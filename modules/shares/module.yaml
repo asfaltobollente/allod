@@ -1,0 +1,50 @@
+id: shares
+tier: core
+provides: [smb-shares]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  basic:
+    ram_mb: 50
+    requires:
+      modules: [storage]
+    grants: [Condivisioni di rete base accessibili da Windows/Mac]
+  custom:
+    ram_mb: 100
+    requires:
+      modules: [storage]
+    grants: [Condivisioni personalizzate, permessi granulari]
+
+ports:
+  - n: 445
+    scope: lan
+    share: none
+  - n: 139
+    scope: lan
+    share: none
+
+privileges:
+  userns: host
+  devices: []
+  caps: []
+
+images: []
+
+update:
+  requires_release_notes: false
+
+transitions:
+  off -> basic: safe
+  basic -> custom: safe
+  custom -> basic: safe
+  basic -> off: safe
+  custom -> off: safe
+
+datasets: []
+
+help:
+  en: help/shares.en.md
+  it: help/shares.it.md

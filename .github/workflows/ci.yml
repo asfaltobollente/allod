@@ -1,0 +1,59 @@
+name: Allod CI & Multi-Arch Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Go Vet
+        run: go vet ./...
+
+      - name: Run Unit Tests with Race Detector
+        run: go test -v -race ./...
+
+      - name: Verify CycloneDX SBOM Generation
+        run: go run ./cmd/allod sbom
+
+  build-linux-multiarch:
+    name: Build Multi-Arch Linux Binaries (Ubuntu Server)
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            desc: x86-64 Mini PC & Cloud Server
+          - goarch: arm64
+            desc: Raspberry Pi 5 & ARM64 VPS
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build Allod Core (${{ matrix.goarch }})
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -v -o bin/allod_linux_${{ matrix.goarch }} ./cmd/allod
+          go build -v -o bin/allod-helperd_linux_${{ matrix.goarch }} ./cmd/allod-helperd
+          go build -v -o bin/allod-panel_linux_${{ matrix.goarch }} ./cmd/allod-panel

@@ -1,0 +1,55 @@
+id: media
+tier: optional
+provides: [media-server]
+conflicts: [plex]
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  basic:
+    ram_mb: 500
+    requires:
+      modules: [storage]
+    grants: [Streaming di film e serie, app mobile e TV]
+    lacks: [transcodifica hardware]
+  full:
+    ram_mb: 1000
+    requires:
+      modules: [storage]
+      video_encode: [h264]
+    grants: [Transcodifica hardware, streaming adattivo, sottotitoli automatici]
+
+ports:
+  - n: 8096
+    scope: mesh
+    share: member
+
+privileges:
+  userns: rootless
+  devices: [/dev/dri/renderD128]
+  caps: []
+
+images:
+  - ref: docker.io/jellyfin/jellyfin
+    tag: "10.10"
+    channel: patch
+
+update:
+  requires_release_notes: false
+  breaks_mobile_apps: false
+
+transitions:
+  off -> basic: safe
+  basic -> full: safe
+  full -> basic: safe
+  basic -> off: safe
+
+datasets:
+  - id: media
+    includes: [config, db]
+    excludes: [cache, transcodes]
+
+help:
+  en: help/media.en.md
+  it: help/media.it.md

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Allod — Cloud Personale in Piena Proprietà</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">🛡️</div>
+        <div>
+          <h2>Allod</h2>
+          <span class="badge badge-success">v2.1 PoC</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="overview">
+          <span class="icon">📊</span> Panoramica
+        </button>
+        <button class="nav-item" data-tab="modules">
+          <span class="icon">📦</span> Moduli & Livelli
+        </button>
+        <button class="nav-item" data-tab="ring">
+          <span class="icon">🌐</span> Federazione (Ring)
+        </button>
+        <button class="nav-item" data-tab="resilience">
+          <span class="icon">⚡</span> Test Resilienza
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="node-badge">
+          <span class="pulse-dot"></span>
+          <div>
+            <div class="node-title" id="sidebar-node-name">allod-luca</div>
+            <div class="node-subtitle">Overlay WireGuard Mesh</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1 id="page-title">Panoramica del Nodo</h1>
+          <p class="subtitle" id="page-subtitle">Stato del sistema, risorse e sicurezza</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-secondary" onclick="refreshData()">
+            <span class="icon">🔄</span> Aggiorna
+          </button>
+          <div class="helper-status" id="helper-status-pill">
+            <span class="status-indicator"></span> Helper Root: Connesso
+          </div>
+        </div>
+      </header>
+
+      <!-- Alert Banner -->
+      <div id="alert-banner" class="alert-banner hidden"></div>
+
+      <!-- TAB 1: OVERVIEW -->
+      <section id="tab-overview" class="tab-pane active">
+        <div class="metrics-grid">
+          <div class="card metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Memoria RAM</span>
+              <span class="icon">🧠</span>
+            </div>
+            <div class="metric-value" id="ram-used">2.3 / 8.0 GB</div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="ram-progress" style="width: 29%;"></div>
+            </div>
+            <div class="metric-footer" id="ram-footer">Riservato core: 600 MB</div>
+          </div>
+
+          <div class="card metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Moduli Attivi</span>
+              <span class="icon">📦</span>
+            </div>
+            <div class="metric-value" id="active-modules-count">5 / 7</div>
+            <div class="metric-subtext" id="active-modules-list">photos, storage, shares, backup, watch</div>
+          </div>
+
+          <div class="card metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Gruppo Federato</span>
+              <span class="icon">🌐</span>
+            </div>
+            <div class="metric-value" id="ring-status-badge">3 Nodi (OK)</div>
+            <div class="metric-subtext">Regola 2 repliche remote attiva</div>
+          </div>
+
+          <div class="card metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Sicurezza & Confine</span>
+              <span class="icon">🔒</span>
+            </div>
+            <div class="metric-value text-success">Rootless Safe</div>
+            <div class="metric-subtext">Pannello non privilegiato</div>
+          </div>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-header">
+            <h3>Stato di Salute della Federazione</h3>
+            <span class="badge badge-success">Sorveglianza Attiva</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted mb-3">I nodi nel Ring si scambiano battiti cardiaci e sorvegliano i backup cifrati in modalità append-only.</p>
+            <div class="nodes-visual-grid" id="nodes-visual-grid">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: MODULES -->
+      <section id="tab-modules" class="tab-pane">
+        <div class="tab-header mb-3">
+          <h2>Gestione Moduli & Risorse</h2>
+          <p class="text-muted">Ogni modulo adatta il consumo di risorse in base al livello selezionato con controllo preflight istantaneo.</p>
+        </div>
+
+        <div class="modules-grid" id="modules-grid">
+          <!-- Rendered by JS -->
+        </div>
+      </section>
+
+      <!-- TAB 3: RING FEDERATION -->
+      <section id="tab-ring" class="tab-pane">
+        <div class="tab-header mb-3">
+          <h2>Topologia del Ring a Tre Nodi</h2>
+          <p class="text-muted">Ogni dataset critico viene salvato in 2 copie remote indipendenti sui nodi degli amici.</p>
+        </div>
+
+        <div class="grid-2col">
+          <div class="card">
+            <div class="card-header">
+              <h3>Membri del Gruppo</h3>
+            </div>
+            <div class="card-body" id="ring-members-container">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Repliche dei Dataset</h3>
+            </div>
+            <div class="card-body" id="ring-datasets-container">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: RESILIENCE & SIMULATION -->
+      <section id="tab-resilience" class="tab-pane">
+        <div class="tab-header mb-3">
+          <h2>Test di Resilienza & Simulatore</h2>
+          <p class="text-muted">Simula scenari critici reali per verificare il comportamento dell'orchestratore Allod.</p>
+        </div>
+
+        <div class="grid-2col">
+          <!-- Simulator 1: Member Removal -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Simulazione Disconnessione/Uscita Membro</h3>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">Cosa succede se un amico del gruppo stacca il NAS o esce dalla federazione?</p>
+              <div class="form-group mb-3">
+                <label for="simulate-member-select">Seleziona membro da disconnettere:</label>
+                <select id="simulate-member-select" class="form-control">
+                  <option value="allod-marco">allod-marco (Marco)</option>
+                  <option value="allod-sara">allod-sara (Sara)</option>
+                </select>
+              </div>
+              <button class="btn btn-warning w-100" onclick="runSimulateRemoval()">
+                <span class="icon">⚠️</span> Simula Rimozione & Calcola Rebalance
+              </button>
+
+              <div id="simulation-results" class="simulation-box hidden mt-3">
+                <!-- Result by JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Simulator 2: Update with Rollback -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Macchina a Stati Aggiornamenti & Rollback</h3>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">Testa il comportamento quando una nuova immagine container fallisce l'healthcheck di avvio.</p>
+              
+              <div class="form-group mb-3">
+                <label for="update-module-select">Modulo da aggiornare:</label>
+                <select id="update-module-select" class="form-control">
+                  <option value="photos">photos (Immich Server)</option>
+                  <option value="cloud">cloud (Nextcloud)</option>
+                </select>
+              </div>
+
+              <div class="form-group mb-3">
+                <label for="update-tag-input">Nuovo Tag:</label>
+                <input type="text" id="update-tag-input" class="form-control font-mono" value="v3.2.0-nightly">
+              </div>
+
+              <div class="btn-group-2">
+                <button class="btn btn-primary" onclick="runUpdateSimulation(false)">
+                  <span class="icon">✅</span> Aggiornamento Sano
+                </button>
+                <button class="btn btn-danger" onclick="runUpdateSimulation(true)">
+                  <span class="icon">💥</span> Simula Errore & Rollback
+                </button>
+              </div>
+
+              <div id="update-steps-box" class="simulation-box hidden mt-3">
+                <!-- Update log steps by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

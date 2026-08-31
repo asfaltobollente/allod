@@ -1,0 +1,35 @@
+node:
+    name: allod-luca
+    channel: stable
+    group: git+ssh://git@allod-marco/ring.git
+catalog:
+    source: https://dl.allod.dev/catalog/v1.json
+    mode: online
+people:
+    - id: luca
+      role: owner
+      quota_gb: 500
+    - id: sara
+      role: member
+      quota_gb: 300
+    - id: nonna
+      role: member
+      quota_gb: 100
+modules:
+    backup:
+        level: peers
+    cloud:
+        level: basic
+    media:
+        level: "off"
+    photos:
+        level: standard
+    shares:
+        level: basic
+    storage:
+        level: raid1
+        disks:
+            - WD-WX41A19K7T2C
+            - WD-WX41A2B0PLZ9
+    watch:
+        level: federated
