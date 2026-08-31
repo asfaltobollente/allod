@@ -704,16 +704,16 @@ function renderModules() {
             </details>
           </div>
         ` : ''}
-        ${(mod.id !== 'storage' && (isUnlocked || mod.runtime_status === 'failed')) ? `
+        ${(mod.id !== 'storage' && !isLocked) ? `
           <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
             <details style="font-size:11px; color:var(--text-muted);" ${mod.runtime_status === 'failed' ? 'open' : ''}>
               <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Ripristino Dati</summary>
               <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
                 <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
-                  Se il modulo ha problemi o configurazioni corrotte, puoi resettarlo e ricreare le cartelle pulite su <code>/mnt/allod-storage/${mod.id}</code>.
+                  Se desideri azzerare il database e i file del modulo, puoi cancellarli e ricreare le cartelle pulite su <code>/mnt/allod-storage/${mod.id}</code>.
                 </p>
                 <button class="btn btn-sm btn-danger" onclick="openDangerPurgeModal('${mod.id}')" style="font-size:11px; padding:4px 10px;">
-                  🗑️ Cancella Dati & Reinstalla Modulo (Reset)
+                  🗑️ Cancella Dati & Ripristina Modulo
                 </button>
               </div>
             </details>
