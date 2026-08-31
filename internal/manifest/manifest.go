@@ -39,9 +39,10 @@ type Requires struct {
 }
 
 type Port struct {
-	N     int    `yaml:"n" json:"n"`
-	Scope string `yaml:"scope" json:"scope"`
-	Share string `yaml:"share,omitempty" json:"share,omitempty"`
+	N             int    `yaml:"n" json:"n"`
+	ContainerPort int    `yaml:"container_port,omitempty" json:"container_port,omitempty"`
+	Scope         string `yaml:"scope" json:"scope"`
+	Share         string `yaml:"share,omitempty" json:"share,omitempty"`
 }
 
 type Privileges struct {

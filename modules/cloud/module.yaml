@@ -16,6 +16,7 @@ levels:
 
 ports:
   - n: 8443
+    container_port: 80
     scope: mesh
     share: member
 

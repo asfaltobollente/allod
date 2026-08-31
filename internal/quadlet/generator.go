@@ -79,7 +79,11 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	// Only publish host ports on the primary container of the module
 	if isPrimary {
 		for _, p := range m.Ports {
-			sb.WriteString(fmt.Sprintf("PublishPort=%d:%d\n", p.N, p.N))
+			cPort := p.N
+			if p.ContainerPort > 0 {
+				cPort = p.ContainerPort
+			}
+			sb.WriteString(fmt.Sprintf("PublishPort=%d:%d\n", p.N, cPort))
 		}
 	}
 
