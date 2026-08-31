@@ -215,14 +215,14 @@ func main() {
 		}
 
 		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
-		cmd := exec.Command("systemctl", "--user", "start", req.Module)
+		cmd := exec.Command("systemctl", "--user", "start", "--no-block", req.Module)
 		if err := cmd.Run(); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore avvio servizio %s: %v", req.Module, err)})
 			return
 		}
 
-		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s avviato con successo", req.Module)})
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Avvio del modulo %s avviato in background", req.Module)})
 	})
 
 	// 5. API Modules Stop
