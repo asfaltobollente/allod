@@ -182,6 +182,47 @@ function renderOverview() {
   }
 }
 
+const moduleTechInfo = {
+  cloud: {
+    product: 'Nextcloud Hub 30',
+    desc: 'Cloud personale per file, cartelle e sincronizzazione desktop/mobile (alternativa privata a Google Drive / Dropbox).',
+    linkPort: 8443,
+    linkProtocol: 'http'
+  },
+  photos: {
+    product: 'Immich v3.1 + PostgreSQL + Valkey',
+    desc: 'Galleria foto ad alte prestazioni con backup automatico da telefono, timeline e album (alternativa a Google Foto).',
+    linkPort: 2283,
+    linkProtocol: 'http'
+  },
+  backup: {
+    product: 'rest-server (Restic Backend)',
+    desc: 'Motore di backup cifrato end-to-end con modalità append-only rigorosa a prova di ransomware.',
+    linkPort: null
+  },
+  shares: {
+    product: 'Samba (SMB/CIFS)',
+    desc: 'Condivisione file ad altissima velocità su rete locale per PC Windows, Mac e Linux.',
+    linkPort: null
+  },
+  storage: {
+    product: 'Btrfs CoW Filesystem + smartmontools',
+    desc: 'Storage avanzato con RAID 1 hardware-safe, snapshot istantanei e diagnosi di salute S.M.A.R.T.',
+    linkPort: null
+  },
+  media: {
+    product: 'Jellyfin Media Server',
+    desc: 'Streaming multimediale personale per film, serie TV, video e musica.',
+    linkPort: 8096,
+    linkProtocol: 'http'
+  },
+  watch: {
+    product: 'Allod Watchdog + WireGuard Mesh',
+    desc: 'Supervisione continua dei battiti cardiaci dei nodi amici e coordinamento repliche.',
+    linkPort: null
+  }
+};
+
 function renderModules() {
   const container = document.getElementById('modules-grid');
   if (!container || !Array.isArray(currentModules)) return;
@@ -197,6 +238,12 @@ function renderModules() {
     const manifest = mod.manifest || {};
     const levels = manifest.levels || manifest.Levels || {};
 
+    const tech = moduleTechInfo[mod.id] || {
+      product: mod.id,
+      desc: manifest.provides ? manifest.provides.join(', ') : 'Modulo Allod',
+      linkPort: null
+    };
+
     let levelOptions = Object.keys(levels).map(lvl => {
       const selected = lvl === mod.current_level ? 'selected' : '';
       return `<option value="${lvl}" ${selected}>${lvl}</option>`;
@@ -205,7 +252,6 @@ function renderModules() {
     const currentLevelInfo = levels[mod.current_level] || {};
     const grants = currentLevelInfo.grants || currentLevelInfo.Grants || [];
     const ramReq = currentLevelInfo.ram_mb || currentLevelInfo.RAMMB || 0;
-    const provides = manifest.provides || manifest.Provides || [];
 
     let grantsHtml = grants.length > 0
       ? `<ul class="grants-list">${grants.map(g => `<li>✓ ${g}</li>`).join('')}</ul>`
@@ -217,11 +263,24 @@ function renderModules() {
     // Runtime status badge
     let statusBadge = `<span class="badge badge-secondary">OFF</span>`;
     let actionButtons = ``;
+    let openLinkHtml = ``;
 
     if (!isOff) {
       if (mod.runtime_status === 'running') {
         statusBadge = `<span class="badge badge-success">🟢 IN ESECUZIONE</span>`;
         actionButtons = `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ Ferma</button>`;
+        
+        if (tech.linkPort) {
+          const host = window.location.hostname || '127.0.0.1';
+          openLinkHtml = `
+            <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
+              <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
+                <span>🌐 Apri interfaccia web (${tech.product})</span>
+                <span>Porta ${tech.linkPort} ↗</span>
+              </a>
+            </div>
+          `;
+        }
       } else if (mod.runtime_status === 'failed') {
         statusBadge = `<span class="badge badge-danger">🔴 ERRORE</span>`;
         actionButtons = `<button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Riavvia</button>`;
@@ -239,13 +298,19 @@ function renderModules() {
               ${mod.id}
               <span class="badge ${tierBadge}">${mod.tier || 'module'}</span>
             </div>
-            <div class="module-meta">${provides.join(', ')}</div>
+            <div style="font-size:12px; font-weight:600; color:var(--primary); margin-top:2px;">
+              📦 ${tech.product}
+            </div>
           </div>
           <div>
             ${statusBadge}
             ${actionButtons}
           </div>
         </div>
+
+        <p style="font-size:12px; color:var(--text-muted); margin:8px 0 12px 0; line-height:1.4;">
+          ${tech.desc}
+        </p>
 
         <div class="level-selector-row">
           <label style="font-size:12px; color:var(--text-muted);">Livello:</label>
@@ -256,11 +321,12 @@ function renderModules() {
         </div>
 
         ${grantsHtml}
+        ${openLinkHtml}
       </div>
 
-      <div style="font-size:11px; color:var(--text-muted); border-top:1px solid var(--card-border); padding-top:8px; display:flex; justify-content:space-between;">
+      <div style="font-size:11px; color:var(--text-muted); border-top:1px solid var(--card-border); padding-top:8px; display:flex; justify-content:space-between; margin-top:12px;">
         <span>UserNS: ${priv.userns || 'rootless'}</span>
-        <span>${imgs.length > 0 ? `${imgs.length} Container` : 'Nativo'}</span>
+        <span>${imgs.length > 0 ? `${imgs.map(i => i.tag || i.Tag).join(', ')}` : 'Nativo'}</span>
       </div>
     `;
 
@@ -270,7 +336,7 @@ function renderModules() {
 
 async function startModule(modID) {
   try {
-    showAlert(`Avvio del modulo '${modID}' in corso (pull immagine / avvio container)...`, 'info');
+    showAlert(`Richiesta avvio per '${modID}' inviata a Podman in background...`, 'info');
     const res = await fetch('/api/modules/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -278,13 +344,15 @@ async function startModule(modID) {
     });
     const data = await res.json();
     if (data.status === 'ok') {
-      showAlert(`✓ Modulo '${modID}' avviato con successo!`, 'success');
-      refreshData();
+      showAlert(`✓ Avvio del modulo '${modID}' iniziato!`, 'success');
+      setTimeout(refreshData, 1000);
+      setTimeout(refreshData, 3000);
     } else {
       showAlert(`Errore avvio: ${data.message}`, 'danger');
     }
   } catch (err) {
-    showAlert('Errore avvio modulo: ' + err.message, 'danger');
+    showAlert('Avvio inviato al server: aggiornamento in corso...', 'info');
+    setTimeout(refreshData, 2000);
   }
 }
 

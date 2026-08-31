@@ -56,6 +56,22 @@
 
 ---
 
+## 📦 Open Source Technology Stack (Transparency First)
+
+Allod orchestrates best-in-class, audited open-source technologies. No black boxes, no vendor lock-in:
+
+| Module | Open Source Technology | Role & Purpose | Direct Web Port |
+| :--- | :--- | :--- | :---: |
+| **`cloud`** | **[Nextcloud Hub 30](https://nextcloud.com)** | Personal file sync, mobile backup & link sharing | `8443` |
+| **`photos`** | **[Immich](https://immich.app)** + PostgreSQL + Valkey | Photo/video timeline & mobile camera auto-sync | `2283` |
+| **`backup`** | **[rest-server](https://github.com/restic/rest-server)** + **[Restic](https://restic.net)** | Zero-knowledge, append-only encrypted peer backups | Mesh only |
+| **`shares`** | **[Samba (SMB/CIFS)](https://www.samba.org)** | High-speed LAN shared folders for Windows, Mac & Linux | `445` |
+| **`storage`** | **[Btrfs](https://btrfs.readthedocs.io)** + **smartmontools** | Hardware-safe RAID 1, instant snapshots & S.M.A.R.T. health | Native |
+| **`media`** | **[Jellyfin](https://jellyfin.org)** | Personal streaming server for movies, series & music | `8096` |
+| **`watch`** | **Allod Watchdog** + **[WireGuard](https://www.wireguard.com)** | Encrypted peer heartbeat & federation quorum supervisor | Mesh only |
+
+---
+
 ## ⚡ Prerequisites & Requirements
 
 * **Operating System**: Ubuntu Server 24.04 LTS (recommended) or any Debian 12+ system (x86-64 or ARM64 / Raspberry Pi 5).
