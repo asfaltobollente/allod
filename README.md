@@ -103,15 +103,30 @@ go build -o allod-panel ./cmd/allod-panel
 ./allod apply -c config.yaml --systemd
 ```
 
-### 6. Launch the Web Dashboard
+### 6. Launch Daemons (Privilege Boundary)
 
-**Option A: Simple background with nohup**
+Allod operates with a **two-daemon security model**:
+
+1. **Root Helper Daemon (`allod-helperd`)**: Runs with root privileges (via `sudo` or systemd) to handle low-level disk management, btrfs snapshots, and SMART health checks over a secured local UNIX socket (`/run/allod/helper.sock`).
+2. **Web Dashboard (`allod-panel`)**: Runs as an unprivileged user (rootless) to manage containers and serve the web UI.
+
+**Quick Launch (Background):**
 ```bash
+# 1. Start root helper daemon (requires sudo)
+sudo nohup ./allod-helperd > helper.log 2>&1 &
+
+# 2. Start unprivileged dashboard (as normal user)
 nohup ./allod-panel > panel.log 2>&1 &
 ```
 
-**Option B: Persistent systemd user service**
+**Production Launch (systemd Services):**
 ```bash
+# 1. Install & start root helper system daemon
+sudo cp configs/allod-helperd.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now allod-helperd
+
+# 2. Install & start user dashboard daemon
 mkdir -p ~/.config/systemd/user
 cp configs/allod-panel.service ~/.config/systemd/user/
 systemctl --user daemon-reload
@@ -119,6 +134,18 @@ systemctl --user enable --now allod-panel
 ```
 
 Open your browser at **`http://<SERVER-IP>:8080/`** (or `http://localhost:8080/`) to access the responsive web panel.
+
+---
+
+## 🔄 Service Lifecycle & Troubleshooting
+
+In case of issues or configuration updates, you can inspect logs and restart services independently:
+
+| Daemon | Privilege | Role | Restart Command | Check Status & Logs |
+| :--- | :--- | :--- | :--- | :--- |
+| **`allod-helperd`** | Root (`sudo`) | Disks, btrfs snapshots, SMART checks | `sudo systemctl restart allod-helperd` | `sudo systemctl status allod-helperd` |
+| **`allod-panel`** | User (`rootless`) | Web dashboard, preflight engine | `systemctl --user restart allod-panel` | `systemctl --user status allod-panel` |
+| **Containers** | User (`podman`) | Immich, Nextcloud, rest-server | `allod start` / `allod stop` | `allod status` / `podman ps` |
 
 ---
 
