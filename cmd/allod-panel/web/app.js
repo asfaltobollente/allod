@@ -55,6 +55,7 @@ async function refreshData() {
     renderOverview();
     renderModules();
     renderRing();
+    renderResilience();
   } catch (err) {
     showAlert('Errore di comunicazione con il backend Allod: ' + err.message, 'danger');
   }
@@ -500,6 +501,62 @@ function renderRing() {
       `;
       datasetsContainer.appendChild(placementTable);
     }
+  }
+}
+
+function renderResilience() {
+  // 1. Dynamic Member Selector for Ring Disconnection Simulator
+  const memberEl = document.getElementById('simulate-member-select');
+  const simulateBtn = document.getElementById('btn-simulate-removal');
+  if (memberEl && currentRing) {
+    const isStandalone = currentRing.is_standalone || Object.keys(currentRing.members || {}).length <= 1;
+    memberEl.innerHTML = '';
+
+    if (isStandalone) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Nessun peer remoto connesso (Modalità Standalone)';
+      memberEl.appendChild(opt);
+      memberEl.disabled = true;
+      if (simulateBtn) {
+        simulateBtn.disabled = true;
+        simulateBtn.style.opacity = '0.5';
+        simulateBtn.title = 'Collega almeno un nodo amico con "allod ring add" per simulare un disconnessione.';
+      }
+    } else {
+      memberEl.disabled = false;
+      if (simulateBtn) {
+        simulateBtn.disabled = false;
+        simulateBtn.style.opacity = '1';
+        simulateBtn.title = '';
+      }
+      Object.values(currentRing.members).forEach(m => {
+        const mId = m.id || m.ID;
+        const isSelf = currentStatus && mId === currentStatus.node_name;
+        if (!isSelf) {
+          const opt = document.createElement('option');
+          opt.value = mId;
+          opt.textContent = `${mId} (${m.address || m.Address || 'Peer Remoto'})`;
+          memberEl.appendChild(opt);
+        }
+      });
+    }
+  }
+
+  // 2. Dynamic Module Selector for Rollback Simulator
+  const updateModEl = document.getElementById('update-module-select');
+  if (updateModEl && Array.isArray(currentModules)) {
+    updateModEl.innerHTML = '';
+    currentModules.forEach(mod => {
+      const isOff = !mod.current_level || mod.current_level === 'off';
+      if (!isOff) {
+        const tech = moduleTechInfo[mod.id] || {};
+        const opt = document.createElement('option');
+        opt.value = mod.id;
+        opt.textContent = `${mod.id} (${tech.product || 'Modulo Allod'})`;
+        updateModEl.appendChild(opt);
+      }
+    });
   }
 }
 

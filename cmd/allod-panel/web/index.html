@@ -182,11 +182,10 @@
               <div class="form-group mb-3">
                 <label for="simulate-member-select">Seleziona membro da disconnettere:</label>
                 <select id="simulate-member-select" class="form-control">
-                  <option value="allod-marco">allod-marco (Marco)</option>
-                  <option value="allod-sara">allod-sara (Sara)</option>
+                  <option value="">Caricamento membri...</option>
                 </select>
               </div>
-              <button class="btn btn-warning w-100" onclick="runSimulateRemoval()">
+              <button class="btn btn-warning w-100" id="btn-simulate-removal" onclick="runSimulateRemoval()">
                 <span class="icon">⚠️</span> Simula Rimozione & Calcola Rebalance
               </button>
 
@@ -207,8 +206,7 @@
               <div class="form-group mb-3">
                 <label for="update-module-select">Modulo da aggiornare:</label>
                 <select id="update-module-select" class="form-control">
-                  <option value="photos">photos (Immich Server)</option>
-                  <option value="cloud">cloud (Nextcloud)</option>
+                  <option value="">Caricamento moduli...</option>
                 </select>
               </div>
 
