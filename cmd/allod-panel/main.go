@@ -328,6 +328,64 @@ func main() {
 		})
 	})
 
+	// 5c. API Storage Diagnostics (Live Btrfs usage & device stats)
+	mux.HandleFunc("/api/storage/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		mountPoint := "/mnt/allod-storage"
+		usageOut, err := exec.Command("btrfs", "filesystem", "usage", mountPoint).CombinedOutput()
+		if err != nil {
+			usageOut = []byte(fmt.Sprintf("btrfs filesystem usage error: %v\nOutput: %s", err, string(usageOut)))
+		}
+
+		statsOut, err := exec.Command("btrfs", "device", "stats", mountPoint).CombinedOutput()
+		if err != nil {
+			statsOut = []byte(fmt.Sprintf("btrfs device stats error: %v\nOutput: %s", err, string(statsOut)))
+		}
+
+		dfOut, err := exec.Command("btrfs", "filesystem", "df", mountPoint).CombinedOutput()
+		if err != nil {
+			dfOut = []byte(fmt.Sprintf("btrfs filesystem df error: %v\nOutput: %s", err, string(dfOut)))
+		}
+
+		data := map[string]interface{}{
+			"mount_point":  mountPoint,
+			"usage":        string(usageOut),
+			"stats":        string(statsOut),
+			"df":           string(dfOut),
+			"is_mounted":   err == nil,
+			"timestamp":    time.Now().Format("2006-01-02 15:04:05"),
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
+	})
+
+	// 5d. API Module Diagnostics (Live systemd status & container logs)
+	mux.HandleFunc("/api/modules/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		modName := r.URL.Query().Get("module")
+		if modName == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Missing module query parameter"})
+			return
+		}
+
+		statusOut, _ := exec.Command("systemctl", "--user", "status", modName).CombinedOutput()
+		logsOut, _ := exec.Command("podman", "logs", "--tail", "30", "systemd-"+modName).CombinedOutput()
+		if len(logsOut) == 0 {
+			logsOut, _ = exec.Command("journalctl", "--user", "-u", modName, "-n", "30", "--no-pager").CombinedOutput()
+		}
+
+		data := map[string]interface{}{
+			"module":      modName,
+			"status_text": string(statusOut),
+			"logs":        string(logsOut),
+			"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
+	})
+
 	// 6. API Modules Set Level
 	mux.HandleFunc("/api/modules/set", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
