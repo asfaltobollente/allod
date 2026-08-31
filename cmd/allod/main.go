@@ -461,6 +461,62 @@ var installCmd = &cobra.Command{
 	},
 }
 
+// initCmd initializes a new node configuration file (config.yaml)
+var initCmd = &cobra.Command{
+	Use:   "init [nome-nodo]",
+	Short: "Inizializza una nuova configurazione locale (config.yaml)",
+	Run: func(cmd *cobra.Command, args []string) {
+		targetFile := "config.yaml"
+		if cfgFile != "" && cfgFile != "configs/config.example.yaml" {
+			targetFile = cfgFile
+		}
+
+		nodeName := "allod-node-01"
+		if len(args) > 0 && args[0] != "" {
+			nodeName = args[0]
+		} else {
+			if h, err := os.Hostname(); err == nil && h != "" {
+				nodeName = "allod-" + h
+			}
+		}
+
+		if _, err := os.Stat(targetFile); err == nil {
+			fmt.Printf("⚠️  Il file '%s' esiste già.\nPer rigenerarlo, rimuovilo prima o modifica il nome in %s\n", targetFile, targetFile)
+			return
+		}
+
+		cfg, err := config.LoadConfig("configs/config.example.yaml")
+		if err != nil {
+			cfg = &config.Config{
+				Node: config.NodeConfig{
+					Name:    nodeName,
+					Channel: "stable",
+				},
+				Modules: map[string]config.ModuleConfig{
+					"storage": {Level: "basic"},
+					"shares":  {Level: "basic"},
+					"photos":  {Level: "standard"},
+					"backup":  {Level: "peers"},
+					"watch":   {Level: "federated"},
+				},
+			}
+		} else {
+			cfg.Node.Name = nodeName
+		}
+
+		if err := cfg.Save(targetFile); err != nil {
+			fmt.Printf("Errore creazione '%s': %v\n", targetFile, err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("✓ Inizializzata configurazione per il nodo '%s' in '%s'\n\n", nodeName, targetFile)
+		fmt.Println("Prossimi passi:")
+		fmt.Printf("  1. Ispeziona il piano:    ./allod plan -c %s\n", targetFile)
+		fmt.Printf("  2. Applica le unità:     ./allod apply -c %s --systemd\n", targetFile)
+		fmt.Printf("  3. Avvia la dashboard:   ./allod-panel\n")
+	},
+}
+
 // ringCmd per M6
 var ringCmd = &cobra.Command{
 	Use:   "ring",
@@ -614,6 +670,7 @@ func init() {
 	ringCmd.AddCommand(ringStatusCmd)
 	ringCmd.AddCommand(ringSimulateCmd)
 
+	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(planCmd)
 	rootCmd.AddCommand(applyCmd)
 	rootCmd.AddCommand(setCmd)
