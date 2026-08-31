@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshData();
 });
 
-function setupTabs() {
+function switchToTab(tab) {
   const tabButtons = document.querySelectorAll('.nav-item');
   const tabPanes = document.querySelectorAll('.tab-pane');
   const pageTitle = document.getElementById('page-title');
@@ -22,21 +22,29 @@ function setupTabs() {
     resilience: { title: 'Test di Resilienza', sub: 'Simulatore di guasti, disconnessioni e rollback automatico' }
   };
 
+  tabButtons.forEach(b => {
+    if (b.dataset.tab === tab) {
+      b.classList.add('active');
+    } else {
+      b.classList.remove('active');
+    }
+  });
+
+  tabPanes.forEach(p => p.classList.remove('active'));
+  const targetPane = document.getElementById(`tab-${tab}`);
+  if (targetPane) targetPane.classList.add('active');
+
+  if (titles[tab]) {
+    if (pageTitle) pageTitle.textContent = titles[tab].title;
+    if (pageSubtitle) pageSubtitle.textContent = titles[tab].sub;
+  }
+}
+
+function setupTabs() {
+  const tabButtons = document.querySelectorAll('.nav-item');
   tabButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab;
-
-      tabButtons.forEach(b => b.classList.remove('active'));
-      tabPanes.forEach(p => p.classList.remove('active'));
-
-      btn.classList.add('active');
-      const targetPane = document.getElementById(`tab-${tab}`);
-      if (targetPane) targetPane.classList.add('active');
-
-      if (titles[tab]) {
-        pageTitle.textContent = titles[tab].title;
-        pageSubtitle.textContent = titles[tab].sub;
-      }
+      switchToTab(btn.dataset.tab);
     });
   });
 }
@@ -299,6 +307,48 @@ function renderOverview() {
         </div>
       `;
       storageGrid.appendChild(box);
+    }
+  }
+
+  // Dynamic Setup Flow Banner handling
+  const setupBanner = document.getElementById('setup-flow-banner');
+  if (setupBanner) {
+    const isMounted = st && (st.is_mounted || st.mode === 'raid1');
+    const runningApps = (currentModules || []).filter(m => m.id !== 'storage' && m.runtime_status === 'running').length;
+
+    if (isMounted && runningApps > 0) {
+      // Setup complete! Hide banner completely
+      setupBanner.classList.add('hidden');
+    } else if (!isMounted) {
+      // Step 1: Need storage init
+      setupBanner.classList.remove('hidden');
+      setupBanner.className = 'alert-banner alert-warning';
+      setupBanner.innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:20px;">⚠️</span>
+          <div>
+            <strong>Passo 1:</strong> Inizializza il Pool Btrfs RAID 1 prima di avviare i container.
+          </div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="openDangerStorageModal()" style="padding:3px 10px; font-size:12px;">
+          ⚡ Inizializza Pool Btrfs
+        </button>
+      `;
+    } else {
+      // Step 2: Storage mounted, but no apps started yet
+      setupBanner.classList.remove('hidden');
+      setupBanner.className = 'alert-banner alert-success';
+      setupBanner.innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:20px;">🎉</span>
+          <div>
+            <strong>Pool NAS RAID 1 Attivo!</strong> Ora puoi avviare i tuoi moduli applicativi.
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-info" onclick="switchToTab('modules')" style="padding:3px 10px; font-size:12px;">
+          📦 Gestisci Moduli ➔
+        </button>
+      `;
     }
   }
 }
