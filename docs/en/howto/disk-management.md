@@ -56,7 +56,13 @@ sudo allod storage init sda1 sdb1
    * `/mnt/allod-storage/photos` (Immich & database)
    * `/mnt/allod-storage/shares` (Samba network folders)
    * `/mnt/allod-storage/backup` (Encrypted peer backups)
-5. **Sets rootless permissions** for your non-root user.
+5. **Sets rootless permissions** for your non-root user (`sudo chown -R $USER:$USER /mnt/allod-storage`).
+
+If you formatted the disks manually with root, ensure your user has full read/write permissions:
+```bash
+sudo chown -R $USER:$USER /mnt/allod-storage
+sudo chmod -R 775 /mnt/allod-storage
+```
 
 ---
 
