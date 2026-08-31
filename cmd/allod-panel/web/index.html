@@ -67,6 +67,20 @@
       <!-- Alert Banner -->
       <div id="alert-banner" class="alert-banner hidden"></div>
 
+      <!-- Setup Flow Banner -->
+      <div id="setup-flow-banner" class="alert-banner alert-success" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:20px;">🛡️</span>
+          <div>
+            <strong>1. Storage Pool NAS:</strong> <span id="setup-step1-status">Btrfs RAID 1 Attivo (/mnt/allod-storage)</span> &nbsp;|&nbsp;
+            <strong>2. Moduli Applicativi:</strong> <span id="setup-step2-status">Pronti per l'avvio con volumi isolati</span>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-info" onclick="switchTab('modules')" style="padding:3px 10px; font-size:12px;">
+          📦 Gestisci Moduli ➔
+        </button>
+      </div>
+
       <!-- TAB 1: OVERVIEW -->
       <section id="tab-overview" class="tab-pane active">
         <div class="metrics-grid">
