@@ -15,6 +15,7 @@ import (
 
 	"github.com/allod-project/allod/internal/cloudinit"
 	"github.com/allod-project/allod/internal/config"
+	"github.com/allod-project/allod/internal/helper"
 	"github.com/allod-project/allod/internal/manifest"
 	"github.com/allod-project/allod/internal/preflight"
 	"github.com/allod-project/allod/internal/quadlet"
@@ -819,6 +820,121 @@ var sbomCmd = &cobra.Command{
 	},
 }
 
+var storageCmd = &cobra.Command{
+	Use:   "storage",
+	Short: "Gestione dischi fisici, pool Btrfs RAID 1 e montaggi per il NAS",
+}
+
+var storageDisksCmd = &cobra.Command{
+	Use:   "disks",
+	Short: "Mostra tutti i dischi fisici rilevati e la topologia NAS (RAID 1 / Single / Witness)",
+	Run: func(cmd *cobra.Command, args []string) {
+		topo := preflight.DetectStorageTopology()
+		fmt.Println("=== Dischi Fisici & Pool Storage Allod ===")
+		fmt.Printf("Topologia Attuale: %s\n\n", topo.ModeSummary)
+
+		if topo.SystemDisk != nil {
+			sys := topo.SystemDisk
+			ssdTag := "HDD"
+			if sys.IsSSD {
+				ssdTag = "SSD"
+			}
+			fmt.Printf("  • /dev/%-8s [%3d GB, %s] (Disco di Sistema OS - root '/') Modello: %s\n", sys.Name, sys.SizeGB, ssdTag, sys.Model)
+		}
+
+		if len(topo.DataDisks) > 0 {
+			fmt.Println("\nDischi Dati Rilevati per il Pool NAS:")
+			for i, d := range topo.DataDisks {
+				ssdTag := "HDD"
+				if d.IsSSD {
+					ssdTag = "SSD"
+				}
+				fmt.Printf("  • /dev/%-8s [%3d GB, %s] (Candidato Pool NAS #%d) Modello: %s\n", d.Name, d.SizeGB, ssdTag, i+1, d.Model)
+			}
+		} else {
+			fmt.Println("\nNessun disco secondario per NAS dedicato rilevato.")
+		}
+
+		if topo.HasWarning {
+			fmt.Printf("\n⚠️ %s\n", topo.WarningMsg)
+		}
+	},
+}
+
+var storageInitMode string
+var storageInitMount string
+
+var storageInitCmd = &cobra.Command{
+	Use:   "init [dischi...]",
+	Short: "Inizializza un pool Btrfs (RAID 1 o Single) sui dischi specificati montandolo su /mnt/allod-storage",
+	Run: func(cmd *cobra.Command, args []string) {
+		topo := preflight.DetectStorageTopology()
+		disks := args
+		if len(disks) == 0 {
+			if len(topo.DataDisks) == 0 {
+				fmt.Println("Nessun disco dati secondario rilevato automaticamente. Specifica i dischi manualmente (es. allod storage init sda sdb).")
+				os.Exit(1)
+			}
+			for _, d := range topo.DataDisks {
+				disks = append(disks, d.Name)
+			}
+		}
+
+		mode := storageInitMode
+		if mode == "" {
+			if len(disks) >= 2 {
+				mode = "raid1"
+			} else {
+				mode = "single"
+			}
+		}
+
+		mountPoint := storageInitMount
+		if mountPoint == "" {
+			mountPoint = "/mnt/allod-storage"
+		}
+
+		fmt.Printf("=== Inizializzazione Pool Storage NAS Allod ===\n")
+		fmt.Printf("Dischi selezionati: %v\n", disks)
+		fmt.Printf("Profilo Btrfs:      %s\n", strings.ToUpper(mode))
+		fmt.Printf("Punto di mount:     %s\n\n", mountPoint)
+
+		// Call helper daemon over socket
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		res, err := client.Execute("storage.init", map[string]interface{}{
+			"disks": disks,
+			"mode":  mode,
+			"mount": mountPoint,
+			"user":  os.Getenv("USER"),
+		}, false)
+
+		if err != nil {
+			client.SocketPath = "allod-helper.sock"
+			res, err = client.Execute("storage.init", map[string]interface{}{
+				"disks": disks,
+				"mode":  mode,
+				"mount": mountPoint,
+				"user":  os.Getenv("USER"),
+			}, false)
+		}
+
+		if err != nil || !res.Ok {
+			errMsg := "Errore comunicazione con allod-helperd (assicurati che sia avviato con sudo)"
+			if err != nil {
+				errMsg = err.Error()
+			} else if res.Error != "" {
+				errMsg = res.Error
+			}
+			fmt.Printf("❌ %s\n", errMsg)
+			os.Exit(1)
+		}
+
+		fmt.Printf("✓ Pool Btrfs %s creato e montato con successo su %s!\n", strings.ToUpper(mode), mountPoint)
+		fmt.Printf("✓ Subvolume permanenti creati: %s/{cloud, photos, shares, backup}\n", mountPoint)
+		fmt.Println("✓ Ora i container salveranno tutti i file direttamente sui tuoi hard disk fisici.")
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "configs/config.example.yaml", "file di configurazione")
 	rootCmd.PersistentFlags().StringVar(&stateDB, "state-db", "state.db", "percorso file state.db")
@@ -829,6 +945,12 @@ func init() {
 	applyCmd.Flags().StringVar(&outDirOverride, "out-dir", "", "Percorso personalizzato per i file Quadlet generati")
 
 	ringSimulateCmd.Flags().StringVar(&removeMember, "remove", "", "ID del membro da simulare la rimozione")
+
+	storageInitCmd.Flags().StringVar(&storageInitMode, "mode", "", "Profilo Btrfs (raid1 oppure single)")
+	storageInitCmd.Flags().StringVar(&storageInitMount, "mount", "/mnt/allod-storage", "Punto di montaggio del pool NAS")
+
+	storageCmd.AddCommand(storageDisksCmd)
+	storageCmd.AddCommand(storageInitCmd)
 
 	ringCmd.AddCommand(ringStatusCmd)
 	ringCmd.AddCommand(ringSimulateCmd)
@@ -842,6 +964,7 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(setCmd)
 	rootCmd.AddCommand(doctorCmd)
+	rootCmd.AddCommand(storageCmd)
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(ringCmd)
 	rootCmd.AddCommand(sbomCmd)
