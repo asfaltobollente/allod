@@ -270,12 +270,27 @@ func main() {
 			return
 		}
 
-		cfg, _ := config.LoadConfig(cfgPath)
-		st, _ := state.Open(dbPath)
+		cfg, err := config.LoadConfig(cfgPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore caricamento config: " + err.Error()})
+			return
+		}
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore apertura state.db: " + err.Error()})
+			return
+		}
 		defer st.Close()
 
 		u := updater.NewUpdater("out_quadlet")
-		report, _ := u.SimulateUpdate(req.Module, req.Tag, req.Fail, cfg, st)
+		report, err := u.SimulateUpdate(req.Module, req.Tag, req.Fail, cfg, st)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: report})
 	})
@@ -296,6 +311,7 @@ func main() {
 
 		reqBody := `{"action": "shares.apply", "plan": true, "args": {"name": "video", "path": "/data/video"}}`
 		conn.Write([]byte(reqBody + "\n"))
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 
 		var respBuf bytes.Buffer
 		io.Copy(&respBuf, conn)
