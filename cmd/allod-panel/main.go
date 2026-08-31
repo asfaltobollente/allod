@@ -123,6 +123,7 @@ func main() {
 
 		helperConnected := checkHelperConnectivity()
 		topo, isStandalone := getRingTopology(cfg)
+		storageTopo := preflight.DetectStorageTopology()
 
 		uid := os.Getuid()
 		currentUser := os.Getenv("USER")
@@ -144,6 +145,7 @@ func main() {
 			"is_rootless":      isRootless,
 			"uid":              uid,
 			"current_user":     currentUser,
+			"storage":          storageTopo,
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})

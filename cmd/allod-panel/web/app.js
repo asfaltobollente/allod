@@ -181,6 +181,88 @@ function renderOverview() {
       });
     }
   }
+
+  // Storage & Physical Disks
+  const storageGrid = document.getElementById('storage-disks-grid');
+  const storageBadge = document.getElementById('storage-mode-badge');
+  const storageSummary = document.getElementById('storage-mode-summary');
+  const storageWarn = document.getElementById('storage-warning-banner');
+
+  if (storageGrid && currentStatus && currentStatus.storage) {
+    const st = currentStatus.storage;
+    storageGrid.innerHTML = '';
+
+    if (storageBadge) {
+      if (st.mode === 'raid1') {
+        storageBadge.className = 'badge badge-success';
+        storageBadge.textContent = 'Btrfs RAID 1 (Auto-Healing)';
+      } else if (st.mode === 'single') {
+        storageBadge.className = 'badge badge-warning';
+        storageBadge.textContent = 'Btrfs Single (No RAID 1)';
+      } else {
+        storageBadge.className = 'badge badge-info';
+        storageBadge.textContent = 'Witness / Solo Backup';
+      }
+    }
+
+    if (storageSummary) {
+      storageSummary.textContent = st.mode_summary || 'Topologia storage rilevata dal kernel.';
+    }
+
+    if (storageWarn) {
+      if (st.has_warning && st.warning_msg) {
+        storageWarn.textContent = '⚠️ ' + st.warning_msg;
+        storageWarn.classList.remove('hidden');
+      } else {
+        storageWarn.classList.add('hidden');
+      }
+    }
+
+    // Render System Disk
+    if (st.system_disk) {
+      const sys = st.system_disk;
+      const box = document.createElement('div');
+      box.className = 'node-item-box';
+      box.innerHTML = `
+        <div class="node-item-icon">💿</div>
+        <div class="node-item-info">
+          <h4>/dev/${sys.name} <span class="badge badge-info">${sys.is_ssd ? 'SSD' : 'HDD'} Sistema (OS)</span></h4>
+          <p>Capacità: <strong>${sys.size_gb} GB</strong> | Modello: <code>${sys.model || 'Sistema'}</code></p>
+          <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">Contiene il sistema operativo Ubuntu Server (root <code>/</code>)</p>
+        </div>
+      `;
+      storageGrid.appendChild(box);
+    }
+
+    // Render Data Disks
+    if (Array.isArray(st.data_disks) && st.data_disks.length > 0) {
+      st.data_disks.forEach((d, idx) => {
+        const box = document.createElement('div');
+        box.className = 'node-item-box';
+        box.innerHTML = `
+          <div class="node-item-icon">🗄️</div>
+          <div class="node-item-info">
+            <h4>/dev/${d.name} <span class="badge badge-success">${d.is_ssd ? 'SSD' : 'HDD'} Pool NAS #${idx+1}</span></h4>
+            <p>Capacità: <strong>${d.size_gb} GB</strong> | Modello: <code>${d.model || 'Disco Dati'}</code></p>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">Dedicato al pool Btrfs per Nextcloud, Immich, Samba e Backup</p>
+          </div>
+        `;
+        storageGrid.appendChild(box);
+      });
+    } else {
+      const box = document.createElement('div');
+      box.className = 'node-item-box';
+      box.style.gridColumn = '1 / -1';
+      box.innerHTML = `
+        <div class="node-item-icon">🛡️</div>
+        <div class="node-item-info">
+          <h4>Nessun disco secondario per NAS dedicato</h4>
+          <p style="font-size:12px; color:var(--text-muted);">Questo nodo opera come <strong>Witness / Cassaforte di Backup Remota</strong>. I carichi NAS sono bloccati per non saturare il disco del sistema operativo.</p>
+        </div>
+      `;
+      storageGrid.appendChild(box);
+    }
+  }
 }
 
 const moduleTechInfo = {
