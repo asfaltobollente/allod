@@ -614,6 +614,7 @@ func main() {
 			baseDir = filepath.Join(home, ".local", "share", "allod", "storage")
 		}
 		modStorage := filepath.Join(baseDir, modID)
+		_ = exec.Command("podman", "unshare", "rm", "-rf", modStorage).Run()
 		_ = os.RemoveAll(modStorage)
 		quadlet.EnsureStorageDirectories(modID)
 
