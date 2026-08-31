@@ -196,9 +196,9 @@ function renderOverview() {
   const storageBadge = document.getElementById('storage-mode-badge');
   const storageSummary = document.getElementById('storage-mode-summary');
   const storageWarn = document.getElementById('storage-warning-banner');
+  const st = currentStatus && currentStatus.storage;
 
-  if (storageGrid && currentStatus && currentStatus.storage) {
-    const st = currentStatus.storage;
+  if (storageGrid && st) {
     storageGrid.innerHTML = '';
 
     if (storageBadge) {
