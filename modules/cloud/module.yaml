@@ -11,8 +11,14 @@ levels:
     ram_mb: 200
     requires:
       modules: [storage]
-    grants: [Sincronizzazione file da desktop e mobile, condivisione link]
-    lacks: [editing collaborativo, calendario, contatti]
+    grants: [Sincronizzazione file da desktop e mobile, condivisione link, database SQLite leggero]
+    lacks: [editing collaborativo, calendario, contatti, sync multi-utente intensivo]
+  standard:
+    ram_mb: 600
+    requires:
+      modules: [storage]
+    grants: [Sincronizzazione massiva multi-utente, database PostgreSQL dedicato, calendario, contatti, note]
+    lacks: [editing collaborativo in tempo reale Office / Collabora]
 
 ports:
   - n: 8443
@@ -29,6 +35,9 @@ images:
   - ref: docker.io/nextcloud
     tag: "30"
     channel: patch
+  - ref: docker.io/library/postgres
+    tag: "16-alpine"
+    channel: patch
 
 update:
   requires_release_notes: true
@@ -37,7 +46,11 @@ update:
 
 transitions:
   off -> basic: safe
+  off -> standard: safe
+  basic -> standard: safe
+  standard -> basic: safe
   basic -> off: destructive
+  standard -> off: destructive
 
 datasets:
   - id: cloud
