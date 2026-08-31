@@ -56,7 +56,13 @@ sudo allod storage init sda1 sdb1
    * `/mnt/allod-storage/photos` (Immich e database foto)
    * `/mnt/allod-storage/shares` (Cartelle condivise Samba)
    * `/mnt/allod-storage/backup` (Cassaforte backup cifrata per gli amici)
-5. **Applica i permessi non privilegiati** per il tuo utente rootless.
+5. **Applica i permessi non privilegiati** per il tuo utente rootless (`sudo chown -R $USER:$USER /mnt/allod-storage`).
+
+Se hai inizializzato il pool manualmente come root, assicurati che il tuo utente abbia i permessi di scrittura completi:
+```bash
+sudo chown -R $USER:$USER /mnt/allod-storage
+sudo chmod -R 775 /mnt/allod-storage
+```
 
 ---
 

@@ -213,6 +213,20 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		username, _ := req.Args["user"].(string)
+		if username == "" || username == "root" {
+			if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && sudoUser != "root" {
+				username = sudoUser
+			} else {
+				if entries, err := os.ReadDir("/home"); err == nil {
+					for _, e := range entries {
+						if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+							username = e.Name()
+							break
+						}
+					}
+				}
+			}
+		}
 		if username == "" {
 			username = "root"
 		}
@@ -221,7 +235,8 @@ func (s *Server) processRequest(req Request) Response {
 			fmt.Sprintf("mkfs.btrfs -d %s -m %s -f %s", mode, mode, strings.Join(disks, " ")),
 			fmt.Sprintf("mkdir -p %s", mountPoint),
 			fmt.Sprintf("mount %s %s", disks[0], mountPoint),
-			fmt.Sprintf("mkdir -p %s/{cloud,photos,shares,backup}", mountPoint),
+			fmt.Sprintf("mkdir -p %s/{cloud,photos,shares,backup,media}", mountPoint),
+			fmt.Sprintf("chmod -R 0777 %s", mountPoint),
 			fmt.Sprintf("chown -R %s:%s %s", username, username, mountPoint),
 		}
 
@@ -244,16 +259,27 @@ func (s *Server) processRequest(req Request) Response {
 			if err := exec.Command("mkfs.btrfs", args...).Run(); err != nil {
 				return Response{Ok: false, Error: fmt.Sprintf("Errore mkfs.btrfs: %v", err)}
 			}
-			_ = os.MkdirAll(mountPoint, 0755)
+			_ = os.MkdirAll(mountPoint, 0777)
 			firstDisk := disks[0]
 			if !strings.HasPrefix(firstDisk, "/dev/") {
 				firstDisk = "/dev/" + firstDisk
 			}
 			_ = exec.Command("mount", firstDisk, mountPoint).Run()
-			for _, sub := range []string{"cloud", "photos", "shares", "backup"} {
-				_ = os.MkdirAll(filepath.Join(mountPoint, sub), 0755)
+			
+			subdirs := []string{
+				"cloud", "cloud/html", "cloud/data", "cloud/postgres",
+				"photos", "photos/upload", "photos/postgres", "photos/valkey",
+				"shares", "shares/public",
+				"backup", "backup/vault",
+				"media", "media/data", "media/config",
 			}
-			_ = exec.Command("chown", "-R", fmt.Sprintf("%s:%s", username, username), mountPoint).Run()
+			for _, sub := range subdirs {
+				_ = os.MkdirAll(filepath.Join(mountPoint, sub), 0777)
+			}
+			_ = exec.Command("chmod", "-R", "0777", mountPoint).Run()
+			if username != "root" {
+				_ = exec.Command("chown", "-R", fmt.Sprintf("%s:%s", username, username), mountPoint).Run()
+			}
 		}
 
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
