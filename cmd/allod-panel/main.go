@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/allod-project/allod/internal/config"
+	"github.com/allod-project/allod/internal/helper"
 	"github.com/allod-project/allod/internal/manifest"
 	"github.com/allod-project/allod/internal/preflight"
 	"github.com/allod-project/allod/internal/ring"
@@ -77,6 +78,12 @@ const dbPath = "state.db"
 func getModuleRuntimeStatus(modName string, level string) string {
 	if level == "off" || level == "" {
 		return "off"
+	}
+	if modName == "storage" {
+		// Storage is active if /mnt/allod-storage is mounted or single/raid1 level is configured
+		if _, err := os.Stat("/mnt/allod-storage"); err == nil {
+			return "running"
+		}
 	}
 	out, err := exec.Command("systemctl", "--user", "is-active", modName).Output()
 	st := strings.TrimSpace(string(out))
@@ -252,6 +259,73 @@ func main() {
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s fermato", req.Module)})
+	})
+
+	// 5b. API Storage Init
+	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Disks []string `json:"disks"`
+			Mode  string   `json:"mode"`
+			Mount string   `json:"mount"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			// Optional body
+		}
+
+		if len(req.Disks) == 0 {
+			topo := preflight.DetectStorageTopology()
+			for _, d := range topo.DataDisks {
+				req.Disks = append(req.Disks, d.Name)
+			}
+		}
+
+		if len(req.Disks) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nessun disco dati secondario rilevato"})
+			return
+		}
+
+		if req.Mode == "" {
+			if len(req.Disks) >= 2 {
+				req.Mode = "raid1"
+			} else {
+				req.Mode = "single"
+			}
+		}
+		if req.Mount == "" {
+			req.Mount = "/mnt/allod-storage"
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		res, err := client.Execute("storage.init", map[string]interface{}{
+			"disks": req.Disks,
+			"mode":  req.Mode,
+			"mount": req.Mount,
+			"user":  os.Getenv("USER"),
+		}, false)
+
+		if err != nil || !res.Ok {
+			errMsg := "Errore comunicazione con allod-helperd (assicurati che sia avviato con sudo)"
+			if err != nil {
+				errMsg = err.Error()
+			} else if res.Error != "" {
+				errMsg = res.Error
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Pool Btrfs %s inizializzato con successo su %s!", strings.ToUpper(req.Mode), req.Mount),
+		})
 	})
 
 	// 6. API Modules Set Level
