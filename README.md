@@ -55,29 +55,52 @@
 
 ---
 
-## 🚀 Quick Start (Ubuntu Server)
+## ⚡ Prerequisites & Requirements
 
-### 1. Installation
+* **Operating System**: Ubuntu Server 24.04 LTS (recommended) or any Debian 12+ system (x86-64 or ARM64 / Raspberry Pi 5).
+* **Hardware**: Minimum 4 GB RAM (8 GB recommended for photo AI indexing), 1x or 2x disks for storage.
+* **System Packages**:
+  ```bash
+  sudo apt update && sudo apt install -y podman btrfs-progs git golang-go
+  ```
+
+---
+
+## 🚀 Quick Start (Build & Run from Source)
+
+### 1. Clone the Repository
 ```bash
-# Add official repository and install
-sudo wget -O /usr/share/keyrings/allod.gpg https://dl.allod.dev/key.gpg
-echo "deb [signed-by=/usr/share/keyrings/allod.gpg] https://dl.allod.dev/apt stable main" | sudo tee /etc/apt/sources.list.d/allod.list
-
-sudo apt-get update && sudo apt-get install -y allod-core
+git clone https://github.com/asfaltobollente/allod.git
+cd allod
 ```
 
-### 2. Apply Configuration (Idempotent)
+### 2. Build the Binaries
 ```bash
-# Inspect plan and apply Quadlets
-allod plan -c configs/config.example.yaml
-allod apply -c configs/config.example.yaml --systemd
+go build -o allod ./cmd/allod
+go build -o allod-helperd ./cmd/allod-helperd
+go build -o allod-panel ./cmd/allod-panel
 ```
 
-### 3. Launch Web Dashboard
+### 3. Run Preflight Diagnostics & Inspect Plan
 ```bash
-systemctl --user enable --now allod-panel
-# Open in browser: http://localhost:8080/
+# Verify system RAM and hardware limits
+./allod doctor -c configs/config.example.yaml
+
+# Dry-run configuration plan
+./allod plan -c configs/config.example.yaml
 ```
+
+### 4. Apply Quadlets (Idempotent)
+```bash
+# Generate Podman Quadlet units into ~/.config/containers/systemd/
+./allod apply -c configs/config.example.yaml --systemd
+```
+
+### 5. Launch the Web Dashboard
+```bash
+./allod-panel
+```
+Open your browser at **`http://<SERVER-IP>:8080/`** (or `http://localhost:8080/`) to access the responsive web panel.
 
 ---
 
