@@ -104,6 +104,12 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 			}
 			sb.WriteString(fmt.Sprintf("PublishPort=%d:%d\n", p.N, cPort))
 		}
+	} else {
+		if strings.Contains(img.Ref, "postgres") {
+			sb.WriteString("PublishPort=5432:5432\n")
+		} else if strings.Contains(img.Ref, "valkey") {
+			sb.WriteString("PublishPort=6379:6379\n")
+		}
 	}
 
 	// Persistent Storage Volumes
