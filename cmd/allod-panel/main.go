@@ -62,6 +62,28 @@ func getConfigPath() string {
 	return "configs/config.example.yaml"
 }
 
+func getModulesDir() string {
+	candidates := []string{
+		"modules",
+		filepath.Join(".", "modules"),
+		filepath.Join("..", "modules"),
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, "allod", "modules"))
+	}
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates, filepath.Join(exeDir, "modules"))
+		candidates = append(candidates, filepath.Join(exeDir, "..", "modules"))
+	}
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && fi.IsDir() {
+			return c
+		}
+	}
+	return "modules"
+}
+
 func getRingTopology(cfg *config.Config) (*ring.RingTopology, bool) {
 	if _, err := os.Stat("ring.yaml"); err == nil {
 		topo, err := ring.LoadTopology("ring.yaml")
@@ -269,7 +291,8 @@ func main() {
 			return
 		}
 
-		entries, err := os.ReadDir("modules")
+		modDir := getModulesDir()
+		entries, err := os.ReadDir(modDir)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
@@ -282,7 +305,7 @@ func main() {
 				continue
 			}
 			modName := e.Name()
-			mPath := filepath.Join("modules", modName, "module.yaml")
+			mPath := filepath.Join(modDir, modName, "module.yaml")
 			m, err := manifest.LoadManifest(mPath)
 			if err != nil {
 				continue
@@ -340,32 +363,54 @@ func main() {
 			}
 		}
 
-		mPath := filepath.Join("modules", req.Module, "module.yaml")
-		if m, err := manifest.LoadManifest(mPath); err == nil {
-			if genRes, err := quadlet.Generate(req.Module, m, level); err == nil {
-				home, _ := os.UserHomeDir()
-				if home != "" {
-					quadDir := filepath.Join(home, ".config", "containers", "systemd")
-					_ = os.MkdirAll(quadDir, 0755)
-					quadlet.EnsureAllodNetwork(quadDir)
-					for fname, content := range genRes.Files {
-						_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
-					}
+		modDir := getModulesDir()
+		mPath := filepath.Join(modDir, req.Module, "module.yaml")
+		m, err := manifest.LoadManifest(mPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Manifest non trovato per '%s' in %s: %v", req.Module, mPath, err)})
+			return
+		}
+
+		genRes, err := quadlet.Generate(req.Module, m, level)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore generazione Quadlet per %s: %v", req.Module, err)})
+			return
+		}
+
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			quadDir := filepath.Join(home, ".config", "containers", "systemd")
+			_ = os.MkdirAll(quadDir, 0755)
+			quadlet.EnsureAllodNetwork(quadDir)
+			for fname, content := range genRes.Files {
+				if err := os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644); err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore scrittura file %s: %v", fname, err)})
+					return
 				}
 			}
 		}
 
-		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		reloadOut, _ := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput()
 		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
 
-		// Start secondary containers if any
-		_ = exec.Command("systemctl", "--user", "start", "--no-block", req.Module+"-postgres").Run()
-		_ = exec.Command("systemctl", "--user", "start", "--no-block", req.Module+"-valkey").Run()
+		// Start secondary containers first if any
+		_ = exec.Command("systemctl", "--user", "start", req.Module+"-postgres").Run()
+		_ = exec.Command("systemctl", "--user", "start", req.Module+"-valkey").Run()
 
-		cmd := exec.Command("systemctl", "--user", "start", "--no-block", req.Module)
-		if err := cmd.Run(); err != nil {
+		startOut, err := exec.Command("systemctl", "--user", "start", req.Module).CombinedOutput()
+		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore avvio servizio %s: %v", req.Module, err)})
+			errMsg := strings.TrimSpace(string(startOut))
+			if errMsg == "" {
+				errMsg = strings.TrimSpace(string(reloadOut))
+			}
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore avvio servizio %s: %s", req.Module, errMsg)})
 			return
 		}
 
@@ -551,11 +596,11 @@ func main() {
 			return
 		}
 
-		mPath := filepath.Join("modules", req.Module, "module.yaml")
+		mPath := filepath.Join(getModulesDir(), req.Module, "module.yaml")
 		m, err := manifest.LoadManifest(mPath)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Modulo inesistente"})
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Modulo inesistente: " + err.Error()})
 			return
 		}
 
