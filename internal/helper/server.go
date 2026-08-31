@@ -226,6 +226,14 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		if !req.Plan {
+			for _, d := range disks {
+				devPath := d
+				if !strings.HasPrefix(devPath, "/dev/") {
+					devPath = "/dev/" + devPath
+				}
+				_ = exec.Command("umount", devPath).Run()
+			}
+
 			args := []string{"-d", mode, "-m", mode, "-f"}
 			for _, d := range disks {
 				if !strings.HasPrefix(d, "/dev/") {

@@ -343,7 +343,9 @@ var startCmd = &cobra.Command{
 				if modCfg.Level == "off" {
 					continue
 				}
-				runCmd := exec.Command("systemctl", "--user", "start", modName)
+				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-postgres").Run()
+				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-valkey").Run()
+				runCmd := exec.Command("systemctl", "--user", "start", "--no-block", modName)
 				if err := runCmd.Run(); err != nil {
 					fmt.Printf("  ✗ %-12s Errore avvio (systemd unit %s): %v\n", modName, modName, err)
 				} else {
@@ -351,7 +353,9 @@ var startCmd = &cobra.Command{
 				}
 			}
 		} else {
-			runCmd := exec.Command("systemctl", "--user", "start", target)
+			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-postgres").Run()
+			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-valkey").Run()
+			runCmd := exec.Command("systemctl", "--user", "start", "--no-block", target)
 			if err := runCmd.Run(); err != nil {
 				fmt.Printf("✗ Errore avvio modulo '%s': %v\n", target, err)
 				os.Exit(1)
@@ -381,11 +385,11 @@ var stopCmd = &cobra.Command{
 		if target == "all" {
 			fmt.Println("Arresto di tutti i moduli...")
 			for modName := range cfg.Modules {
-				_ = exec.Command("systemctl", "--user", "stop", modName).Run()
+				_ = exec.Command("systemctl", "--user", "stop", modName, modName+"-postgres", modName+"-valkey").Run()
 				fmt.Printf("  ⏹ %-12s Fermato\n", modName)
 			}
 		} else {
-			_ = exec.Command("systemctl", "--user", "stop", target).Run()
+			_ = exec.Command("systemctl", "--user", "stop", target, target+"-postgres", target+"-valkey").Run()
 			fmt.Printf("⏹ Modulo '%s' fermato\n", target)
 		}
 	},
