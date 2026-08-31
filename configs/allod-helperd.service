@@ -1,0 +1,13 @@
+[Unit]
+Description=Allod Privileged Root Helper Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/%u/allod/allod-helperd
+WorkingDirectory=/home/%u/allod
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
