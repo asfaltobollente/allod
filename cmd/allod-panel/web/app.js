@@ -260,12 +260,17 @@ function renderOverview() {
         <div class="node-item-icon">⚡</div>
         <div class="node-item-info" style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;">
           <div>
-            <h4 style="margin:0; color:var(--text-main);">Gestione Automatica Pool Storage</h4>
-            <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">Inizializza o rimonta il pool RAID 1 su <code>/mnt/allod-storage</code> con un click.</p>
+            <h4 style="margin:0; color:var(--text-main);">Gestione & Ispezione Pool Storage</h4>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">Controlla l'allocazione RAID 1, i checksum e la salute del filesystem in tempo reale.</p>
           </div>
-          <button class="btn btn-sm btn-primary" id="btn-init-storage" onclick="initStorageFromGUI()">
-            ⚡ Inizializza Pool Btrfs (${(st.mode || 'raid1').toUpperCase()})
-          </button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-sm btn-info" id="btn-diag-storage" onclick="showStorageDiagnostics()">
+              🔍 Ispezione Btrfs & Checksum
+            </button>
+            <button class="btn btn-sm btn-primary" id="btn-init-storage" onclick="initStorageFromGUI()">
+              ⚡ Inizializza Pool Btrfs (${(st.mode || 'raid1').toUpperCase()})
+            </button>
+          </div>
         </div>
       `;
       storageGrid.appendChild(actionBox);
@@ -455,7 +460,10 @@ function renderModules() {
     if (!isOff) {
       if (mod.runtime_status === 'running') {
         statusBadge = `<span class="badge badge-success">🟢 IN ESECUZIONE</span>`;
-        actionButtons = `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ Ferma</button>`;
+        actionButtons = `
+          <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ Ferma</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
+        `;
         
         if (tech.linkPort) {
           const host = window.location.hostname || '127.0.0.1';
@@ -470,10 +478,16 @@ function renderModules() {
         }
       } else if (mod.runtime_status === 'failed') {
         statusBadge = `<span class="badge badge-danger">🔴 ERRORE</span>`;
-        actionButtons = `<button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Riavvia</button>`;
+        actionButtons = `
+          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Riavvia</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
+        `;
       } else {
         statusBadge = `<span class="badge badge-warning">⏹ FERMATO</span>`;
-        actionButtons = `<button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Avvia</button>`;
+        actionButtons = `
+          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Avvia</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
+        `;
       }
     }
 
@@ -849,4 +863,89 @@ function showAlert(msg, type) {
   banner.textContent = msg;
   banner.classList.remove('hidden');
   setTimeout(() => banner.classList.add('hidden'), 5000);
+}
+
+function closeDiagModal() {
+  const modal = document.getElementById('diagnostics-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function showStorageDiagnostics() {
+  const modal = document.getElementById('diagnostics-modal');
+  const title = document.getElementById('diag-modal-title');
+  const body = document.getElementById('diag-modal-body');
+  if (!modal || !title || !body) return;
+
+  title.innerHTML = '🔍 Ispezione Live Btrfs RAID 1 & Salute Dischi';
+  body.innerHTML = '<p class="text-muted">Interrogazione del kernel: <code>btrfs filesystem usage</code> & <code>btrfs device stats</code>...</p>';
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/storage/diagnostics');
+    const json = await res.json();
+    if (json.status !== 'ok') {
+      body.innerHTML = `<div class="alert-banner alert-danger">Errore lettura diagnostica: ${json.message}</div>`;
+      return;
+    }
+    const d = json.data;
+    body.innerHTML = `
+      <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div>
+          <strong>Punto di mount:</strong> <code>${d.mount_point}</code>
+          <span class="badge ${d.is_mounted ? 'badge-success' : 'badge-danger'}" style="margin-left:8px;">
+            ${d.is_mounted ? '🟢 Montato & Attivo' : '🔴 Non Montato'}
+          </span>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted);">${d.timestamp}</div>
+      </div>
+
+      <h4 style="margin:12px 0 6px 0; font-size:13px; color:var(--primary);">📊 Allocazione Btrfs Filesystem Usage (RAID 1 Real-Time):</h4>
+      <div class="diag-code-box">${escapeHtml(d.usage)}</div>
+
+      <h4 style="margin:16px 0 6px 0; font-size:13px; color:var(--success);">🛡️ Contatori di Errore Hardware Dischi (btrfs device stats):</h4>
+      <div class="diag-code-box" style="color:#10b981;">${escapeHtml(d.stats)}</div>
+    `;
+  } catch (err) {
+    body.innerHTML = `<div class="alert-banner alert-danger">Errore di rete: ${err.message}</div>`;
+  }
+}
+
+async function showModuleDiagnostics(modId) {
+  const modal = document.getElementById('diagnostics-modal');
+  const title = document.getElementById('diag-modal-title');
+  const body = document.getElementById('diag-modal-body');
+  if (!modal || !title || !body) return;
+
+  title.innerHTML = `🩺 Diagnostica Live Modulo: <strong>${modId}</strong>`;
+  body.innerHTML = `<p class="text-muted">Recupero stato systemd e ultimi log container per <code>${modId}</code>...</p>`;
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/api/modules/diagnostics?module=${encodeURIComponent(modId)}`);
+    const json = await res.json();
+    if (json.status !== 'ok') {
+      body.innerHTML = `<div class="alert-banner alert-danger">Errore diagnostica: ${json.message}</div>`;
+      return;
+    }
+    const d = json.data;
+    body.innerHTML = `
+      <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+        <div><strong>Modulo:</strong> <code>${d.module}</code></div>
+        <div style="font-size:11px; color:var(--text-muted);">${d.timestamp}</div>
+      </div>
+
+      <h4 style="margin:12px 0 6px 0; font-size:13px; color:var(--primary);">⚙️ Stato Systemd (systemctl status ${d.module}):</h4>
+      <div class="diag-code-box">${escapeHtml(d.status_text || 'Nessun output')}</div>
+
+      <h4 style="margin:16px 0 6px 0; font-size:13px; color:var(--primary);">📜 Ultimi Log Container Podman (tail -30):</h4>
+      <div class="diag-code-box" style="color:#e2e8f0;">${escapeHtml(d.logs || 'Nessun log recente')}</div>
+    `;
+  } catch (err) {
+    body.innerHTML = `<div class="alert-banner alert-danger">Errore di rete: ${err.message}</div>`;
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

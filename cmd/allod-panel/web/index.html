@@ -248,6 +248,22 @@
     </main>
   </div>
 
+  <!-- DIAGNOSTICS MODAL -->
+  <div id="diagnostics-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="diag-modal-title">🔍 Diagnostica di Sistema</h3>
+        <button class="modal-close-btn" onclick="closeDiagModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="diag-modal-body">
+        <p class="text-muted">Caricamento diagnostica in corso...</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeDiagModal()">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
