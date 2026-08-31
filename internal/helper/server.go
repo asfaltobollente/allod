@@ -5,12 +5,19 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
 
 var validNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+
+func validDeviceRegex(dev string) bool {
+	dev = strings.TrimSpace(dev)
+	dev = strings.TrimPrefix(dev, "/dev/")
+	return validNameRegex.MatchString(dev)
+}
 
 type Request struct {
 	Action string                 `json:"action"`
@@ -27,6 +34,46 @@ type Response struct {
 
 type Server struct {
 	SocketPath string
+}
+
+type Client struct {
+	SocketPath string
+}
+
+func (c *Client) Execute(action string, args map[string]interface{}, plan bool) (Response, error) {
+	sock := c.SocketPath
+	if sock == "" {
+		sock = "/run/allod/helper.sock"
+	}
+
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		conn, err = net.Dial("unix", "allod-helper.sock")
+		if err != nil {
+			conn, err = net.Dial("tcp", "127.0.0.1:40000")
+			if err != nil {
+				return Response{Ok: false, Error: "cannot connect to helper"}, err
+			}
+		}
+	}
+	defer conn.Close()
+
+	req := Request{
+		Action: action,
+		Plan:   plan,
+		Args:   args,
+	}
+
+	if err := json.NewEncoder(conn).Encode(req); err != nil {
+		return Response{Ok: false, Error: err.Error()}, err
+	}
+
+	var res Response
+	if err := json.NewDecoder(conn).Decode(&res); err != nil {
+		return Response{Ok: false, Error: err.Error()}, err
+	}
+
+	return res, nil
 }
 
 func (s *Server) Start() error {
@@ -135,11 +182,73 @@ func (s *Server) processRequest(req Request) Response {
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("systemctl restart %s", unit)}}
 
 	case "storage.init":
-		serial, ok := req.Args["serial"].(string)
-		if !ok || !validNameRegex.MatchString(serial) {
-			return Response{Ok: false, Error: "Invalid or missing 'serial' identifier"}
+		var disks []string
+		if dList, ok := req.Args["disks"].([]interface{}); ok {
+			for _, d := range dList {
+				if s, ok := d.(string); ok && validDeviceRegex(s) {
+					disks = append(disks, s)
+				}
+			}
+		} else if dStr, ok := req.Args["disks"].(string); ok {
+			for _, s := range strings.Split(dStr, ",") {
+				s = strings.TrimSpace(s)
+				if validDeviceRegex(s) {
+					disks = append(disks, s)
+				}
+			}
 		}
-		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("wipefs and format disk with serial %s", serial)}}
+
+		if len(disks) == 0 {
+			return Response{Ok: false, Error: "Nessun disco valido specificato per storage.init"}
+		}
+
+		mode, _ := req.Args["mode"].(string)
+		if mode != "single" {
+			mode = "raid1"
+		}
+
+		mountPoint, _ := req.Args["mount"].(string)
+		if mountPoint == "" {
+			mountPoint = "/mnt/allod-storage"
+		}
+
+		username, _ := req.Args["user"].(string)
+		if username == "" {
+			username = "root"
+		}
+
+		plan := []string{
+			fmt.Sprintf("mkfs.btrfs -d %s -m %s -f %s", mode, mode, strings.Join(disks, " ")),
+			fmt.Sprintf("mkdir -p %s", mountPoint),
+			fmt.Sprintf("mount %s %s", disks[0], mountPoint),
+			fmt.Sprintf("mkdir -p %s/{cloud,photos,shares,backup}", mountPoint),
+			fmt.Sprintf("chown -R %s:%s %s", username, username, mountPoint),
+		}
+
+		if !req.Plan {
+			args := []string{"-d", mode, "-m", mode, "-f"}
+			for _, d := range disks {
+				if !strings.HasPrefix(d, "/dev/") {
+					d = "/dev/" + d
+				}
+				args = append(args, d)
+			}
+			if err := exec.Command("mkfs.btrfs", args...).Run(); err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore mkfs.btrfs: %v", err)}
+			}
+			_ = os.MkdirAll(mountPoint, 0755)
+			firstDisk := disks[0]
+			if !strings.HasPrefix(firstDisk, "/dev/") {
+				firstDisk = "/dev/" + firstDisk
+			}
+			_ = exec.Command("mount", firstDisk, mountPoint).Run()
+			for _, sub := range []string{"cloud", "photos", "shares", "backup"} {
+				_ = os.MkdirAll(filepath.Join(mountPoint, sub), 0755)
+			}
+			_ = exec.Command("chown", "-R", fmt.Sprintf("%s:%s", username, username), mountPoint).Run()
+		}
+
+		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
 
 	default:
 		// Rifiuta tassativamente tutto ciò che non è nella lista chiusa

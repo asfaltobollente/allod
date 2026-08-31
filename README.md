@@ -217,6 +217,8 @@ In case of issues or configuration updates, you can inspect logs and restart ser
 | `allod status` | Displays real-time running/stopped/failed status of all configured modules. |
 | `allod set <mod>=<lvl>` | Changes module level with strict hardware & dependency preflight. |
 | `allod doctor` | Comprehensive diagnostic check of active modules and RAM limits. |
+| `allod storage disks` | Inspects physical disks and shows current NAS storage topology. |
+| `allod storage init [disks...]` | Automated Btrfs RAID 1 formatting, subvolume setup & /mnt/allod-storage mount. |
 | `allod ring status` | Displays ring federation health and verifies 2-replica dataset placement. |
 | `allod ring add <id> <ip>` | Connects a friend's node to the encrypted federation Ring. |
 | `allod ring simulate --remove <id>` | Calculates emergency rebalance plan if a peer leaves the ring. |
