@@ -31,6 +31,10 @@ type Server struct {
 
 func (s *Server) Start() error {
 	os.Remove(s.SocketPath) // Pulizia vecchio socket
+	if dir := filepath.Dir(s.SocketPath); dir != "." && dir != "" {
+		_ = os.MkdirAll(dir, 0755)
+	}
+
 	l, err := net.Listen("unix", s.SocketPath)
 	if err != nil {
 		// Fallback locale per test se unix socket fallisce su win
@@ -40,6 +44,7 @@ func (s *Server) Start() error {
 		}
 		fmt.Println("Ascolto su TCP 127.0.0.1:40000 (Fallback)")
 	} else {
+		_ = os.Chmod(s.SocketPath, 0666)
 		fmt.Println("Ascolto su UNIX Socket:", s.SocketPath)
 	}
 	defer l.Close()
