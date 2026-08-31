@@ -2,7 +2,7 @@
 
 **Full data ownership: modular, subscription-free, with zero exposed ports.**
 
-> 🇮🇹 *"I tuoi dati in piena proprietà, con la stessa comodità di prima."*  
+> *"I tuoi dati in piena proprietà, con la stessa comodità di prima."*  
 > *Your data, held in full ownership, with the simplicity you expect.*
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
