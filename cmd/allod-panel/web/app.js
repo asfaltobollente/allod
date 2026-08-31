@@ -63,6 +63,18 @@ async function refreshData() {
 function renderOverview() {
   if (!currentStatus) return;
 
+  // Helper Root connection pill
+  const helperPill = document.getElementById('helper-status-pill');
+  if (helperPill) {
+    if (currentStatus.helper_connected) {
+      helperPill.className = 'helper-status';
+      helperPill.innerHTML = '<span class="status-indicator"></span> Helper Root: Connesso';
+    } else {
+      helperPill.className = 'helper-status offline';
+      helperPill.innerHTML = '<span class="status-indicator offline"></span> Helper Root: Non Avviato';
+    }
+  }
+
   const sidebarName = document.getElementById('sidebar-node-name');
   if (sidebarName) sidebarName.textContent = currentStatus.node_name || 'allod-node';
   

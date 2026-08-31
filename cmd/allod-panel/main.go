@@ -451,12 +451,17 @@ func main() {
 }
 
 func checkHelperConnectivity() bool {
-	conn, err := net.DialTimeout("tcp", "127.0.0.1:40000", 500*time.Millisecond)
+	conn, err := net.DialTimeout("unix", "/run/allod/helper.sock", 200*time.Millisecond)
 	if err == nil {
 		conn.Close()
 		return true
 	}
-	conn, err = net.DialTimeout("unix", "allod-helper.sock", 500*time.Millisecond)
+	conn, err = net.DialTimeout("unix", "allod-helper.sock", 200*time.Millisecond)
+	if err == nil {
+		conn.Close()
+		return true
+	}
+	conn, err = net.DialTimeout("tcp", "127.0.0.1:40000", 200*time.Millisecond)
 	if err == nil {
 		conn.Close()
 		return true
