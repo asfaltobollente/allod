@@ -187,39 +187,53 @@ const moduleTechInfo = {
   cloud: {
     product: 'Nextcloud Hub 30',
     desc: 'Cloud personale per file, cartelle e sincronizzazione desktop/mobile (alternativa privata a Google Drive / Dropbox).',
+    db: 'SQLite (Embedded)',
+    dbNote: 'Ottimale per uso personale (1 utente) e minimo consumo RAM. Per carichi multi-utente e sync massivi (>100k file) è consigliato un backend PostgreSQL dedicato.',
     linkPort: 8443,
     linkProtocol: 'http'
   },
   photos: {
     product: 'Immich v3.1 + PostgreSQL + Valkey',
     desc: 'Galleria foto ad alte prestazioni con backup automatico da telefono, timeline e album (alternativa a Google Foto).',
+    db: 'PostgreSQL 14 + Vectorchord + Valkey',
+    dbNote: 'Database relazionale scalabile e motore vettoriale per indicizzazione IA e ricerca semantica ultra-veloce.',
     linkPort: 2283,
     linkProtocol: 'http'
   },
   backup: {
     product: 'rest-server (Restic Backend)',
     desc: 'Motore di backup cifrato end-to-end con modalità append-only rigorosa a prova di ransomware.',
+    db: 'Repository Crittografico Restic',
+    dbNote: 'Dati immutabili protetti con cifratura client-side AES-256 senza dipendenze da database esterni.',
     linkPort: null
   },
   shares: {
     product: 'Samba (SMB/CIFS)',
     desc: 'Condivisione file ad altissima velocità su rete locale per PC Windows, Mac e Linux.',
+    db: 'Samba TDB (Trivial Database nativo)',
+    dbNote: 'Database di lock ad alte prestazioni integrato direttamente nel kernel e filesystem Linux.',
     linkPort: null
   },
   storage: {
     product: 'Btrfs CoW Filesystem + smartmontools',
     desc: 'Storage avanzato con RAID 1 hardware-safe, snapshot istantanei e diagnosi di salute S.M.A.R.T.',
+    db: 'Btrfs B-Trees (On-Disk Metadata)',
+    dbNote: 'Controllo di integrità dei blocchi e auto-riparazione con checksum CRC32c automatico.',
     linkPort: null
   },
   media: {
     product: 'Jellyfin Media Server',
     desc: 'Streaming multimediale personale per film, serie TV, video e musica.',
+    db: 'SQLite (Embedded)',
+    dbNote: 'Database locale leggero e veloce per librerie musicali e metadati cinematografici.',
     linkPort: 8096,
     linkProtocol: 'http'
   },
   watch: {
     product: 'Allod Watchdog + WireGuard Mesh',
     desc: 'Supervisione continua dei battiti cardiaci dei nodi amici e coordinamento repliche.',
+    db: 'State.db (SQLite locale)',
+    dbNote: 'Tracciamento idempotente dello stato dei nodi e delle transizioni del ring.',
     linkPort: null
   }
 };
@@ -242,6 +256,8 @@ function renderModules() {
     const tech = moduleTechInfo[mod.id] || {
       product: mod.id,
       desc: manifest.provides ? manifest.provides.join(', ') : 'Modulo Allod',
+      db: 'Standard',
+      dbNote: 'Configurazione predefinita Allod',
       linkPort: null
     };
 
@@ -291,6 +307,16 @@ function renderModules() {
       }
     }
 
+    let dbInfoHtml = ``;
+    if (tech.db) {
+      dbInfoHtml = `
+        <div style="margin-top:8px; padding:6px 10px; background:rgba(15, 23, 42, 0.6); border-radius:6px; border-left:3px solid var(--primary); font-size:11px;">
+          <div style="font-weight:600; color:var(--text-main); margin-bottom:2px;">🗄️ Database: <span style="color:var(--primary);">${tech.db}</span></div>
+          <div style="color:var(--text-muted); line-height:1.35;">${tech.dbNote}</div>
+        </div>
+      `;
+    }
+
     card.innerHTML = `
       <div>
         <div class="module-card-header">
@@ -309,7 +335,7 @@ function renderModules() {
           </div>
         </div>
 
-        <p style="font-size:12px; color:var(--text-muted); margin:8px 0 12px 0; line-height:1.4;">
+        <p style="font-size:12px; color:var(--text-muted); margin:8px 0 10px 0; line-height:1.4;">
           ${tech.desc}
         </p>
 
@@ -322,6 +348,7 @@ function renderModules() {
         </div>
 
         ${grantsHtml}
+        ${dbInfoHtml}
         ${openLinkHtml}
       </div>
 
