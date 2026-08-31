@@ -3,6 +3,7 @@ package quadlet
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/allod-project/allod/internal/manifest"
@@ -30,6 +31,8 @@ func Generate(modID string, m *manifest.Manifest, levelName string) (*GenerateRe
 	}
 
 	result := &GenerateResult{Files: make(map[string]string)}
+
+	EnsureStorageDirectories(modID)
 
 	if len(m.Images) == 0 {
 		// Native module: generate a .service unit instead of .container
@@ -61,6 +64,47 @@ func Generate(modID string, m *manifest.Manifest, levelName string) (*GenerateRe
 	}
 
 	return result, nil
+}
+
+// EnsureStorageDirectories creates all host volume mount paths with permissive access.
+func EnsureStorageDirectories(modID string) {
+	baseDir := StorageBaseDir()
+	var dirs []string
+	switch modID {
+	case "cloud":
+		dirs = []string{
+			filepath.Join(baseDir, "cloud", "html"),
+			filepath.Join(baseDir, "cloud", "data"),
+			filepath.Join(baseDir, "cloud", "postgres"),
+		}
+	case "photos":
+		dirs = []string{
+			filepath.Join(baseDir, "photos", "upload"),
+			filepath.Join(baseDir, "photos", "postgres"),
+			filepath.Join(baseDir, "photos", "valkey"),
+		}
+	case "backup":
+		dirs = []string{
+			filepath.Join(baseDir, "backup", "vault"),
+		}
+	case "shares":
+		dirs = []string{
+			filepath.Join(baseDir, "shares", "public"),
+		}
+	case "media":
+		dirs = []string{
+			filepath.Join(baseDir, "media", "data"),
+			filepath.Join(baseDir, "media", "config"),
+		}
+	default:
+		dirs = []string{
+			filepath.Join(baseDir, modID),
+		}
+	}
+
+	for _, d := range dirs {
+		_ = os.MkdirAll(d, 0777)
+	}
 }
 
 // StorageBaseDir determines the root directory for persistent module volumes.
