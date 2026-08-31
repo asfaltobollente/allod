@@ -1,11 +1,12 @@
 # Allod — Personal Cloud & Federated Peer Backup Orchestrator
 
-**Cloud personale in piena proprietà: modulare, senza abbonamenti, senza porte aperte.**
+**Full data ownership: modular, subscription-free, with zero exposed ports.**
 
-> *"I tuoi dati in piena proprietà, con la stessa comodità di prima."* — *Your data, held in full.*
+> 🇮🇹 *"I tuoi dati in piena proprietà, con la stessa comodità di prima."*  
+> *Your data, held in full ownership, with the simplicity you expect.*
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Go Report Card](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](go.mod)
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](go.mod)
 [![Target OS](https://img.shields.io/badge/Target%20OS-Ubuntu%20Server%2024.04%20LTS-E95420.svg)](docs/en/tutorial/first-node.md)
 [![Architecture](https://img.shields.io/badge/Arch-x86--64%20%7C%20ARM64-brightgreen.svg)](docs/en/explanation/architecture.md)
 
@@ -13,14 +14,14 @@
 
 ## 📖 Overview
 
-**Allod** is a lightweight, declarative personal cloud orchestrator built on top of **Podman Quadlets** and **systemd**. It transforms a mini PC, old laptop, or Raspberry Pi 5 into a resilient home server that federates with friends over an encrypted WireGuard mesh to provide reciprocal, ransomware-proof backups.
+**Allod** is a lightweight, declarative personal cloud orchestrator built on top of **Podman Quadlets** and **systemd**. It transforms any mini PC, old laptop, or Raspberry Pi 5 into a resilient home server that can federate with friends over an encrypted WireGuard mesh to provide reciprocal, ransomware-proof backups.
 
 ### Core Principles
-1. **Full Data Ownership**: You own the hardware, the keys, and the storage. No central SaaS accounts required.
-2. **Immutable Append-Only Backups**: Peer backups run in strict append-only mode (`rest-server --append-only`). If your node suffers a ransomware attack, the attacker cannot delete historical backups stored on your friends' nodes.
-3. **Decentralized 2-Replica Ring**: In a group of 3+ nodes, every critical dataset automatically maintains 2 distinct remote replicas with anti-affinity placement.
+1. **Full Data Ownership**: You own the hardware, the encryption keys, and the storage. No third-party SaaS accounts required.
+2. **Immutable Append-Only Backups**: Peer backups operate in strict append-only mode (`rest-server --append-only`). If your local server suffers a ransomware attack, the attacker cannot delete or tamper with historical backups stored on your peers' servers.
+3. **Decentralized 2-Replica Ring**: In a federation group of 3+ nodes, every critical dataset automatically maintains 2 distinct remote replicas with anti-affinity placement.
 4. **Strict Privilege Boundary**: The web dashboard is 100% rootless; administrative tasks are delegated over a local UNIX socket to a minimal root helper with a closed 9-action whitelist.
-5. **No Open Firewall Ports**: Natively integrated with WireGuard overlay meshes (Headscale / Tailscale) with fine-grained per-port ACLs.
+5. **No Open Firewall Ports**: Natively integrates with WireGuard overlay meshes (Headscale / Tailscale) with fine-grained per-port access control lists (ACLs).
 
 ---
 
@@ -34,7 +35,7 @@
   │   │  allod-panel (Web UI)     │   │  allod CLI          │   │
   │   │  - Embedded SPA dashboard │   │  - plan / apply     │   │
   │   │  - Preflight validator    │   │  - doctor / ring    │   │
-  │   │  - Rollback state machine │   │  - sbom             │   │
+  │   │  - Live service controls  │   │  - start / stop     │   │
   │   └─────────────┬─────────────┘   └──────────┬──────────┘   │
   │                 │                            │              │
   │                 │    UNIX Domain Socket      │              │
@@ -58,7 +59,7 @@
 ## ⚡ Prerequisites & Requirements
 
 * **Operating System**: Ubuntu Server 24.04 LTS (recommended) or any Debian 12+ system (x86-64 or ARM64 / Raspberry Pi 5).
-* **Hardware**: Minimum 4 GB RAM (8 GB recommended for photo AI indexing), 1x or 2x disks for storage.
+* **Hardware**: Minimum 4 GB RAM (8 GB recommended for AI photo indexing), 1x or 2x disks for storage.
 * **System Packages**:
   ```bash
   sudo apt update && sudo apt install -y podman btrfs-progs git golang-go
@@ -83,7 +84,7 @@ go build -o allod-panel ./cmd/allod-panel
 
 ### 3. Initialize Your Node Configuration
 ```bash
-# Initialize your node configuration (e.g. ./allod init my-server)
+# Initialize config.yaml with your custom node name (e.g. ./allod init my-server)
 ./allod init my-node-name
 ```
 
