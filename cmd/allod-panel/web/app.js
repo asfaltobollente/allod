@@ -249,6 +249,26 @@ function renderOverview() {
         `;
         storageGrid.appendChild(box);
       });
+
+      // Storage GUI Action Row
+      const actionBox = document.createElement('div');
+      actionBox.className = 'node-item-box';
+      actionBox.style.gridColumn = '1 / -1';
+      actionBox.style.background = 'rgba(16, 185, 129, 0.08)';
+      actionBox.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+      actionBox.innerHTML = `
+        <div class="node-item-icon">⚡</div>
+        <div class="node-item-info" style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;">
+          <div>
+            <h4 style="margin:0; color:var(--text-main);">Gestione Automatica Pool Storage</h4>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">Inizializza o rimonta il pool RAID 1 su <code>/mnt/allod-storage</code> con un click.</p>
+          </div>
+          <button class="btn btn-sm btn-primary" id="btn-init-storage" onclick="initStorageFromGUI()">
+            ⚡ Inizializza Pool Btrfs (${(st.mode || 'raid1').toUpperCase()})
+          </button>
+        </div>
+      `;
+      storageGrid.appendChild(actionBox);
     } else {
       const box = document.createElement('div');
       box.className = 'node-item-box';
@@ -262,6 +282,30 @@ function renderOverview() {
       `;
       storageGrid.appendChild(box);
     }
+  }
+}
+
+async function initStorageFromGUI() {
+  if (!confirm("Vuoi inizializzare/rimontare il pool Btrfs RAID 1 sui dischi fisici del NAS su /mnt/allod-storage?")) {
+    return;
+  }
+  showToast('Inizializzazione pool storage in corso tramite helper root...', 'info');
+  try {
+    const res = await fetch('/api/storage/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showToast(data.message || 'Pool Btrfs inizializzato con successo!', 'success');
+      fetchStatus();
+      fetchModules();
+    } else {
+      showToast('Errore: ' + (data.message || 'Operazione fallita'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione con il pannello: ' + err.message, 'error');
   }
 }
 
