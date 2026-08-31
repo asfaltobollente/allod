@@ -957,6 +957,85 @@ var storageInitCmd = &cobra.Command{
 	},
 }
 
+var purgeForce bool
+
+var purgeCmd = &cobra.Command{
+	Use:     "purge [modulo]",
+	Aliases: []string{"reset"},
+	Short:   "Arresta, rimuove i container e cancella tutti i dati e le configurazioni di un modulo",
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		modName := args[0]
+		manifestPath := filepath.Join("modules", modName, "module.yaml")
+		if _, err := os.Stat(manifestPath); err != nil && modName != "storage" {
+			fmt.Printf("Modulo '%s' inesistente.\n", modName)
+			os.Exit(1)
+		}
+
+		if !purgeForce {
+			fmt.Printf("⚠️  ATTENZIONE CRITICA: Stai per cancellare definitivamente tutti i dati, container\n")
+			fmt.Printf("   e file di configurazione per il modulo '%s'.\n", modName)
+			fmt.Printf("   Questa operazione eliminerà il database e i file salvati nel pool storage!\n")
+			fmt.Print("   Per confermare la cancellazione totale, digita 'CANCELLA': ")
+
+			reader := bufio.NewReader(os.Stdin)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+
+			if input != "CANCELLA" {
+				fmt.Println("\n❌ Operazione annullata. Nessun dato è stato cancellato.")
+				return
+			}
+			fmt.Println()
+		}
+
+		fmt.Printf("Purge del modulo '%s' in corso...\n", modName)
+
+		// 1. Stop systemd services
+		_ = exec.Command("systemctl", "--user", "stop", modName).Run()
+		_ = exec.Command("systemctl", "--user", "stop", modName+"-postgres").Run()
+		_ = exec.Command("systemctl", "--user", "stop", modName+"-valkey").Run()
+
+		// 2. Remove Podman containers
+		_ = exec.Command("podman", "rm", "-f", "systemd-"+modName).Run()
+		_ = exec.Command("podman", "rm", "-f", "systemd-"+modName+"-postgres").Run()
+		_ = exec.Command("podman", "rm", "-f", "systemd-"+modName+"-valkey").Run()
+		_ = exec.Command("podman", "rm", "-f", modName).Run()
+
+		// 3. Reset failed state
+		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
+
+		// 4. Remove generated Quadlet units
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			quadDir := filepath.Join(home, ".config", "containers", "systemd")
+			_ = os.Remove(filepath.Join(quadDir, modName+".container"))
+			_ = os.Remove(filepath.Join(quadDir, modName+"-postgres.container"))
+			_ = os.Remove(filepath.Join(quadDir, modName+"-valkey.container"))
+			_ = os.Remove(filepath.Join(quadDir, modName+".service"))
+		}
+
+		// 5. Clean state.db entry
+		if st, err := state.Open(stateDB); err == nil {
+			st.DeleteModule(modName)
+			st.Close()
+		}
+
+		// 6. Clean and re-initialize storage folder
+		baseDir := quadlet.StorageBaseDir()
+		modStorage := filepath.Join(baseDir, modName)
+		_ = os.RemoveAll(modStorage)
+		quadlet.EnsureStorageDirectories(modName)
+
+		// 7. Daemon reload
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+
+		fmt.Printf("✓ Modulo '%s' cancellato e ripristinato con successo.\n", modName)
+		fmt.Printf("✓ Cartelle ricreate pulite su: %s\n", modStorage)
+		fmt.Println("✓ Ora puoi riavviare o reinstallare il modulo con: allod start " + modName)
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "configs/config.example.yaml", "file di configurazione")
 	rootCmd.PersistentFlags().StringVar(&stateDB, "state-db", "state.db", "percorso file state.db")
@@ -965,6 +1044,8 @@ func init() {
 
 	applyCmd.Flags().BoolVar(&useSystemd, "systemd", false, "Genera direttamente nella cartella Quadlet di sistema Ubuntu")
 	applyCmd.Flags().StringVar(&outDirOverride, "out-dir", "", "Percorso personalizzato per i file Quadlet generati")
+
+	purgeCmd.Flags().BoolVarP(&purgeForce, "force", "f", false, "Forza l'eliminazione senza prompt interattivo di sicurezza")
 
 	ringSimulateCmd.Flags().StringVar(&removeMember, "remove", "", "ID del membro da simulare la rimozione")
 
@@ -984,6 +1065,7 @@ func init() {
 	rootCmd.AddCommand(applyCmd)
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(purgeCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(setCmd)
 	rootCmd.AddCommand(doctorCmd)
