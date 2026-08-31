@@ -2,6 +2,7 @@
 let currentStatus = null;
 let currentModules = null;
 let currentRing = null;
+let storageCardUnlocked = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
@@ -469,7 +470,24 @@ function renderModules() {
     let actionButtons = ``;
     let openLinkHtml = ``;
 
-    if (!isOff) {
+    const isStorageOnNAS = (mod.id === 'storage' && (mod.is_on_nas_pool || mod.runtime_status === 'running'));
+    const isStorageLocked = (isStorageOnNAS && !storageCardUnlocked);
+
+    if (isStorageLocked) {
+      card.className = 'module-card module-card-locked';
+      statusBadge = `<span class="badge badge-success">🟢 Btrfs RAID 1 (Protetto)</span>`;
+      actionButtons = `
+        <button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px; margin-left:8px;">🔍 Ispezione Btrfs</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="toggleStorageUnlock()" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔓 Sblocca</button>
+      `;
+    } else if (isStorageOnNAS && storageCardUnlocked) {
+      card.className = 'module-card';
+      statusBadge = `<span class="badge badge-warning">🔓 Btrfs RAID 1 (Sbloccato)</span>`;
+      actionButtons = `
+        <button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px; margin-left:8px;">🔍 Ispezione Btrfs</button>
+        <button class="btn btn-sm btn-warning" onclick="toggleStorageUnlock()" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔒 Blocca</button>
+      `;
+    } else if (!isOff) {
       if (mod.runtime_status === 'running') {
         statusBadge = `<span class="badge badge-success">🟢 IN ESECUZIONE</span>`;
         actionButtons = `
@@ -567,7 +585,7 @@ function renderModules() {
 
         <div class="level-selector-row">
           <label style="font-size:12px; color:var(--text-muted);">Livello:</label>
-          <select class="form-control" onchange="changeModuleLevel('${mod.id}', this.value)" style="padding:4px 8px; font-size:12px;">
+          <select class="form-control" ${isStorageLocked ? 'disabled style="opacity:0.55; cursor:not-allowed; padding:4px 8px; font-size:12px;"' : 'style="padding:4px 8px; font-size:12px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
             ${levelOptions}
           </select>
           <span class="badge badge-info" style="font-size:11px;">${ramReq} MB RAM</span>
@@ -576,9 +594,14 @@ function renderModules() {
         ${grantsHtml}
         ${dbInfoHtml}
         ${storageBoxHtml}
-        ${mod.id === 'storage' ? `
+        ${isStorageLocked ? `
+          <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
+            🔒 <strong>Fondamento NAS Attivo:</strong> Il filesystem Btrfs RAID 1 è montato nel kernel. La card è protetta per evitare modifiche involontarie. Clicca <strong>Sblocca</strong> se desideri agire su di essa.
+          </div>
+        ` : ''}
+        ${(mod.id === 'storage' && storageCardUnlocked) ? `
           <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
-            <details style="font-size:11px; color:var(--text-muted);">
+            <details style="font-size:11px; color:var(--text-muted);" open>
               <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Formattazione Dischi</summary>
               <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
                 <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
@@ -1071,3 +1094,8 @@ document.addEventListener('click', (e) => {
   const dangerModal = document.getElementById('danger-storage-modal');
   if (dangerModal && e.target === dangerModal) closeDangerStorageModal();
 });
+
+function toggleStorageUnlock() {
+  storageCardUnlocked = !storageCardUnlocked;
+  renderModules();
+}
