@@ -96,6 +96,40 @@ function renderOverview() {
     if (actListEl) actListEl.textContent = active.map(m => m.id).join(', ');
   }
 
+  // Ring status metric card
+  const ringBadge = document.getElementById('ring-status-badge');
+  const ringSubtext = document.getElementById('ring-status-subtext');
+  if (currentRing) {
+    const isStandalone = currentRing.is_standalone || Object.keys(currentRing.members || {}).length <= 1;
+    if (isStandalone) {
+      if (ringBadge) ringBadge.textContent = '1 Nodo (Locale)';
+      if (ringSubtext) ringSubtext.textContent = 'Modalità Standalone (0 peer remoti)';
+    } else {
+      const count = Object.keys(currentRing.members || {}).length;
+      if (ringBadge) ringBadge.textContent = `${count} Nodi (OK)`;
+      if (ringSubtext) ringSubtext.textContent = 'Regola 2 repliche remote attiva';
+    }
+  }
+
+  // Security metric card (Real check from backend)
+  const secBadge = document.getElementById('security-status-badge');
+  const secSubtext = document.getElementById('security-status-subtext');
+  if (currentStatus) {
+    if (currentStatus.is_rootless) {
+      if (secBadge) {
+        secBadge.className = 'metric-value text-success';
+        secBadge.textContent = 'Rootless Safe';
+      }
+      if (secSubtext) secSubtext.textContent = `Utente '${currentStatus.current_user || 'non-root'}' (UID: ${currentStatus.uid || 1000})`;
+    } else {
+      if (secBadge) {
+        secBadge.className = 'metric-value text-warning';
+        secBadge.textContent = '⚠️ Root (Privilegiato)';
+      }
+      if (secSubtext) secSubtext.textContent = 'Attenzione: in esecuzione come root!';
+    }
+  }
+
   // Visual Nodes
   const visualGrid = document.getElementById('nodes-visual-grid');
   if (visualGrid && currentRing && currentRing.members) {
