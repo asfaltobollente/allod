@@ -256,20 +256,36 @@ function renderOverview() {
       actionBox.style.gridColumn = '1 / -1';
       actionBox.style.background = 'rgba(16, 185, 129, 0.08)';
       actionBox.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+
+      const isMounted = st.is_mounted || (st.mode === 'raid1' && currentModules.some(m => m.is_on_nas_pool));
+
       actionBox.innerHTML = `
-        <div class="node-item-icon">⚡</div>
+        <div class="node-item-icon">${isMounted ? '🛡️' : '⚡'}</div>
         <div class="node-item-info" style="display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;">
           <div>
-            <h4 style="margin:0; color:var(--text-main);">Gestione & Ispezione Pool Storage</h4>
-            <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">Controlla l'allocazione RAID 1, i checksum e la salute del filesystem in tempo reale.</p>
+            <h4 style="margin:0; color:var(--text-main);">
+              Gestione & Ispezione Pool Storage
+              ${isMounted ? '<span class="badge badge-success" style="margin-left:6px; font-size:10.5px;">✅ RAID 1 Operativo & Montato</span>' : ''}
+            </h4>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+              ${isMounted 
+                ? 'Il pool Btrfs RAID 1 è attivo su <code>/mnt/allod-storage</code>. I container salvano i dati qui.' 
+                : 'I dischi sono stati rilevati ma il pool storage non è ancora inizializzato.'}
+            </p>
           </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <button class="btn btn-sm btn-info" id="btn-diag-storage" onclick="showStorageDiagnostics()">
               🔍 Ispezione Btrfs & Checksum
             </button>
-            <button class="btn btn-sm btn-primary" id="btn-init-storage" onclick="initStorageFromGUI()">
-              ⚡ Inizializza Pool Btrfs (${(st.mode || 'raid1').toUpperCase()})
-            </button>
+            ${!isMounted ? `
+              <button class="btn btn-sm btn-primary" id="btn-init-storage" onclick="initStorageFromGUI()">
+                ⚡ Inizializza Pool Btrfs (${(st.mode || 'raid1').toUpperCase()})
+              </button>
+            ` : `
+              <button class="btn btn-sm btn-outline-secondary" onclick="initStorageFromGUI()" title="Re-inizializza il filesystem (attenzione: operazione distruttiva)" style="font-size:11px; opacity:0.6;">
+                🔄 Re-inizializza
+              </button>
+            `}
           </div>
         </div>
       `;
