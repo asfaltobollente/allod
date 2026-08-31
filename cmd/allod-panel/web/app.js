@@ -2,7 +2,7 @@
 let currentStatus = null;
 let currentModules = null;
 let currentRing = null;
-let storageCardUnlocked = false;
+let unlockedModules = new Set();
 
 document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
@@ -520,23 +520,62 @@ function renderModules() {
     let actionButtons = ``;
     let openLinkHtml = ``;
 
-    const isStorageOnNAS = (mod.id === 'storage' && (mod.is_on_nas_pool || mod.runtime_status === 'running'));
-    const isStorageLocked = (isStorageOnNAS && !storageCardUnlocked);
+    // Critical Data Modules that must be protected once in production:
+    const criticalDataModules = ['storage', 'cloud', 'photos', 'backup', 'shares', 'media'];
+    const isDataCritical = criticalDataModules.includes(mod.id) || (mod.mounts && mod.mounts.length > 0);
+    const isRunningOrNAS = (mod.runtime_status === 'running' || (mod.id === 'storage' && mod.is_on_nas_pool));
+    const isLocked = isDataCritical && isRunningOrNAS && !unlockedModules.has(mod.id);
+    const isUnlocked = isDataCritical && isRunningOrNAS && unlockedModules.has(mod.id);
 
-    if (isStorageLocked) {
+    if (isLocked) {
       card.className = 'module-card module-card-locked';
-      statusBadge = `<span class="badge badge-success">🟢 Btrfs RAID 1 (Protetto)</span>`;
+      statusBadge = `<span class="badge badge-success">🟢 PROTETTO (In Produzione)</span>`;
+      
+      let diagBtn = (mod.id === 'storage')
+        ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 Ispezione Btrfs</button>`
+        : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 Diagnostica</button>`;
+
       actionButtons = `
-        <button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px; margin-left:8px;">🔍 Ispezione Btrfs</button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="toggleStorageUnlock()" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔓 Sblocca</button>
+        ${diagBtn}
+        <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔓 Sblocca</button>
       `;
-    } else if (isStorageOnNAS && storageCardUnlocked) {
+
+      if (tech.linkPort) {
+        const host = window.location.hostname || '127.0.0.1';
+        openLinkHtml = `
+          <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
+            <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
+              <span>🌐 Apri interfaccia web (${tech.product})</span>
+              <span>Porta ${tech.linkPort} ↗</span>
+            </a>
+          </div>
+        `;
+      }
+    } else if (isUnlocked) {
       card.className = 'module-card';
-      statusBadge = `<span class="badge badge-warning">🔓 Btrfs RAID 1 (Sbloccato)</span>`;
+      statusBadge = `<span class="badge badge-warning">🔓 IN ESECUZIONE (Sbloccato)</span>`;
+      
+      let diagBtn = (mod.id === 'storage')
+        ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 Ispezione Btrfs</button>`
+        : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 Diagnostica</button>`;
+
       actionButtons = `
-        <button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px; margin-left:8px;">🔍 Ispezione Btrfs</button>
-        <button class="btn btn-sm btn-warning" onclick="toggleStorageUnlock()" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔒 Blocca</button>
+        ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ Ferma</button>` : ''}
+        ${diagBtn}
+        <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔒 Blocca</button>
       `;
+
+      if (tech.linkPort) {
+        const host = window.location.hostname || '127.0.0.1';
+        openLinkHtml = `
+          <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
+            <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
+              <span>🌐 Apri interfaccia web (${tech.product})</span>
+              <span>Porta ${tech.linkPort} ↗</span>
+            </a>
+          </div>
+        `;
+      }
     } else if (!isOff) {
       if (mod.runtime_status === 'running') {
         statusBadge = `<span class="badge badge-success">🟢 IN ESECUZIONE</span>`;
@@ -635,7 +674,7 @@ function renderModules() {
 
         <div class="level-selector-row">
           <label style="font-size:12px; color:var(--text-muted);">Livello:</label>
-          <select class="form-control" ${isStorageLocked ? 'disabled style="opacity:0.55; cursor:not-allowed; padding:4px 8px; font-size:12px;"' : 'style="padding:4px 8px; font-size:12px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
+          <select class="form-control" ${isLocked ? 'disabled style="opacity:0.55; cursor:not-allowed; padding:4px 8px; font-size:12px;"' : 'style="padding:4px 8px; font-size:12px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
             ${levelOptions}
           </select>
           <span class="badge badge-info" style="font-size:11px;">${ramReq} MB RAM</span>
@@ -644,12 +683,12 @@ function renderModules() {
         ${grantsHtml}
         ${dbInfoHtml}
         ${storageBoxHtml}
-        ${isStorageLocked ? `
+        ${isLocked ? `
           <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
-            🔒 <strong>Fondamento NAS Attivo:</strong> Il filesystem Btrfs RAID 1 è montato nel kernel. La card è protetta per evitare modifiche involontarie. Clicca <strong>Sblocca</strong> se desideri agire su di essa.
+            🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.
           </div>
         ` : ''}
-        ${(mod.id === 'storage' && storageCardUnlocked) ? `
+        ${(mod.id === 'storage' && isUnlocked) ? `
           <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
             <details style="font-size:11px; color:var(--text-muted);" open>
               <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Formattazione Dischi</summary>
@@ -1145,7 +1184,11 @@ document.addEventListener('click', (e) => {
   if (dangerModal && e.target === dangerModal) closeDangerStorageModal();
 });
 
-function toggleStorageUnlock() {
-  storageCardUnlocked = !storageCardUnlocked;
+function toggleModuleUnlock(modId) {
+  if (unlockedModules.has(modId)) {
+    unlockedModules.delete(modId);
+  } else {
+    unlockedModules.add(modId);
+  }
   renderModules();
 }
