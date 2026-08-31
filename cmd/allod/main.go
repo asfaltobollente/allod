@@ -208,6 +208,7 @@ var applyCmd = &cobra.Command{
 		skipped := 0
 
 		processed := make(map[string]bool)
+		quadlet.EnsureAllodNetwork(outDir)
 
 		for modName, modCfg := range cfg.Modules {
 			processed[modName] = true

@@ -347,6 +347,7 @@ func main() {
 				if home != "" {
 					quadDir := filepath.Join(home, ".config", "containers", "systemd")
 					_ = os.MkdirAll(quadDir, 0755)
+					quadlet.EnsureAllodNetwork(quadDir)
 					for fname, content := range genRes.Files {
 						_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
 					}
@@ -599,6 +600,7 @@ func main() {
 				_ = os.Remove(filepath.Join(quadDir, req.Module+"-valkey.container"))
 				_ = os.Remove(filepath.Join(quadDir, req.Module+".service"))
 			} else {
+				quadlet.EnsureAllodNetwork(quadDir)
 				if genRes, err := quadlet.Generate(req.Module, m, req.Level); err == nil {
 					for fname, content := range genRes.Files {
 						_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
