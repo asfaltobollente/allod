@@ -330,7 +330,37 @@ func main() {
 			return
 		}
 
+		// Auto-generate Quadlets if missing or needed
+		cfgPath := getConfigPath()
+		cfg, _ := config.LoadConfig(cfgPath)
+		level := "standard"
+		if cfg != nil && cfg.Modules != nil {
+			if mcfg, ok := cfg.Modules[req.Module]; ok && mcfg.Level != "" && mcfg.Level != "off" {
+				level = mcfg.Level
+			}
+		}
+
+		mPath := filepath.Join("modules", req.Module, "module.yaml")
+		if m, err := manifest.LoadManifest(mPath); err == nil {
+			if genRes, err := quadlet.Generate(req.Module, m, level); err == nil {
+				home, _ := os.UserHomeDir()
+				if home != "" {
+					quadDir := filepath.Join(home, ".config", "containers", "systemd")
+					_ = os.MkdirAll(quadDir, 0755)
+					for fname, content := range genRes.Files {
+						_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
+					}
+				}
+			}
+		}
+
 		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
+
+		// Start secondary containers if any
+		_ = exec.Command("systemctl", "--user", "start", "--no-block", req.Module+"-postgres").Run()
+		_ = exec.Command("systemctl", "--user", "start", "--no-block", req.Module+"-valkey").Run()
+
 		cmd := exec.Command("systemctl", "--user", "start", "--no-block", req.Module)
 		if err := cmd.Run(); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -338,7 +368,7 @@ func main() {
 			return
 		}
 
-		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Avvio del modulo %s avviato in background", req.Module)})
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Avvio del modulo %s avviato con successo", req.Module)})
 	})
 
 	// 5. API Modules Stop
@@ -554,6 +584,28 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
 			return
+		}
+
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			quadDir := filepath.Join(home, ".config", "containers", "systemd")
+			_ = os.MkdirAll(quadDir, 0755)
+			if req.Level == "off" {
+				_ = exec.Command("systemctl", "--user", "stop", req.Module).Run()
+				_ = exec.Command("systemctl", "--user", "stop", req.Module+"-postgres").Run()
+				_ = exec.Command("systemctl", "--user", "stop", req.Module+"-valkey").Run()
+				_ = os.Remove(filepath.Join(quadDir, req.Module+".container"))
+				_ = os.Remove(filepath.Join(quadDir, req.Module+"-postgres.container"))
+				_ = os.Remove(filepath.Join(quadDir, req.Module+"-valkey.container"))
+				_ = os.Remove(filepath.Join(quadDir, req.Module+".service"))
+			} else {
+				if genRes, err := quadlet.Generate(req.Module, m, req.Level); err == nil {
+					for fname, content := range genRes.Files {
+						_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
+					}
+				}
+			}
+			_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s impostato a %s", req.Module, req.Level)})
