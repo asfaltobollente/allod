@@ -278,6 +278,31 @@
     </div>
   </div>
 
+  <!-- DANGER STORAGE MODAL (Double-Lock Safety Check) -->
+  <div id="danger-storage-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:550px; border-color:var(--danger);">
+      <div class="modal-header" style="background:rgba(239,68,68,0.15);">
+        <h3 style="color:var(--danger);">⚠️ Conferma Formattazione Pool Storage</h3>
+        <button class="modal-close-btn" onclick="closeDangerStorageModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert-banner alert-danger" style="margin-bottom:14px;">
+          <strong>ATTENZIONE CRITICA:</strong> Questa operazione cancellerà permanentemente tutti i file, database, foto e cartelle condivise su <code>/mnt/allod-storage</code>!
+        </div>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
+          Per confermare la formattazione e re-inizializzazione del pool Btrfs RAID 1, digita esattamente <strong>FORMATTA</strong> nel campo sottostante:
+        </p>
+        <input type="text" id="danger-confirm-input" class="form-control font-mono" placeholder="Digita FORMATTA" oninput="checkDangerConfirmInput()" style="margin-bottom:14px; width:100%;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeDangerStorageModal()">Annulla</button>
+        <button class="btn btn-danger" id="danger-confirm-btn" onclick="executeDangerStorageInit()" disabled style="margin-left:8px;">
+          🗑️ Conferma e Formatta Dischi
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

@@ -269,7 +269,7 @@ function renderOverview() {
             </h4>
             <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">
               ${isMounted 
-                ? 'Il pool Btrfs RAID 1 è attivo su <code>/mnt/allod-storage</code>. I container salvano i dati qui.' 
+                ? 'Il pool Btrfs RAID 1 è attivo su <code>/mnt/allod-storage</code>. I container salvano i dati sui tuoi dischi fisici.' 
                 : 'I dischi sono stati rilevati ma il pool storage non è ancora inizializzato.'}
             </p>
           </div>
@@ -278,14 +278,10 @@ function renderOverview() {
               🔍 Ispezione Btrfs & Checksum
             </button>
             ${!isMounted ? `
-              <button class="btn btn-sm btn-primary" id="btn-init-storage" onclick="initStorageFromGUI()">
+              <button class="btn btn-sm btn-primary" id="btn-init-storage" onclick="openDangerStorageModal()">
                 ⚡ Inizializza Pool Btrfs (${(st.mode || 'raid1').toUpperCase()})
               </button>
-            ` : `
-              <button class="btn btn-sm btn-outline-secondary" onclick="initStorageFromGUI()" title="Re-inizializza il filesystem (attenzione: operazione distruttiva)" style="font-size:11px; opacity:0.6;">
-                🔄 Re-inizializza
-              </button>
-            `}
+            ` : ''}
           </div>
         </div>
       `;
@@ -580,6 +576,21 @@ function renderModules() {
         ${grantsHtml}
         ${dbInfoHtml}
         ${storageBoxHtml}
+        ${mod.id === 'storage' ? `
+          <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
+            <details style="font-size:11px; color:var(--text-muted);">
+              <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Formattazione Dischi</summary>
+              <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
+                <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
+                  Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici cancellando definitivamente tutti i dati e le foto presenti.
+                </p>
+                <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:11px; padding:4px 10px;">
+                  🗑️ Re-inizializza Pool Storage (Distruttivo)
+                </button>
+              </div>
+            </details>
+          </div>
+        ` : ''}
         ${openLinkHtml}
       </div>
 
@@ -997,11 +1008,66 @@ function escapeHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function openDangerStorageModal() {
+  const modal = document.getElementById('danger-storage-modal');
+  const input = document.getElementById('danger-confirm-input');
+  const btn = document.getElementById('danger-confirm-btn');
+  if (!modal || !input || !btn) return;
+
+  input.value = '';
+  btn.disabled = true;
+  modal.classList.remove('hidden');
+  setTimeout(() => input.focus(), 100);
+}
+
+function closeDangerStorageModal() {
+  const modal = document.getElementById('danger-storage-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function checkDangerConfirmInput() {
+  const input = document.getElementById('danger-confirm-input');
+  const btn = document.getElementById('danger-confirm-btn');
+  if (!input || !btn) return;
+  btn.disabled = input.value.trim() !== 'FORMATTA';
+}
+
+async function executeDangerStorageInit() {
+  const input = document.getElementById('danger-confirm-input');
+  if (!input || input.value.trim() !== 'FORMATTA') {
+    showAlert("Devi digitare esattamente 'FORMATTA' per procedere", 'danger');
+    return;
+  }
+  closeDangerStorageModal();
+  showAlert('Inizializzazione pool storage in corso tramite helper root...', 'info');
+  try {
+    const res = await fetch('/api/storage/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(data.message || 'Pool Btrfs inizializzato con successo!', 'success');
+      refreshData();
+    } else {
+      showAlert('Errore: ' + (data.message || 'Operazione fallita'), 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+  }
+}
+
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeDiagModal();
+  if (e.key === 'Escape') {
+    closeDiagModal();
+    closeDangerStorageModal();
+  }
 });
 
 document.addEventListener('click', (e) => {
-  const modal = document.getElementById('diagnostics-modal');
-  if (modal && e.target === modal) closeDiagModal();
+  const diagModal = document.getElementById('diagnostics-modal');
+  if (diagModal && e.target === diagModal) closeDiagModal();
+  const dangerModal = document.getElementById('danger-storage-modal');
+  if (dangerModal && e.target === dangerModal) closeDangerStorageModal();
 });
