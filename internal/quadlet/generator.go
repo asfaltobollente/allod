@@ -3,6 +3,7 @@ package quadlet
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -126,6 +127,7 @@ NetworkName=allod
 // EnsureAllodNetwork creates allod.network in the systemd quadlet directory if missing.
 func EnsureAllodNetwork(outDir string) {
 	_ = os.MkdirAll(outDir, 0755)
+	_ = exec.Command("podman", "network", "create", "allod").Run()
 	netFile := filepath.Join(outDir, "allod.network")
 	if _, err := os.Stat(netFile); err != nil {
 		_ = os.WriteFile(netFile, []byte(GenerateNetwork()), 0644)
@@ -152,8 +154,7 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	sb.WriteString("[Container]\n")
 	sb.WriteString(fmt.Sprintf("Image=%s:%s\n", img.Ref, img.Tag))
 	sb.WriteString(fmt.Sprintf("ContainerName=%s\n", unitName))
-	sb.WriteString("Network=allod.network\n")
-	sb.WriteString("AddHost=host.containers.internal:host-gateway\n")
+	sb.WriteString("Network=allod\n")
 	if len(img.Args) > 0 {
 		sb.WriteString(fmt.Sprintf("Exec=%s\n", strings.Join(img.Args, " ")))
 	}
