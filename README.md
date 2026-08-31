@@ -103,9 +103,20 @@ go build -o allod-panel ./cmd/allod-panel
 ```
 
 ### 6. Launch the Web Dashboard
+
+**Option A: Simple background with nohup**
 ```bash
-./allod-panel
+nohup ./allod-panel > panel.log 2>&1 &
 ```
+
+**Option B: Persistent systemd user service**
+```bash
+mkdir -p ~/.config/systemd/user
+cp configs/allod-panel.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now allod-panel
+```
+
 Open your browser at **`http://<SERVER-IP>:8080/`** (or `http://localhost:8080/`) to access the responsive web panel.
 
 ---

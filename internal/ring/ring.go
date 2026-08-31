@@ -9,43 +9,43 @@ import (
 )
 
 type Dataset struct {
-	ID       string `yaml:"id"`
-	SizeGB   int    `yaml:"size_gb"`
-	Critical bool   `yaml:"critical"`
+	ID       string `yaml:"id" json:"id"`
+	SizeGB   int    `yaml:"size_gb" json:"size_gb"`
+	Critical bool   `yaml:"critical" json:"critical"`
 }
 
 type Member struct {
-	ID       string    `yaml:"id"`
-	Address  string    `yaml:"address"`
-	QuotaGB  int       `yaml:"quota_gb"`
-	Datasets []Dataset `yaml:"datasets"`
+	ID       string    `yaml:"id" json:"id"`
+	Address  string    `yaml:"address" json:"address"`
+	QuotaGB  int       `yaml:"quota_gb" json:"quota_gb"`
+	Datasets []Dataset `yaml:"datasets" json:"datasets"`
 }
 
 type RingTopology struct {
-	Name           string             `yaml:"name"`
-	TargetReplicas int                `yaml:"target_replicas"`
-	Members        map[string]*Member `yaml:"members"`
+	Name           string             `yaml:"name" json:"name"`
+	TargetReplicas int                `yaml:"target_replicas" json:"target_replicas"`
+	Members        map[string]*Member `yaml:"members" json:"members"`
 }
 
 type ReplicaAssignment struct {
-	DatasetID     string
-	OwnerNode     string
-	SizeGB        int
-	Critical      bool
-	TargetNodes   []string
-	TargetCount   int
-	RequiredCount int
-	Status        string
+	DatasetID     string   `json:"dataset_id"`
+	OwnerNode     string   `json:"owner_node"`
+	SizeGB        int      `json:"size_gb"`
+	Critical      bool     `json:"critical"`
+	TargetNodes   []string `json:"target_nodes"`
+	TargetCount   int      `json:"target_count"`
+	RequiredCount int      `json:"required_count"`
+	Status        string   `json:"status"`
 }
 
 type RemovalImpact struct {
-	LostPrimaryDatasets []string
-	DegradedDatasets    []string
-	RebalanceActions    []string
-	SurvivingMembers    map[string]int // memberID -> usedGB
-	TotalQuotaRemaining int
-	TotalUsedRemaining  int
-	QuorumHealth        string
+	LostPrimaryDatasets []string       `json:"lost_primary_datasets"`
+	DegradedDatasets    []string       `json:"degraded_datasets"`
+	RebalanceActions    []string       `json:"rebalance_actions"`
+	SurvivingMembers    map[string]int `json:"surviving_members"`
+	TotalQuotaRemaining int            `json:"total_quota_remaining"`
+	TotalUsedRemaining  int            `json:"total_used_remaining"`
+	QuorumHealth        string         `json:"quorum_health"`
 }
 
 func NewRingTopology(name string, targetReplicas int) *RingTopology {
