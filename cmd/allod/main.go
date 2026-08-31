@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -305,6 +307,123 @@ var applyCmd = &cobra.Command{
 			fmt.Printf(", %d saltate", skipped)
 		}
 		fmt.Println(".")
+
+		if useSystemd || outDir == getSystemdDir() {
+			_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+			fmt.Println("✓ Eseguito systemctl --user daemon-reload (unità registrate in systemd)")
+			fmt.Println("  Per avviare tutti i servizi:  allod start")
+			fmt.Println("  Per controllare lo stato:    allod status")
+		}
+	},
+}
+
+// startCmd starts module services using systemctl
+var startCmd = &cobra.Command{
+	Use:   "start [modulo|all]",
+	Short: "Avvia i container o servizi dei moduli tramite systemd/Podman",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		target := "all"
+		if len(args) > 0 {
+			target = args[0]
+		}
+
+		cfg, err := config.LoadConfig(cfgFile)
+		if err != nil {
+			fmt.Printf("Errore config: %v\n", err)
+			os.Exit(1)
+		}
+
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+
+		if target == "all" {
+			fmt.Printf("Avvio di tutti i moduli attivi per il nodo %s...\n", cfg.Node.Name)
+			for modName, modCfg := range cfg.Modules {
+				if modCfg.Level == "off" {
+					continue
+				}
+				runCmd := exec.Command("systemctl", "--user", "start", modName)
+				if err := runCmd.Run(); err != nil {
+					fmt.Printf("  ✗ %-12s Errore avvio (systemd unit %s): %v\n", modName, modName, err)
+				} else {
+					fmt.Printf("  ✓ %-12s Avviato\n", modName)
+				}
+			}
+		} else {
+			runCmd := exec.Command("systemctl", "--user", "start", target)
+			if err := runCmd.Run(); err != nil {
+				fmt.Printf("✗ Errore avvio modulo '%s': %v\n", target, err)
+				os.Exit(1)
+			}
+			fmt.Printf("✓ Modulo '%s' avviato con successo\n", target)
+		}
+	},
+}
+
+// stopCmd stops module services
+var stopCmd = &cobra.Command{
+	Use:   "stop [modulo|all]",
+	Short: "Ferma i container o servizi dei moduli",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		target := "all"
+		if len(args) > 0 {
+			target = args[0]
+		}
+
+		cfg, err := config.LoadConfig(cfgFile)
+		if err != nil {
+			fmt.Printf("Errore config: %v\n", err)
+			os.Exit(1)
+		}
+
+		if target == "all" {
+			fmt.Println("Arresto di tutti i moduli...")
+			for modName := range cfg.Modules {
+				_ = exec.Command("systemctl", "--user", "stop", modName).Run()
+				fmt.Printf("  ⏹ %-12s Fermato\n", modName)
+			}
+		} else {
+			_ = exec.Command("systemctl", "--user", "stop", target).Run()
+			fmt.Printf("⏹ Modulo '%s' fermato\n", target)
+		}
+	},
+}
+
+// statusCmd shows live runtime status of modules
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Mostra lo stato di esecuzione in tempo reale dei container e servizi",
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.LoadConfig(cfgFile)
+		if err != nil {
+			fmt.Printf("Errore config: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("=== Stato Runtime del Nodo: %s ===\n\n", cfg.Node.Name)
+		fmt.Printf("%-15s %-12s %-25s %s\n", "MODULO", "LIVELLO", "STATO RUNTIME", "SERVIZIO SYSTEMD")
+		fmt.Println(strings.Repeat("-", 65))
+
+		for modName, modCfg := range cfg.Modules {
+			unit := modName + ".service"
+			out, _ := exec.Command("systemctl", "--user", "is-active", modName).Output()
+			status := strings.TrimSpace(string(out))
+			if status == "" {
+				status = "not-found / stopped"
+			}
+
+			statusIcon := "⏹ inactive"
+			if status == "active" {
+				statusIcon = "🟢 active (running)"
+			} else if status == "failed" {
+				statusIcon = "🔴 failed"
+			} else if modCfg.Level == "off" {
+				statusIcon = "⚪ off"
+			}
+
+			fmt.Printf("%-15s %-12s %-25s %s\n", modName, modCfg.Level, statusIcon, unit)
+		}
 	},
 }
 
@@ -637,6 +756,50 @@ var ringSimulateCmd = &cobra.Command{
 	},
 }
 
+// ringAddCmd adds a peer to the federation ring
+var ringAddCmd = &cobra.Command{
+	Use:   "add [node-id] [mesh-ip] [quota-gb]",
+	Short: "Aggiunge un nuovo nodo peer alla federazione Ring",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		nodeID := args[0]
+		meshIP := args[1]
+		quotaGB := 500
+		if len(args) >= 3 {
+			if q, err := strconv.Atoi(args[2]); err == nil && q > 0 {
+				quotaGB = q
+			}
+		}
+
+		targetRing := "ring.yaml"
+		if ringFile != "" && ringFile != "configs/ring.example.yaml" {
+			targetRing = ringFile
+		}
+
+		topo, err := ring.LoadTopology(targetRing)
+		if err != nil {
+			topo = ring.NewRingTopology("allod-ring", 2)
+		}
+
+		topo.AddMember(&ring.Member{
+			ID:      nodeID,
+			Address: meshIP,
+			QuotaGB: quotaGB,
+			Datasets: []ring.Dataset{
+				{ID: "photos", SizeGB: 40, Critical: true},
+				{ID: "documents", SizeGB: 10, Critical: true},
+			},
+		})
+
+		if err := topo.Save(targetRing); err != nil {
+			fmt.Printf("Errore salvataggio ring (%s): %v\n", targetRing, err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("✓ Aggiunto nodo '%s' (IP: %s, Quota: %d GB) al Ring in '%s'\n", nodeID, meshIP, quotaGB, targetRing)
+	},
+}
+
 // sbomCmd per M7 (Cyber Resilience Act SBOM)
 var sbomCmd = &cobra.Command{
 	Use:   "sbom",
@@ -669,10 +832,14 @@ func init() {
 
 	ringCmd.AddCommand(ringStatusCmd)
 	ringCmd.AddCommand(ringSimulateCmd)
+	ringCmd.AddCommand(ringAddCmd)
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(planCmd)
 	rootCmd.AddCommand(applyCmd)
+	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(setCmd)
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(installCmd)
