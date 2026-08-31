@@ -1,0 +1,13 @@
+[Unit]
+Description=Allod Web Dashboard Panel
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/allod
+ExecStart=%h/allod/allod-panel
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
