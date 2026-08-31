@@ -182,6 +182,13 @@ body {
   font-size: 13px;
   font-weight: 500;
   border-radius: 20px;
+  transition: var(--transition);
+}
+
+.helper-status.offline {
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--danger);
 }
 
 .status-indicator {
@@ -189,6 +196,10 @@ body {
   height: 8px;
   background-color: var(--success);
   border-radius: 50%;
+}
+
+.status-indicator.offline {
+  background-color: var(--danger);
 }
 
 /* Cards & Grid */
