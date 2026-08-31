@@ -127,10 +127,14 @@ Open your browser at **`http://<SERVER-IP>:8080/`** (or `http://localhost:8080/`
 | :--- | :--- |
 | `allod init [node-name]` | Initializes a fresh `config.yaml` with custom or auto-detected node name. |
 | `allod plan` | Differential dry-run comparing `config.yaml` with `state.db`. |
-| `allod apply` | Generates Quadlet units idempotently and updates `state.db`. |
+| `allod apply` | Generates Quadlet units idempotently, updates `state.db`, and reloads systemd. |
+| `allod start [mod\|all]` | Starts container units and host services via systemd/Podman. |
+| `allod stop [mod\|all]` | Stops active module containers and host services. |
+| `allod status` | Displays real-time running/stopped/failed status of all configured modules. |
 | `allod set <mod>=<lvl>` | Changes module level with strict hardware & dependency preflight. |
 | `allod doctor` | Comprehensive diagnostic check of active modules and RAM limits. |
 | `allod ring status` | Displays ring federation health and verifies 2-replica dataset placement. |
+| `allod ring add <id> <ip>` | Connects a friend's node to the encrypted federation Ring. |
 | `allod ring simulate --remove <id>` | Calculates emergency rebalance plan if a peer leaves the ring. |
 | `allod sbom` | Generates CycloneDX JSON Software Bill of Materials (CRA compliant). |
 | `allod install <hostname>` | Generates zero-touch cloud-init deployment configuration. |

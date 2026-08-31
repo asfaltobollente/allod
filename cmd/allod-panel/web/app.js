@@ -16,8 +16,8 @@ function setupTabs() {
 
   const titles = {
     overview: { title: 'Panoramica del Nodo', sub: 'Stato del sistema, risorse e sicurezza' },
-    modules: { title: 'Gestione Moduli & Livelli', sub: 'Adatta le risorse e configura i servizi del nodo' },
-    ring: { title: 'Federazione del Ring', sub: 'Topologia dei 3 nodi e repliche remote per dataset' },
+    modules: { title: 'Gestione Moduli & Servizi', sub: 'Adatta le risorse, avvia e ferma i container' },
+    ring: { title: 'Federazione del Ring', sub: 'Topologia del gruppo e repliche remote per dataset' },
     resilience: { title: 'Test di Resilienza', sub: 'Simulatore di guasti, disconnessioni e rollback automatico' }
   };
 
@@ -88,8 +88,9 @@ function renderOverview() {
   // Active modules
   if (Array.isArray(currentModules)) {
     const active = currentModules.filter(m => m.current_level && m.current_level !== 'off');
+    const running = currentModules.filter(m => m.runtime_status === 'running');
     const actCountEl = document.getElementById('active-modules-count');
-    if (actCountEl) actCountEl.textContent = `${active.length} / ${currentModules.length}`;
+    if (actCountEl) actCountEl.textContent = `${running.length} in esecuzione (${active.length} configurati)`;
     
     const actListEl = document.getElementById('active-modules-list');
     if (actListEl) actListEl.textContent = active.map(m => m.id).join(', ');
@@ -99,23 +100,39 @@ function renderOverview() {
   const visualGrid = document.getElementById('nodes-visual-grid');
   if (visualGrid && currentRing && currentRing.members) {
     visualGrid.innerHTML = '';
-    Object.values(currentRing.members).forEach(m => {
-      const mId = m.id || m.ID || 'node';
-      const mAddr = m.address || m.Address || '127.0.0.1';
-      const mQuota = m.quota_gb !== undefined ? m.quota_gb : (m.QuotaGB || 500);
-      const isSelf = mId === currentStatus.node_name;
+    const isStandalone = currentRing.is_standalone || Object.keys(currentRing.members).length <= 1;
 
-      const box = document.createElement('div');
-      box.className = 'node-item-box';
-      box.innerHTML = `
-        <div class="node-item-icon">${isSelf ? '🏠' : '🤝'}</div>
-        <div class="node-item-info">
-          <h4>${mId} ${isSelf ? '<span class="badge badge-info">Locale</span>' : ''}</h4>
-          <p>IP: <code>${mAddr}</code> | Quota: <strong>${mQuota} GB</strong></p>
+    if (isStandalone) {
+      const selfMember = Object.values(currentRing.members)[0] || { id: currentStatus.node_name, address: '127.0.0.1', quota_gb: 500 };
+      visualGrid.innerHTML = `
+        <div class="node-item-box" style="grid-column: 1 / -1; background: rgba(30, 41, 59, 0.5); border-left: 4px solid var(--primary);">
+          <div class="node-item-icon">🏠</div>
+          <div class="node-item-info">
+            <h4>${selfMember.id} <span class="badge badge-info">Nodo Locale</span></h4>
+            <p>Stato: <strong>Standalone (Nessun peer remoto)</strong> | Quota locale: <strong>${selfMember.quota_gb || 500} GB</strong></p>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">I backup sono salvati in locale. Per collegare il server di un amico al tuo Ring, usa il comando: <code>allod ring add &lt;id-amico&gt; &lt;ip-wireguard&gt; &lt;quota_gb&gt;</code></p>
+          </div>
         </div>
       `;
-      visualGrid.appendChild(box);
-    });
+    } else {
+      Object.values(currentRing.members).forEach(m => {
+        const mId = m.id || m.ID || 'node';
+        const mAddr = m.address || m.Address || '127.0.0.1';
+        const mQuota = m.quota_gb !== undefined ? m.quota_gb : (m.QuotaGB || 500);
+        const isSelf = mId === currentStatus.node_name;
+
+        const box = document.createElement('div');
+        box.className = 'node-item-box';
+        box.innerHTML = `
+          <div class="node-item-icon">${isSelf ? '🏠' : '🤝'}</div>
+          <div class="node-item-info">
+            <h4>${mId} ${isSelf ? '<span class="badge badge-info">Locale</span>' : ''}</h4>
+            <p>IP: <code>${mAddr}</code> | Quota: <strong>${mQuota} GB</strong></p>
+          </div>
+        `;
+        visualGrid.appendChild(box);
+      });
+    }
   }
 }
 
@@ -151,6 +168,23 @@ function renderModules() {
     const priv = manifest.privileges || manifest.Privileges || {};
     const imgs = manifest.images || manifest.Images || [];
 
+    // Runtime status badge
+    let statusBadge = `<span class="badge badge-secondary">OFF</span>`;
+    let actionButtons = ``;
+
+    if (!isOff) {
+      if (mod.runtime_status === 'running') {
+        statusBadge = `<span class="badge badge-success">🟢 IN ESECUZIONE</span>`;
+        actionButtons = `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ Ferma</button>`;
+      } else if (mod.runtime_status === 'failed') {
+        statusBadge = `<span class="badge badge-danger">🔴 ERRORE</span>`;
+        actionButtons = `<button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Riavvia</button>`;
+      } else {
+        statusBadge = `<span class="badge badge-warning">⏹ FERMATO</span>`;
+        actionButtons = `<button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Avvia</button>`;
+      }
+    }
+
     card.innerHTML = `
       <div>
         <div class="module-card-header">
@@ -161,7 +195,10 @@ function renderModules() {
             </div>
             <div class="module-meta">${provides.join(', ')}</div>
           </div>
-          <span class="badge ${isOff ? 'badge-warning' : 'badge-success'}">${isOff ? 'OFF' : 'ATTIVO'}</span>
+          <div>
+            ${statusBadge}
+            ${actionButtons}
+          </div>
         </div>
 
         <div class="level-selector-row">
@@ -183,6 +220,45 @@ function renderModules() {
 
     container.appendChild(card);
   });
+}
+
+async function startModule(modID) {
+  try {
+    showAlert(`Avvio del modulo '${modID}' in corso (pull immagine / avvio container)...`, 'info');
+    const res = await fetch('/api/modules/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ module: modID })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(`✓ Modulo '${modID}' avviato con successo!`, 'success');
+      refreshData();
+    } else {
+      showAlert(`Errore avvio: ${data.message}`, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore avvio modulo: ' + err.message, 'danger');
+  }
+}
+
+async function stopModule(modID) {
+  try {
+    const res = await fetch('/api/modules/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ module: modID })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(`✓ Modulo '${modID}' fermato con successo.`, 'success');
+      refreshData();
+    } else {
+      showAlert(`Errore arresto: ${data.message}`, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore arresto modulo: ' + err.message, 'danger');
+  }
 }
 
 async function changeModuleLevel(modID, newLevel) {
@@ -209,40 +285,62 @@ async function changeModuleLevel(modID, newLevel) {
 function renderRing() {
   if (!currentRing) return;
 
+  const isStandalone = currentRing.is_standalone || Object.keys(currentRing.members).length <= 1;
+
   // Members
   const membersContainer = document.getElementById('ring-members-container');
   if (membersContainer && currentRing.members) {
     membersContainer.innerHTML = '';
 
-    const memberTable = document.createElement('table');
-    memberTable.className = 'data-table';
-    memberTable.innerHTML = `
-      <thead>
-        <tr>
-          <th>Nodo</th>
-          <th>Indirizzo Mesh</th>
-          <th>Quota Fornita</th>
-          <th>Datasets Locali</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${Object.values(currentRing.members).map(m => {
-          const mId = m.id || m.ID || 'node';
-          const mAddr = m.address || m.Address || '100.64.0.x';
-          const mQuota = m.quota_gb !== undefined ? m.quota_gb : (m.QuotaGB || 500);
-          const mData = m.datasets || m.Datasets || [];
-          return `
-            <tr>
-              <td><strong>${mId}</strong></td>
-              <td><code>${mAddr}</code></td>
-              <td>${mQuota} GB</td>
-              <td>${mData.length}</td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    `;
-    membersContainer.appendChild(memberTable);
+    if (isStandalone) {
+      const selfMember = Object.values(currentRing.members)[0] || { id: currentStatus ? currentStatus.node_name : 'allod-node', address: '127.0.0.1', quota_gb: 500 };
+      membersContainer.innerHTML = `
+        <div style="background: rgba(30, 41, 59, 0.4); padding: 16px; border-radius: 8px; border: 1px solid var(--card-border);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+              <strong>${selfMember.id}</strong> <span class="badge badge-info">Nodo Locale</span>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Indirizzo: <code>${selfMember.address}</code> | Quota allocata: <strong>${selfMember.quota_gb} GB</strong></div>
+            </div>
+            <span class="badge badge-warning">Standalone (1 Nodo)</span>
+          </div>
+          <p style="font-size:13px; color:var(--text-muted); margin:0;">
+            Attualmente questo nodo opera in modalità indipendente. I tuoi backup sono protetti in locale.<br>
+            Per aggiungere un amico al tuo gruppo Ring e abilitare la replica remota:
+          </p>
+          <pre style="background:#0f172a; padding:8px 12px; border-radius:6px; margin-top:8px; font-size:12px;">allod ring add &lt;id-amico&gt; &lt;ip-wireguard&gt; &lt;quota_gb&gt;</pre>
+        </div>
+      `;
+    } else {
+      const memberTable = document.createElement('table');
+      memberTable.className = 'data-table';
+      memberTable.innerHTML = `
+        <thead>
+          <tr>
+            <th>Nodo</th>
+            <th>Indirizzo Mesh</th>
+            <th>Quota Fornita</th>
+            <th>Datasets Locali</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.values(currentRing.members).map(m => {
+            const mId = m.id || m.ID || 'node';
+            const mAddr = m.address || m.Address || '100.64.0.x';
+            const mQuota = m.quota_gb !== undefined ? m.quota_gb : (m.QuotaGB || 500);
+            const mData = m.datasets || m.Datasets || [];
+            return `
+              <tr>
+                <td><strong>${mId}</strong></td>
+                <td><code>${mAddr}</code></td>
+                <td>${mQuota} GB</td>
+                <td>${mData.length}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      `;
+      membersContainer.appendChild(memberTable);
+    }
   }
 
   // Placements
@@ -250,36 +348,44 @@ function renderRing() {
   if (datasetsContainer && currentRing.placements) {
     datasetsContainer.innerHTML = '';
 
-    const placementTable = document.createElement('table');
-    placementTable.className = 'data-table';
-    placementTable.innerHTML = `
-      <thead>
-        <tr>
-          <th>Dataset</th>
-          <th>Dimensione</th>
-          <th>Repliche Remote</th>
-          <th>Stato</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${Object.entries(currentRing.placements).map(([key, p]) => {
-          const isCrit = p.critical !== undefined ? p.critical : p.Critical;
-          const sizeGB = p.size_gb !== undefined ? p.size_gb : (p.SizeGB || 0);
-          const targets = p.target_nodes || p.TargetNodes || [];
-          const status = p.status || p.Status || 'OK';
+    if (isStandalone) {
+      datasetsContainer.innerHTML = `
+        <div style="font-size:13px; color:var(--text-muted); padding:12px; background:rgba(30,41,59,0.3); border-radius:8px;">
+          I dataset locali (<code>photos</code>, <code>documents</code>) sono salvati su questo nodo. Le repliche remote federate si attiveranno automaticamente non appena collegherai almeno 1 peer remoto.
+        </div>
+      `;
+    } else {
+      const placementTable = document.createElement('table');
+      placementTable.className = 'data-table';
+      placementTable.innerHTML = `
+        <thead>
+          <tr>
+            <th>Dataset</th>
+            <th>Dimensione</th>
+            <th>Repliche Remote</th>
+            <th>Stato</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(currentRing.placements).map(([key, p]) => {
+            const isCrit = p.critical !== undefined ? p.critical : p.Critical;
+            const sizeGB = p.size_gb !== undefined ? p.size_gb : (p.SizeGB || 0);
+            const targets = p.target_nodes || p.TargetNodes || [];
+            const status = p.status || p.Status || 'OK';
 
-          return `
-            <tr>
-              <td><code>${key}</code> ${isCrit ? '<span class="badge badge-warning">Critico</span>' : ''}</td>
-              <td>${sizeGB} GB</td>
-              <td>${targets.map(t => `<span class="badge badge-info">${t}</span>`).join(' ')}</td>
-              <td><span class="badge badge-success">${status}</span></td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    `;
-    datasetsContainer.appendChild(placementTable);
+            return `
+              <tr>
+                <td><code>${key}</code> ${isCrit ? '<span class="badge badge-warning">Critico</span>' : ''}</td>
+                <td>${sizeGB} GB</td>
+                <td>${targets.map(t => `<span class="badge badge-info">${t}</span>`).join(' ')}</td>
+                <td><span class="badge badge-success">${status}</span></td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      `;
+      datasetsContainer.appendChild(placementTable);
+    }
   }
 }
 

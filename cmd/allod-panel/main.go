@@ -10,7 +10,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/allod-project/allod/internal/config"
@@ -31,10 +33,11 @@ type PanelResponse struct {
 }
 
 type ModuleInfo struct {
-	ID           string             `json:"id"`
-	Tier         string             `json:"tier"`
-	CurrentLevel string             `json:"current_level"`
-	Manifest     *manifest.Manifest `json:"manifest"`
+	ID            string             `json:"id"`
+	Tier          string             `json:"tier"`
+	CurrentLevel  string             `json:"current_level"`
+	RuntimeStatus string             `json:"runtime_status"` // "running", "stopped", "failed", "off"
+	Manifest      *manifest.Manifest `json:"manifest"`
 }
 
 func getConfigPath() string {
@@ -44,14 +47,50 @@ func getConfigPath() string {
 	return "configs/config.example.yaml"
 }
 
-func getRingPath() string {
+func getRingTopology(cfg *config.Config) (*ring.RingTopology, bool) {
 	if _, err := os.Stat("ring.yaml"); err == nil {
-		return "ring.yaml"
+		topo, err := ring.LoadTopology("ring.yaml")
+		if err == nil {
+			return topo, false
+		}
 	}
-	return "configs/ring.example.yaml"
+	// Standalone single-node topology if no ring.yaml has been configured
+	nodeName := "allod-node"
+	if cfg != nil && cfg.Node.Name != "" {
+		nodeName = cfg.Node.Name
+	}
+	topo := ring.NewRingTopology("allod-standalone", 2)
+	topo.AddMember(&ring.Member{
+		ID:      nodeName,
+		Address: "127.0.0.1 (Locale)",
+		QuotaGB: 500,
+		Datasets: []ring.Dataset{
+			{ID: "photos", SizeGB: 40, Critical: true},
+			{ID: "documents", SizeGB: 10, Critical: true},
+		},
+	})
+	return topo, true
 }
 
 const dbPath = "state.db"
+
+func getModuleRuntimeStatus(modName string, level string) string {
+	if level == "off" || level == "" {
+		return "off"
+	}
+	out, err := exec.Command("systemctl", "--user", "is-active", modName).Output()
+	st := strings.TrimSpace(string(out))
+	if err == nil && st == "active" {
+		return "running"
+	}
+	if st == "failed" {
+		return "failed"
+	}
+	if st == "activating" {
+		return "starting"
+	}
+	return "stopped"
+}
 
 func main() {
 	port := 8080
@@ -82,17 +121,19 @@ func main() {
 		committed, _ := preflight.CommittedRAMInfo(cfg, "")
 		usedMB := preflight.CoreReservedMB + committed
 
-		// Test helper socket connectivity
 		helperConnected := checkHelperConnectivity()
+		topo, isStandalone := getRingTopology(cfg)
 
 		data := map[string]interface{}{
-			"node_name":          cfg.Node.Name,
-			"channel":            cfg.Node.Channel,
-			"ram_total_mb":       preflight.GetSystemRAMMB(),
-			"core_reserved_mb":   preflight.CoreReservedMB,
-			"ram_used_mb":        usedMB,
-			"helper_connected":   helperConnected,
-			"group_repo":         cfg.Node.Group,
+			"node_name":        cfg.Node.Name,
+			"channel":          cfg.Node.Channel,
+			"ram_total_mb":     preflight.GetSystemRAMMB(),
+			"core_reserved_mb": preflight.CoreReservedMB,
+			"ram_used_mb":      usedMB,
+			"helper_connected": helperConnected,
+			"group_repo":       cfg.Node.Group,
+			"is_standalone":    isStandalone,
+			"ring_members":     len(topo.Members),
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
@@ -132,18 +173,76 @@ func main() {
 				curLevel = modCfg.Level
 			}
 
+			runtimeStatus := getModuleRuntimeStatus(modName, curLevel)
+
 			modules = append(modules, ModuleInfo{
-				ID:           modName,
-				Tier:         m.Tier,
-				CurrentLevel: curLevel,
-				Manifest:     m,
+				ID:            modName,
+				Tier:          m.Tier,
+				CurrentLevel:  curLevel,
+				RuntimeStatus: runtimeStatus,
+				Manifest:      m,
 			})
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: modules})
 	})
 
-	// 4. API Modules Set Level
+	// 4. API Modules Start
+	mux.HandleFunc("/api/modules/start", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Module string `json:"module"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Module == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Invalid JSON"})
+			return
+		}
+
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		cmd := exec.Command("systemctl", "--user", "start", req.Module)
+		if err := cmd.Run(); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore avvio servizio %s: %v", req.Module, err)})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s avviato con successo", req.Module)})
+	})
+
+	// 5. API Modules Stop
+	mux.HandleFunc("/api/modules/stop", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Module string `json:"module"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Module == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Invalid JSON"})
+			return
+		}
+
+		cmd := exec.Command("systemctl", "--user", "stop", req.Module)
+		if err := cmd.Run(); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore arresto %s: %v", req.Module, err)})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s fermato", req.Module)})
+	})
+
+	// 6. API Modules Set Level
 	mux.HandleFunc("/api/modules/set", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -209,15 +308,11 @@ func main() {
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s impostato a %s", req.Module, req.Level)})
 	})
 
-	// 5. API Ring Status
+	// 7. API Ring Status
 	mux.HandleFunc("/api/ring", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		topo, err := ring.LoadTopology(getRingPath())
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
-			return
-		}
+		cfg, _ := config.LoadConfig(getConfigPath())
+		topo, isStandalone := getRingTopology(cfg)
 
 		placements := topo.CalculatePlacement()
 
@@ -226,12 +321,13 @@ func main() {
 			"target_replicas": topo.TargetReplicas,
 			"members":         topo.Members,
 			"placements":      placements,
+			"is_standalone":   isStandalone,
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
 	})
 
-	// 6. API Ring Simulate Removal
+	// 8. API Ring Simulate Removal
 	mux.HandleFunc("/api/ring/simulate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -247,12 +343,8 @@ func main() {
 			return
 		}
 
-		topo, err := ring.LoadTopology(getRingPath())
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
-			return
-		}
+		cfg, _ := config.LoadConfig(getConfigPath())
+		topo, _ := getRingTopology(cfg)
 
 		impact, err := topo.SimulateRemoval(req.Member)
 		if err != nil {
@@ -264,7 +356,7 @@ func main() {
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: impact})
 	})
 
-	// 7. API Update Rollback Simulation
+	// 9. API Update Rollback Simulation
 	mux.HandleFunc("/api/update/simulate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -307,7 +399,7 @@ func main() {
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: report})
 	})
 
-	// 8. API Test Helper
+	// 10. API Test Helper
 	mux.HandleFunc("/api/test-helper", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		conn, err := net.Dial("tcp", "127.0.0.1:40000")
