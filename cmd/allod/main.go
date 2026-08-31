@@ -1024,6 +1024,7 @@ var purgeCmd = &cobra.Command{
 		// 6. Clean and re-initialize storage folder
 		baseDir := quadlet.StorageBaseDir()
 		modStorage := filepath.Join(baseDir, modName)
+		_ = exec.Command("podman", "unshare", "rm", "-rf", modStorage).Run()
 		_ = os.RemoveAll(modStorage)
 		quadlet.EnsureStorageDirectories(modName)
 
