@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -30,8 +31,11 @@ var (
 	ringFile       string
 	removeMember   string
 	acceptRisk     bool
-	useSystemd     bool
-	outDirOverride string
+	useSystemd       bool
+	outDirOverride   string
+	storageInitMode  string
+	storageInitMount string
+	storageInitForce bool
 )
 
 var rootCmd = &cobra.Command{
@@ -865,9 +869,6 @@ var storageDisksCmd = &cobra.Command{
 	},
 }
 
-var storageInitMode string
-var storageInitMount string
-
 var storageInitCmd = &cobra.Command{
 	Use:   "init [dischi...]",
 	Short: "Inizializza un pool Btrfs (RAID 1 o Single) sui dischi specificati montandolo su /mnt/allod-storage",
@@ -896,6 +897,23 @@ var storageInitCmd = &cobra.Command{
 		mountPoint := storageInitMount
 		if mountPoint == "" {
 			mountPoint = "/mnt/allod-storage"
+		}
+
+		// Double confirmation if already mounted
+		if topo.IsMounted && !storageInitForce {
+			fmt.Printf("⚠️  ATTENZIONE CRITICA: Il pool storage su '%s' è GIÀ ESISTENTE e ATTIVO!\n", mountPoint)
+			fmt.Println("   Questa operazione CANCELLERÀ e FORMATTERÀ tutti i file, database e foto presenti sui dischi.")
+			fmt.Print("   Per confermare la formattazione, digita 'FORMATTA': ")
+
+			reader := bufio.NewReader(os.Stdin)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+
+			if input != "FORMATTA" {
+				fmt.Println("\n❌ Operazione annullata in sicurezza. Nessun dato è stato modificato.")
+				return
+			}
+			fmt.Println()
 		}
 
 		fmt.Printf("=== Inizializzazione Pool Storage NAS Allod ===\n")
@@ -952,6 +970,7 @@ func init() {
 
 	storageInitCmd.Flags().StringVar(&storageInitMode, "mode", "", "Profilo Btrfs (raid1 oppure single)")
 	storageInitCmd.Flags().StringVar(&storageInitMount, "mount", "/mnt/allod-storage", "Punto di montaggio del pool NAS")
+	storageInitCmd.Flags().BoolVarP(&storageInitForce, "force", "f", false, "Forza la formattazione senza prompt interattivo di sicurezza")
 
 	storageCmd.AddCommand(storageDisksCmd)
 	storageCmd.AddCommand(storageInitCmd)
