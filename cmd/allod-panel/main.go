@@ -124,6 +124,13 @@ func main() {
 		helperConnected := checkHelperConnectivity()
 		topo, isStandalone := getRingTopology(cfg)
 
+		uid := os.Getuid()
+		currentUser := os.Getenv("USER")
+		if currentUser == "" {
+			currentUser = fmt.Sprintf("uid-%d", uid)
+		}
+		isRootless := uid != 0
+
 		data := map[string]interface{}{
 			"node_name":        cfg.Node.Name,
 			"channel":          cfg.Node.Channel,
@@ -134,6 +141,9 @@ func main() {
 			"group_repo":       cfg.Node.Group,
 			"is_standalone":    isStandalone,
 			"ring_members":     len(topo.Members),
+			"is_rootless":      isRootless,
+			"uid":              uid,
+			"current_user":     currentUser,
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
