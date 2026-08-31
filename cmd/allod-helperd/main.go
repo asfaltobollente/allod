@@ -9,10 +9,14 @@ import (
 
 func main() {
 	fmt.Println("Avvio allod-helperd (Privileged Root Helper)...")
-	
-	// Socket temporaneo per il PoC su Windows
-	sockPath := "allod-helper.sock" 
-	
+
+	sockPath := "allod-helper.sock"
+	if os.Geteuid() == 0 {
+		if err := os.MkdirAll("/run/allod", 0755); err == nil {
+			sockPath = "/run/allod/helper.sock"
+		}
+	}
+
 	srv := helper.Server{
 		SocketPath: sockPath,
 	}
