@@ -949,3 +949,12 @@ function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDiagModal();
+});
+
+document.addEventListener('click', (e) => {
+  const modal = document.getElementById('diagnostics-modal');
+  if (modal && e.target === modal) closeDiagModal();
+});
