@@ -1,18 +1,18 @@
 node:
-    name: allod-luca
+    name: allod-node-01
     channel: stable
-    group: git+ssh://git@allod-marco/ring.git
+    group: git+ssh://git@my-allod-ring/ring.git
 catalog:
     source: https://dl.allod.dev/catalog/v1.json
     mode: online
 people:
-    - id: luca
+    - id: owner
       role: owner
       quota_gb: 500
-    - id: sara
+    - id: member-01
       role: member
       quota_gb: 300
-    - id: nonna
+    - id: member-02
       role: member
       quota_gb: 100
 modules:
@@ -29,7 +29,7 @@ modules:
     storage:
         level: raid1
         disks:
-            - WD-WX41A19K7T2C
-            - WD-WX41A2B0PLZ9
+            - DISK-SERIAL-01
+            - DISK-SERIAL-02
     watch:
         level: federated

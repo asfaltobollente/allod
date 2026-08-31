@@ -81,22 +81,28 @@ go build -o allod-helperd ./cmd/allod-helperd
 go build -o allod-panel ./cmd/allod-panel
 ```
 
-### 3. Run Preflight Diagnostics & Inspect Plan
+### 3. Initialize Your Node Configuration
+```bash
+# Initialize your node configuration (e.g. ./allod init my-server)
+./allod init my-node-name
+```
+
+### 4. Run Preflight Diagnostics & Inspect Plan
 ```bash
 # Verify system RAM and hardware limits
-./allod doctor -c configs/config.example.yaml
+./allod doctor -c config.yaml
 
 # Dry-run configuration plan
-./allod plan -c configs/config.example.yaml
+./allod plan -c config.yaml
 ```
 
-### 4. Apply Quadlets (Idempotent)
+### 5. Apply Quadlets (Idempotent)
 ```bash
 # Generate Podman Quadlet units into ~/.config/containers/systemd/
-./allod apply -c configs/config.example.yaml --systemd
+./allod apply -c config.yaml --systemd
 ```
 
-### 5. Launch the Web Dashboard
+### 6. Launch the Web Dashboard
 ```bash
 ./allod-panel
 ```
@@ -108,6 +114,7 @@ Open your browser at **`http://<SERVER-IP>:8080/`** (or `http://localhost:8080/`
 
 | Command | Description |
 | :--- | :--- |
+| `allod init [node-name]` | Initializes a fresh `config.yaml` with custom or auto-detected node name. |
 | `allod plan` | Differential dry-run comparing `config.yaml` with `state.db`. |
 | `allod apply` | Generates Quadlet units idempotently and updates `state.db`. |
 | `allod set <mod>=<lvl>` | Changes module level with strict hardware & dependency preflight. |
