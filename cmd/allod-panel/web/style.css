@@ -303,6 +303,24 @@ body {
   transition: var(--transition);
 }
 
+.module-card-locked {
+  background: rgba(24, 33, 47, 0.7) !important;
+  border: 1px solid rgba(148, 163, 184, 0.25) !important;
+  position: relative;
+}
+
+.module-card-locked::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 4px;
+  background: #64748b;
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+
 .module-card:hover {
   border-color: #475569;
 }
