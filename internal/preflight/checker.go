@@ -37,6 +37,8 @@ type StorageTopology struct {
 	ModeSummary string     `json:"mode_summary"`
 	HasWarning  bool       `json:"has_warning"`
 	WarningMsg  string     `json:"warning_msg,omitempty"`
+	IsMounted   bool       `json:"is_mounted"`
+	MountPoint  string     `json:"mount_point"`
 }
 
 type lsblkOutput struct {
@@ -130,6 +132,11 @@ func DetectStorageTopology() StorageTopology {
 		topo.ModeSummary = "Modalità Witness / Cassaforte Remota (0 Dischi Dati NAS)"
 		topo.HasWarning = true
 		topo.WarningMsg = "Nessun disco dati secondario rilevato. Il server opera in modalità Witness preservando il disco dell'OS e abilitando solo la cassaforte di backup cifrata per gli amici."
+	}
+
+	if _, err := os.Stat("/mnt/allod-storage"); err == nil {
+		topo.IsMounted = true
+		topo.MountPoint = "/mnt/allod-storage"
 	}
 
 	return topo
