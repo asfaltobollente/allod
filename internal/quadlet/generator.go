@@ -2,6 +2,7 @@ package quadlet
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/allod-project/allod/internal/manifest"
@@ -62,6 +63,15 @@ func Generate(modID string, m *manifest.Manifest, levelName string) (*GenerateRe
 	return result, nil
 }
 
+// StorageBaseDir determines the root directory for persistent module volumes.
+// If /mnt/allod-storage (the Btrfs NAS pool) exists, it is preferred.
+func StorageBaseDir() string {
+	if _, err := os.Stat("/mnt/allod-storage"); err == nil {
+		return "/mnt/allod-storage"
+	}
+	return "%h/.local/share/allod/storage"
+}
+
 func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image, level manifest.Level, isPrimary bool) string {
 	var sb strings.Builder
 
@@ -87,12 +97,13 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		}
 	}
 
-	// Persistent Storage Volumes (%h is systemd user home directory specifier)
+	// Persistent Storage Volumes
+	baseDir := StorageBaseDir()
 	switch m.ID {
 	case "cloud":
 		if isPrimary {
-			sb.WriteString("Volume=%h/.local/share/allod/storage/cloud/html:/var/www/html:Z\n")
-			sb.WriteString("Volume=%h/.local/share/allod/storage/cloud/data:/var/www/html/data:Z\n")
+			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/html:/var/www/html:Z\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/data:/var/www/html/data:Z\n", baseDir))
 			if strings.Contains(img.Ref, "nextcloud") {
 				sb.WriteString("Environment=POSTGRES_HOST=127.0.0.1\n")
 				sb.WriteString("Environment=POSTGRES_DB=nextcloud\n")
@@ -100,29 +111,29 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 				sb.WriteString("Environment=POSTGRES_PASSWORD=allod_secure_pass\n")
 			}
 		} else if strings.Contains(img.Ref, "postgres") {
-			sb.WriteString("Volume=%h/.local/share/allod/storage/cloud/postgres:/var/lib/postgresql/data:Z\n")
+			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/postgres:/var/lib/postgresql/data:Z\n", baseDir))
 			sb.WriteString("Environment=POSTGRES_DB=nextcloud\n")
 			sb.WriteString("Environment=POSTGRES_USER=nextcloud\n")
 			sb.WriteString("Environment=POSTGRES_PASSWORD=allod_secure_pass\n")
 		}
 	case "photos":
 		if isPrimary {
-			sb.WriteString("Volume=%h/.local/share/allod/storage/photos/upload:/usr/src/app/upload:Z\n")
+			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/usr/src/app/upload:Z\n", baseDir))
 		} else if strings.Contains(img.Ref, "postgres") {
-			sb.WriteString("Volume=%h/.local/share/allod/storage/photos/postgres:/var/lib/postgresql/data:Z\n")
+			sb.WriteString(fmt.Sprintf("Volume=%s/photos/postgres:/var/lib/postgresql/data:Z\n", baseDir))
 			sb.WriteString("Environment=POSTGRES_DB=immich\n")
 			sb.WriteString("Environment=POSTGRES_USER=postgres\n")
 			sb.WriteString("Environment=POSTGRES_PASSWORD=postgres\n")
 		} else if strings.Contains(img.Ref, "valkey") {
-			sb.WriteString("Volume=%h/.local/share/allod/storage/photos/valkey:/data:Z\n")
+			sb.WriteString(fmt.Sprintf("Volume=%s/photos/valkey:/data:Z\n", baseDir))
 		}
 	case "backup":
-		sb.WriteString("Volume=%h/.local/share/allod/storage/backup/vault:/data:Z\n")
+		sb.WriteString(fmt.Sprintf("Volume=%s/backup/vault:/data:Z\n", baseDir))
 	case "media":
-		sb.WriteString("Volume=%h/.local/share/allod/storage/media/config:/config:Z\n")
-		sb.WriteString("Volume=%h/.local/share/allod/storage/media/data:/media:Z\n")
+		sb.WriteString(fmt.Sprintf("Volume=%s/media/config:/config:Z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/media/data:/media:Z\n", baseDir))
 	default:
-		sb.WriteString(fmt.Sprintf("Volume=%%h/.local/share/allod/storage/%s:/data:Z\n", m.ID))
+		sb.WriteString(fmt.Sprintf("Volume=%s/%s:/data:Z\n", baseDir, m.ID))
 	}
 
 	if m.Privileges.Userns == "host" {
