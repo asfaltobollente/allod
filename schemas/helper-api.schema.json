@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://allod.dev/schemas/helper-api.schema.json",
+  "title": "Allod Helper API",
+  "description": "Schema per l'API dell'helper root di Allod",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": [
+        "action",
+        "plan"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "shares.apply",
+            "users.create",
+            "users.passwd",
+            "firewall.apply",
+            "snapshots.create",
+            "snapshots.prune",
+            "smart.read",
+            "service.restart",
+            "storage.init"
+          ]
+        },
+        "plan": {
+          "type": "boolean",
+          "description": "Se true, restituisce solo il piano delle modifiche senza applicarle"
+        },
+        "args": {
+          "type": "object",
+          "description": "Argomenti specifici per l'azione"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": [
+        "ok",
+        "applied"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "plan": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

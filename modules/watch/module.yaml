@@ -1,0 +1,33 @@
+id: watch
+tier: core
+provides: [mesh-watchdog]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  federated:
+    ram_mb: 15
+    grants: [Sorveglianza reciproca tra nodi, generazione allarmi]
+    lacks: []
+
+# Il watchdog è integrato in allod-core, non usa un'immagine container separata per risparmiare risorse
+images: []
+
+privileges:
+  userns: host
+  devices: []
+  caps: [CAP_NET_RAW] # Necessario per fare ping ICMP se necessario
+
+update:
+  requires_release_notes: false
+  breaks_mobile_apps: false
+
+transitions:
+  off -> federated: safe
+  federated -> off: safe
+
+help:
+  en: help/watch.en.md
+  it: help/watch.it.md

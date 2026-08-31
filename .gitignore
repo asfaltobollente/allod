@@ -1,0 +1,48 @@
+# Go build artifacts and executables
+*.exe
+*.dll
+*.so
+*.dylib
+/allod
+/allod-helperd
+/allod-panel
+/poc-m4
+/poc-m5
+/poc-m6
+allod_linux_*
+allod-helperd_linux_*
+allod-panel_linux_*
+bin/
+
+# Test binary
+*.test
+
+# Output & temp directories
+out_quadlet/
+restore_target/
+repo/
+
+# SQLite databases & WAL
+state.db
+state.db-wal
+state.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Go workspace
+go.work
+go.work.sum
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Helper socket (runtime artifact, not to be committed)
+*.sock
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo

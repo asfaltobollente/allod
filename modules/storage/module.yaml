@@ -1,0 +1,43 @@
+id: storage
+tier: core
+provides: [local-storage]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  single:
+    ram_mb: 100
+    disk_gb: 0
+    grants: [Archivio su un singolo disco]
+    lacks: [Ridondanza in caso di guasto]
+  raid1:
+    ram_mb: 200
+    disk_gb: 0
+    requires:
+      modules: []
+    grants: [Ridondanza btrfs RAID 1 su due dischi, checksum per corruzione silenziosa]
+
+ports: []
+
+privileges:
+  userns: host
+  devices: []
+  caps: [CAP_SYS_ADMIN]
+
+images: []
+
+update:
+  requires_release_notes: false
+
+transitions:
+  off -> single: safe
+  single -> raid1: safe
+  raid1 -> single: destructive
+
+datasets: []
+
+help:
+  en: help/storage.en.md
+  it: help/storage.it.md

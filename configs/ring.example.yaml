@@ -1,0 +1,36 @@
+name: allod-ring-alpha
+target_replicas: 2
+
+members:
+  allod-luca:
+    id: allod-luca
+    address: 100.64.0.1
+    quota_gb: 500
+    datasets:
+      - id: photos
+        size_gb: 45
+        critical: true
+      - id: documents
+        size_gb: 15
+        critical: true
+
+  allod-marco:
+    id: allod-marco
+    address: 100.64.0.2
+    quota_gb: 500
+    datasets:
+      - id: family-media
+        size_gb: 60
+        critical: true
+      - id: archives
+        size_gb: 20
+        critical: false
+
+  allod-sara:
+    id: allod-sara
+    address: 100.64.0.3
+    quota_gb: 500
+    datasets:
+      - id: design-assets
+        size_gb: 30
+        critical: true

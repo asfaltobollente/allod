@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://allod.dev/schemas/module.schema.json",
+  "title": "Allod Module Manifest",
+  "description": "Schema per i manifest dichiarativi dei moduli Allod",
+  "type": "object",
+  "required": [
+    "id",
+    "tier",
+    "platforms",
+    "levels"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,20}$",
+      "description": "Identificatore univoco del modulo"
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "core",
+        "recommended",
+        "optional"
+      ],
+      "description": "Livello di importanza del modulo"
+    },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "amd64",
+          "arm64"
+        ]
+      },
+      "minItems": 1
+    },
+    "provides": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "levels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "ram_mb": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "disk_gb": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "requires": {
+            "type": "object",
+            "properties": {
+              "modules": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cpu_flags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "total_ram_mb": {
+                "type": "integer"
+              },
+              "video_encode": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lacks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes_arm64": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ram_mb"
+        ]
+      }
+    },
+    "ports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "loopback",
+              "lan",
+              "mesh"
+            ]
+          },
+          "share": {
+            "type": "string",
+            "enum": [
+              "none",
+              "friend",
+              "member"
+            ]
+          }
+        },
+        "required": [
+          "n",
+          "scope"
+        ]
+      }
+    },
+    "privileges": {
+      "type": "object",
+      "properties": {
+        "userns": {
+          "type": "string",
+          "enum": [
+            "rootless",
+            "host"
+          ],
+          "default": "rootless"
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "caps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "pinned",
+              "patch",
+              "security"
+            ]
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Arguments to pass to the container entrypoint"
+          }
+        },
+        "required": [
+          "ref",
+          "tag",
+          "channel"
+        ]
+      }
+    },
+    "update": {
+      "type": "object",
+      "properties": {
+        "requires_release_notes": {
+          "type": "boolean",
+          "default": false
+        },
+        "pre_hook": {
+          "type": "string"
+        },
+        "breaks_mobile_apps": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "transitions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "safe",
+          "destructive"
+        ]
+      }
+    },
+    "datasets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "includes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "excludes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "help": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

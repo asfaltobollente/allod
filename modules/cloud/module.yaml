@@ -1,0 +1,48 @@
+id: cloud
+tier: optional
+provides: [file-sync]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  basic:
+    ram_mb: 200
+    requires:
+      modules: [storage]
+    grants: [Sincronizzazione file da desktop e mobile, condivisione link]
+    lacks: [editing collaborativo, calendario, contatti]
+
+ports:
+  - n: 8443
+    scope: mesh
+    share: member
+
+privileges:
+  userns: rootless
+  devices: []
+  caps: []
+
+images:
+  - ref: docker.io/nextcloud
+    tag: "30"
+    channel: patch
+
+update:
+  requires_release_notes: true
+  pre_hook: occ-maintenance
+  breaks_mobile_apps: true
+
+transitions:
+  off -> basic: safe
+  basic -> off: destructive
+
+datasets:
+  - id: cloud
+    includes: [data, db-dump]
+    excludes: [cache, preview]
+
+help:
+  en: help/cloud.en.md
+  it: help/cloud.it.md

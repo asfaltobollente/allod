@@ -1,0 +1,66 @@
+id: photos
+tier: recommended
+provides: [photo-backup]
+conflicts: [photoprism]
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  standard:
+    ram_mb: 1500
+    disk_gb: 10
+    requires:
+      modules: [storage]
+      cpu_flags: [sse4_2]
+    grants: [backup automatico da telefono, timeline, album condivisi, app iOS e Android]
+    lacks: [ricerca per contenuto, riconoscimento volti]
+  full:
+    ram_mb: 4000
+    requires:
+      total_ram_mb: 16000
+      cpu_flags: [avx2]
+    grants: [ricerca semantica, riconoscimento volti]
+    notes_arm64: "funziona, da 10 a 20 volte più lento su Pi 5"
+
+ports:
+  - n: 2283
+    scope: mesh
+    share: friend
+
+privileges:
+  userns: rootless
+  devices: []
+  caps: []
+
+images:
+  - ref: ghcr.io/immich-app/immich-server
+    tag: v3.1.0
+    channel: pinned
+  - ref: ghcr.io/immich-app/postgres
+    tag: "14-vectorchord0.4.3"
+    channel: pinned
+  - ref: docker.io/valkey/valkey
+    tag: "9"
+    channel: patch
+
+update:
+  requires_release_notes: true
+  pre_hook: pgdump
+  breaks_mobile_apps: true
+
+transitions:
+  off -> standard: safe
+  standard -> full: safe
+  full -> standard: safe
+  standard -> off: safe
+  full -> off: safe
+
+datasets:
+  - id: photos
+    includes: [originals, db-dump]
+    excludes: [thumbs, encoded-video]
+
+help:
+  en: help/photos.en.md
+  it: help/photos.it.md

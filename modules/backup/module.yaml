@@ -1,0 +1,47 @@
+id: backup
+tier: core
+provides: [federated-backup]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  peers:
+    ram_mb: 150
+    requires:
+      modules: [storage]
+    grants: [Ricezione backup dai nodi amici (append-only), invio dei propri backup]
+    lacks: []
+
+ports:
+  - n: 8000
+    scope: mesh
+    share: friend
+
+privileges:
+  userns: rootless
+  devices: []
+  caps: []
+
+images:
+  - ref: docker.io/restic/rest-server
+    tag: 0.12.1
+    channel: pinned
+    args: ["--append-only", "--no-auth"] # No auth for PoC simplification, in real life htpasswd is used
+
+update:
+  requires_release_notes: false
+  breaks_mobile_apps: false
+
+transitions:
+  off -> peers: safe
+  peers -> off: safe
+
+datasets:
+  - id: backup
+    includes: [data]
+
+help:
+  en: help/backup.en.md
+  it: help/backup.it.md
