@@ -37,15 +37,26 @@ type ModuleInfo struct {
 	Manifest     *manifest.Manifest `json:"manifest"`
 }
 
-const (
-	cfgPath  = "configs/config.example.yaml"
-	ringPath = "configs/ring.example.yaml"
-	dbPath   = "state.db"
-)
+func getConfigPath() string {
+	if _, err := os.Stat("config.yaml"); err == nil {
+		return "config.yaml"
+	}
+	return "configs/config.example.yaml"
+}
+
+func getRingPath() string {
+	if _, err := os.Stat("ring.yaml"); err == nil {
+		return "ring.yaml"
+	}
+	return "configs/ring.example.yaml"
+}
+
+const dbPath = "state.db"
 
 func main() {
 	port := 8080
-	fmt.Printf("Avvio allod-panel (Web Dashboard Integrata) su http://127.0.0.1:%d ...\n", port)
+	cfgPath := getConfigPath()
+	fmt.Printf("Avvio allod-panel (Web Dashboard Integrata) su porta %d (config: %s) ...\n", port, cfgPath)
 
 	mux := http.NewServeMux()
 
@@ -61,7 +72,7 @@ func main() {
 	// 2. API Status
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		cfg, err := config.LoadConfig(cfgPath)
+		cfg, err := config.LoadConfig(getConfigPath())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
@@ -90,7 +101,7 @@ func main() {
 	// 3. API Modules list
 	mux.HandleFunc("/api/modules", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		cfg, err := config.LoadConfig(cfgPath)
+		cfg, err := config.LoadConfig(getConfigPath())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
@@ -151,6 +162,7 @@ func main() {
 			return
 		}
 
+		cfgPath := getConfigPath()
 		cfg, err := config.LoadConfig(cfgPath)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -200,7 +212,7 @@ func main() {
 	// 5. API Ring Status
 	mux.HandleFunc("/api/ring", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		topo, err := ring.LoadTopology(ringPath)
+		topo, err := ring.LoadTopology(getRingPath())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
@@ -235,7 +247,7 @@ func main() {
 			return
 		}
 
-		topo, err := ring.LoadTopology(ringPath)
+		topo, err := ring.LoadTopology(getRingPath())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
@@ -270,7 +282,7 @@ func main() {
 			return
 		}
 
-		cfg, err := config.LoadConfig(cfgPath)
+		cfg, err := config.LoadConfig(getConfigPath())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore caricamento config: " + err.Error()})
@@ -323,7 +335,7 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:         fmt.Sprintf("127.0.0.1:%d", port),
+		Addr:         fmt.Sprintf(":%d", port),
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
