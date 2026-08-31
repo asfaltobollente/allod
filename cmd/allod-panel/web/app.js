@@ -188,7 +188,7 @@ const moduleTechInfo = {
     product: 'Nextcloud Hub 30',
     desc: 'Cloud personale per file, cartelle e sincronizzazione desktop/mobile (alternativa privata a Google Drive / Dropbox).',
     db: 'SQLite (Embedded)',
-    dbNote: 'Ottimale per uso personale (1 utente) e minimo consumo RAM. Per carichi multi-utente e sync massivi (>100k file) è consigliato un backend PostgreSQL dedicato.',
+    dbNote: 'Ottimale per uso personale (1 utente) e minimo consumo RAM. Per carichi multi-utente e sync massivi (>100k file) seleziona il livello \'standard\' (PostgreSQL).',
     linkPort: 8443,
     linkProtocol: 'http'
   },
@@ -238,6 +238,56 @@ const moduleTechInfo = {
   }
 };
 
+function getModuleTechInfo(modID, currentLevel) {
+  if (modID === 'cloud') {
+    if (currentLevel === 'standard') {
+      return {
+        product: 'Nextcloud Hub 30 (PostgreSQL Dedicated)',
+        desc: 'Cloud personale avanzato con database relazionale PostgreSQL, calendario, contatti e sync multi-utente massivo.',
+        db: 'PostgreSQL 16 (Container Dedicato)',
+        dbNote: 'Massime prestazioni (600 MB RAM): transazioni concorrenti isolate, affidabilità enterprise per migliaia di file e più utenti simultanei.',
+        linkPort: 8443,
+        linkProtocol: 'http'
+      };
+    }
+    return {
+      product: 'Nextcloud Hub 30 (SQLite Lightweight)',
+      desc: 'Cloud personale per file, cartelle e sincronizzazione desktop/mobile (alternativa privata a Google Drive / Dropbox).',
+      db: 'SQLite (Embedded)',
+      dbNote: 'Consumo minimo (200 MB RAM), perfetto per uso personale (1 utente). Per carichi multi-utente e database PostgreSQL ad alte prestazioni, imposta il livello su \'standard\'!',
+      linkPort: 8443,
+      linkProtocol: 'http'
+    };
+  }
+  if (modID === 'photos') {
+    if (currentLevel === 'full') {
+      return {
+        product: 'Immich v3.1 (Full AI Search & Face Recognition)',
+        desc: 'Galleria foto con IA avanzata: riconoscimento volti automatico, ricerca semantica vettoriale e timeline (4000 MB RAM).',
+        db: 'PostgreSQL 14 + Vectorchord + Valkey',
+        dbNote: 'Database vettoriale scalabile per indicizzazione IA e ricerca semantica ad altissima velocità.',
+        linkPort: 2283,
+        linkProtocol: 'http'
+      };
+    }
+    return {
+      product: 'Immich v3.1 + PostgreSQL + Valkey',
+      desc: 'Galleria foto ad alte prestazioni con backup automatico da telefono, timeline e album (alternativa a Google Foto).',
+      db: 'PostgreSQL 14 + Vectorchord + Valkey',
+      dbNote: 'Database relazionale scalabile e motore vettoriale per indicizzazione e timeline ultra-veloce.',
+      linkPort: 2283,
+      linkProtocol: 'http'
+    };
+  }
+  return moduleTechInfo[modID] || {
+    product: modID,
+    desc: 'Modulo Allod',
+    db: 'Standard',
+    dbNote: 'Configurazione predefinita Allod',
+    linkPort: null
+  };
+}
+
 function renderModules() {
   const container = document.getElementById('modules-grid');
   if (!container || !Array.isArray(currentModules)) return;
@@ -253,13 +303,7 @@ function renderModules() {
     const manifest = mod.manifest || {};
     const levels = manifest.levels || manifest.Levels || {};
 
-    const tech = moduleTechInfo[mod.id] || {
-      product: mod.id,
-      desc: manifest.provides ? manifest.provides.join(', ') : 'Modulo Allod',
-      db: 'Standard',
-      dbNote: 'Configurazione predefinita Allod',
-      linkPort: null
-    };
+    const tech = getModuleTechInfo(mod.id, mod.current_level);
 
     let levelOptions = Object.keys(levels).map(lvl => {
       const selected = lvl === mod.current_level ? 'selected' : '';
