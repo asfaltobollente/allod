@@ -87,6 +87,44 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		}
 	}
 
+	// Persistent Storage Volumes (%h is systemd user home directory specifier)
+	switch m.ID {
+	case "cloud":
+		if isPrimary {
+			sb.WriteString("Volume=%h/.local/share/allod/storage/cloud/html:/var/www/html:Z\n")
+			sb.WriteString("Volume=%h/.local/share/allod/storage/cloud/data:/var/www/html/data:Z\n")
+			if strings.Contains(img.Ref, "nextcloud") {
+				sb.WriteString("Environment=POSTGRES_HOST=127.0.0.1\n")
+				sb.WriteString("Environment=POSTGRES_DB=nextcloud\n")
+				sb.WriteString("Environment=POSTGRES_USER=nextcloud\n")
+				sb.WriteString("Environment=POSTGRES_PASSWORD=allod_secure_pass\n")
+			}
+		} else if strings.Contains(img.Ref, "postgres") {
+			sb.WriteString("Volume=%h/.local/share/allod/storage/cloud/postgres:/var/lib/postgresql/data:Z\n")
+			sb.WriteString("Environment=POSTGRES_DB=nextcloud\n")
+			sb.WriteString("Environment=POSTGRES_USER=nextcloud\n")
+			sb.WriteString("Environment=POSTGRES_PASSWORD=allod_secure_pass\n")
+		}
+	case "photos":
+		if isPrimary {
+			sb.WriteString("Volume=%h/.local/share/allod/storage/photos/upload:/usr/src/app/upload:Z\n")
+		} else if strings.Contains(img.Ref, "postgres") {
+			sb.WriteString("Volume=%h/.local/share/allod/storage/photos/postgres:/var/lib/postgresql/data:Z\n")
+			sb.WriteString("Environment=POSTGRES_DB=immich\n")
+			sb.WriteString("Environment=POSTGRES_USER=postgres\n")
+			sb.WriteString("Environment=POSTGRES_PASSWORD=postgres\n")
+		} else if strings.Contains(img.Ref, "valkey") {
+			sb.WriteString("Volume=%h/.local/share/allod/storage/photos/valkey:/data:Z\n")
+		}
+	case "backup":
+		sb.WriteString("Volume=%h/.local/share/allod/storage/backup/vault:/data:Z\n")
+	case "media":
+		sb.WriteString("Volume=%h/.local/share/allod/storage/media/config:/config:Z\n")
+		sb.WriteString("Volume=%h/.local/share/allod/storage/media/data:/media:Z\n")
+	default:
+		sb.WriteString(fmt.Sprintf("Volume=%%h/.local/share/allod/storage/%s:/data:Z\n", m.ID))
+	}
+
 	if m.Privileges.Userns == "host" {
 		sb.WriteString("UserNS=host\n")
 	}

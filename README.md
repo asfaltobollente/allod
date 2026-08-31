@@ -72,6 +72,46 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 
 ---
 
+## 💾 Storage Architecture & Physical Disk Management (A Safe Harbor for Everyone)
+
+Allod is designed from the ground up as a **"Storage First"** system: personal cloud files, photos, and shared directories live on a dedicated storage pool and **never fill up your operating system drive**.
+
+Allod automatically inspects your physical hardware and adapts to 3 deployment tiers:
+
+```text
+                     ┌──────────────────────────────────────┐
+                     │ Linux Block Device Detection (lsblk) │
+                     └──────────────────┬───────────────────┘
+                                        │
+             ┌──────────────────────────┼──────────────────────────┐
+             ▼                          ▼                          ▼
+   ┌───────────────────┐      ┌───────────────────┐      ┌───────────────────┐
+   │    2+ Data Disks  │      │    1 Data Disk    │      │    0 Data Disks   │
+   │  (Dedicated NAS)  │      │ (Simple Storage)  │      │  (OS Drive Only)  │
+   └─────────┬─────────┘      └─────────┬─────────┘      └─────────┬─────────┘
+             ▼                          ▼                          ▼
+   ┌───────────────────┐      ┌───────────────────┐      ┌───────────────────┐
+   │   FULL NAS MODE   │      │  SINGLE DISK NAS  │      │   WITNESS VAULT   │
+   │  Btrfs RAID 1     │      │   Btrfs Single    │      │  Remote Backup    │
+   │  Hardware Mirror  │      │  ⚠️ Warning Banner│      │  Preserves OS Disk│
+   │  & Auto-Healing   │      │  Relies on Ring   │      │  (No Heavy Apps)  │
+   └───────────────────┘      └───────────────────┘      └───────────────────┘
+```
+
+### 1. Dual-Disk NAS (Full RAID 1 Redundancy — Recommended)
+* **Setup**: 1x OS Drive (SSD) + 2x Dedicated Data Drives (HDDs/SSDs).
+* **How it works**: Uses **Btrfs RAID 1** data & metadata mirroring. If one physical hard drive experiences mechanical failure, your server continues operating with zero data loss. Btrfs continuously validates CRC32c checksums to detect and **automatically heal bit rot and silent corruption**.
+
+### 2. Single-Disk NAS (Simple Home Server)
+* **Setup**: 1x OS Drive + 1x Data Drive.
+* **How it works**: Formatted as Btrfs Single. Allod displays a clear dashboard warning that local hardware mirroring is absent, reminding you that disaster recovery is provided by your encrypted peer replicas in the Ring.
+
+### 3. Witness / Remote Backup Vault (Zero Dedicated Data Disks)
+* **Setup**: A single disk containing the Ubuntu OS.
+* **How it works**: Protects the OS drive from getting exhausted by disabling heavy local storage services and operating purely as a lightweight **Encrypted Backup Witness** to safeguard your friends' remote replicas.
+
+---
+
 ## ⚡ Prerequisites & Requirements
 
 * **Operating System**: Ubuntu Server 24.04 LTS (recommended) or any Debian 12+ system (x86-64 or ARM64 / Raspberry Pi 5).
