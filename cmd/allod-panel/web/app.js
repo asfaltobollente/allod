@@ -600,6 +600,7 @@ function renderModules() {
         actionButtons = `
           <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Riavvia</button>
           <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="openDangerPurgeModal('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🗑️ Reset</button>
         `;
       } else {
         statusBadge = `<span class="badge badge-warning">⏹ FERMATO</span>`;
@@ -698,6 +699,21 @@ function renderModules() {
                 </p>
                 <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:11px; padding:4px 10px;">
                   🗑️ Re-inizializza Pool Storage (Distruttivo)
+                </button>
+              </div>
+            </details>
+          </div>
+        ` : ''}
+        ${(mod.id !== 'storage' && (isUnlocked || mod.runtime_status === 'failed')) ? `
+          <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
+            <details style="font-size:11px; color:var(--text-muted);" ${mod.runtime_status === 'failed' ? 'open' : ''}>
+              <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Ripristino Dati</summary>
+              <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
+                <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
+                  Se il modulo ha problemi o configurazioni corrotte, puoi resettarlo e ricreare le cartelle pulite su <code>/mnt/allod-storage/${mod.id}</code>.
+                </p>
+                <button class="btn btn-sm btn-danger" onclick="openDangerPurgeModal('${mod.id}')" style="font-size:11px; padding:4px 10px;">
+                  🗑️ Cancella Dati & Reinstalla Modulo (Reset)
                 </button>
               </div>
             </details>
@@ -1174,6 +1190,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeDiagModal();
     closeDangerStorageModal();
+    closeDangerPurgeModal();
   }
 });
 
@@ -1182,6 +1199,8 @@ document.addEventListener('click', (e) => {
   if (diagModal && e.target === diagModal) closeDiagModal();
   const dangerModal = document.getElementById('danger-storage-modal');
   if (dangerModal && e.target === dangerModal) closeDangerStorageModal();
+  const purgeModal = document.getElementById('danger-purge-modal');
+  if (purgeModal && e.target === purgeModal) closeDangerPurgeModal();
 });
 
 function toggleModuleUnlock(modId) {
@@ -1191,4 +1210,65 @@ function toggleModuleUnlock(modId) {
     unlockedModules.add(modId);
   }
   renderModules();
+}
+
+let purgeTargetModule = null;
+
+function openDangerPurgeModal(modId) {
+  purgeTargetModule = modId;
+  const modTitle = document.getElementById('danger-purge-module-name');
+  if (modTitle) modTitle.textContent = "'" + modId + "'";
+  const input = document.getElementById('danger-purge-confirm-input');
+  if (input) input.value = '';
+  const btn = document.getElementById('danger-purge-confirm-btn');
+  if (btn) btn.disabled = true;
+
+  const modal = document.getElementById('danger-purge-modal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    setTimeout(() => { if (input) input.focus(); }, 50);
+  }
+}
+
+function closeDangerPurgeModal() {
+  const modal = document.getElementById('danger-purge-modal');
+  if (modal) modal.classList.add('hidden');
+  purgeTargetModule = null;
+}
+
+function checkDangerPurgeConfirmInput() {
+  const input = document.getElementById('danger-purge-confirm-input');
+  const btn = document.getElementById('danger-purge-confirm-btn');
+  if (input && btn) {
+    btn.disabled = (input.value.trim() !== 'CANCELLA');
+  }
+}
+
+async function executeDangerModulePurge() {
+  if (!purgeTargetModule) return;
+  const input = document.getElementById('danger-purge-confirm-input');
+  if (!input || input.value.trim() !== 'CANCELLA') {
+    showAlert("Devi digitare esattamente 'CANCELLA' per procedere", 'danger');
+    return;
+  }
+  const modToPurge = purgeTargetModule;
+  closeDangerPurgeModal();
+  showAlert(`Ripristino e cancellazione modulo '${modToPurge}' in corso...`, 'info');
+  try {
+    const res = await fetch('/api/modules/purge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ module: modToPurge })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(data.message || `Modulo '${modToPurge}' ripristinato con successo!`, 'success');
+      unlockedModules.delete(modToPurge);
+      refreshData();
+    } else {
+      showAlert('Errore ripristino: ' + (data.message || 'Operazione fallita'), 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+  }
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/allod-project/allod/internal/helper"
 	"github.com/allod-project/allod/internal/manifest"
 	"github.com/allod-project/allod/internal/preflight"
+	"github.com/allod-project/allod/internal/quadlet"
 	"github.com/allod-project/allod/internal/ring"
 	"github.com/allod-project/allod/internal/state"
 	"github.com/allod-project/allod/internal/updater"
@@ -556,6 +557,73 @@ func main() {
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s impostato a %s", req.Module, req.Level)})
+	})
+
+	// 6c. API Purge Module (Clean restart / reset with double-lock safety)
+	mux.HandleFunc("/api/modules/purge", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Module string `json:"module"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Module == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Modulo non specificato"})
+			return
+		}
+
+		modID := req.Module
+
+		// 1. Stop systemd services
+		_ = exec.Command("systemctl", "--user", "stop", modID).Run()
+		_ = exec.Command("systemctl", "--user", "stop", modID+"-postgres").Run()
+		_ = exec.Command("systemctl", "--user", "stop", modID+"-valkey").Run()
+
+		// 2. Remove Podman containers
+		_ = exec.Command("podman", "rm", "-f", "systemd-"+modID).Run()
+		_ = exec.Command("podman", "rm", "-f", "systemd-"+modID+"-postgres").Run()
+		_ = exec.Command("podman", "rm", "-f", "systemd-"+modID+"-valkey").Run()
+		_ = exec.Command("podman", "rm", "-f", modID).Run()
+
+		// 3. Reset failed state
+		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
+
+		// 4. Remove generated Quadlet units
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			quadDir := filepath.Join(home, ".config", "containers", "systemd")
+			_ = os.Remove(filepath.Join(quadDir, modID+".container"))
+			_ = os.Remove(filepath.Join(quadDir, modID+"-postgres.container"))
+			_ = os.Remove(filepath.Join(quadDir, modID+"-valkey.container"))
+			_ = os.Remove(filepath.Join(quadDir, modID+".service"))
+		}
+
+		// 5. Clean state.db entry
+		if st, err := state.Open(dbPath); err == nil {
+			st.DeleteModule(modID)
+			st.Close()
+		}
+
+		// 6. Clean and re-initialize storage folder
+		baseDir := "/mnt/allod-storage"
+		if _, err := os.Stat(baseDir); err != nil {
+			baseDir = filepath.Join(home, ".local", "share", "allod", "storage")
+		}
+		modStorage := filepath.Join(baseDir, modID)
+		_ = os.RemoveAll(modStorage)
+		quadlet.EnsureStorageDirectories(modID)
+
+		// 7. Daemon reload
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Modulo '%s' cancellato e ripristinato con successo. Cartelle pulite su %s.", modID, modStorage),
+		})
 	})
 
 	// 7. API Ring Status

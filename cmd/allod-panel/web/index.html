@@ -292,6 +292,31 @@
     </div>
   </div>
 
+  <!-- DANGER PURGE MODAL (Double-Lock Safety Check for Module Reset) -->
+  <div id="danger-purge-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:550px; border-color:var(--danger);">
+      <div class="modal-header" style="background:rgba(239,68,68,0.15);">
+        <h3 style="color:var(--danger);">⚠️ Ripristino & Cancellazione Dati Modulo</h3>
+        <button class="modal-close-btn" onclick="closeDangerPurgeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert-banner alert-danger" style="margin-bottom:14px;">
+          <strong>ATTENZIONE CRITICA:</strong> Stai per cancellare definitivamente tutti i dati, container e file di configurazione del modulo <strong id="danger-purge-module-name"></strong> su <code>/mnt/allod-storage</code>!
+        </div>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
+          Il servizio verrà arrestato, i container rimossi e le cartelle ricreate pulite con i permessi corretti. Per confermare, digita esattamente <strong>CANCELLA</strong> nel campo sottostante:
+        </p>
+        <input type="text" id="danger-purge-confirm-input" class="form-control font-mono" placeholder="Digita CANCELLA" oninput="checkDangerPurgeConfirmInput()" style="margin-bottom:14px; width:100%;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeDangerPurgeModal()">Annulla</button>
+        <button class="btn btn-danger" id="danger-purge-confirm-btn" onclick="executeDangerModulePurge()" disabled style="margin-left:8px;">
+          🗑️ Conferma Cancellazione Totale
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
