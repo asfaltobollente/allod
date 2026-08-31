@@ -33,12 +33,25 @@ type PanelResponse struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
+type VolumeMountInfo struct {
+	HostPath      string `json:"host_path"`
+	ContainerPath string `json:"container_path"`
+	Exists        bool   `json:"exists"`
+	SizeBytes     int64  `json:"size_bytes"`
+	SizeHuman     string `json:"size_human"`
+}
+
 type ModuleInfo struct {
 	ID            string             `json:"id"`
 	Tier          string             `json:"tier"`
 	CurrentLevel  string             `json:"current_level"`
 	RuntimeStatus string             `json:"runtime_status"` // "running", "stopped", "failed", "off"
 	Manifest      *manifest.Manifest `json:"manifest"`
+	StoragePath   string             `json:"storage_path"`
+	StorageSize   string             `json:"storage_size"`
+	StorageBytes  int64              `json:"storage_bytes"`
+	IsOnNASPool   bool               `json:"is_on_nas_pool"`
+	Mounts        []VolumeMountInfo  `json:"mounts"`
 }
 
 func getConfigPath() string {
@@ -74,6 +87,93 @@ func getRingTopology(cfg *config.Config) (*ring.RingTopology, bool) {
 }
 
 const dbPath = "state.db"
+
+func getStorageInfo(modID string) (string, string, int64, bool, []VolumeMountInfo) {
+	baseDir := "/mnt/allod-storage"
+	isOnNAS := true
+	if _, err := os.Stat(baseDir); err != nil {
+		isOnNAS = false
+		home, _ := os.UserHomeDir()
+		baseDir = filepath.Join(home, ".local", "share", "allod", "storage")
+	}
+
+	modPath := filepath.Join(baseDir, modID)
+	var mounts []VolumeMountInfo
+
+	switch modID {
+	case "cloud":
+		mounts = []VolumeMountInfo{
+			{HostPath: filepath.Join(modPath, "html"), ContainerPath: "/var/www/html"},
+			{HostPath: filepath.Join(modPath, "data"), ContainerPath: "/var/www/html/data"},
+			{HostPath: filepath.Join(modPath, "postgres"), ContainerPath: "/var/lib/postgresql/data"},
+		}
+	case "photos":
+		mounts = []VolumeMountInfo{
+			{HostPath: filepath.Join(modPath, "upload"), ContainerPath: "/usr/src/app/upload"},
+			{HostPath: filepath.Join(modPath, "postgres"), ContainerPath: "/var/lib/postgresql/data"},
+			{HostPath: filepath.Join(modPath, "valkey"), ContainerPath: "/data"},
+		}
+	case "backup":
+		mounts = []VolumeMountInfo{
+			{HostPath: filepath.Join(modPath, "vault"), ContainerPath: "/data"},
+		}
+	case "shares":
+		mounts = []VolumeMountInfo{
+			{HostPath: filepath.Join(modPath, "public"), ContainerPath: "/shares/public"},
+		}
+	case "media":
+		mounts = []VolumeMountInfo{
+			{HostPath: filepath.Join(modPath, "data"), ContainerPath: "/media"},
+			{HostPath: filepath.Join(modPath, "config"), ContainerPath: "/config"},
+		}
+	default:
+		mounts = []VolumeMountInfo{
+			{HostPath: modPath, ContainerPath: "/data"},
+		}
+	}
+
+	var totalBytes int64 = 0
+	for i := range mounts {
+		if fi, err := os.Stat(mounts[i].HostPath); err == nil {
+			mounts[i].Exists = true
+			if fi.IsDir() {
+				s := dirSize(mounts[i].HostPath)
+				mounts[i].SizeBytes = s
+				mounts[i].SizeHuman = formatBytes(s)
+				totalBytes += s
+			}
+		} else {
+			mounts[i].Exists = false
+			mounts[i].SizeHuman = "0 B"
+		}
+	}
+
+	return modPath, formatBytes(totalBytes), totalBytes, isOnNAS, mounts
+}
+
+func dirSize(path string) int64 {
+	var size int64
+	_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && info != nil && !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+	return size
+}
+
+func formatBytes(b int64) string {
+	if b < 1024 {
+		return fmt.Sprintf("%d B", b)
+	}
+	if b < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(b)/1024)
+	}
+	if b < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
+	}
+	return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
+}
 
 func getModuleRuntimeStatus(modName string, level string) string {
 	if level == "off" || level == "" {
@@ -193,6 +293,7 @@ func main() {
 			}
 
 			runtimeStatus := getModuleRuntimeStatus(modName, curLevel)
+			sPath, sSize, sBytes, isNAS, mounts := getStorageInfo(modName)
 
 			modules = append(modules, ModuleInfo{
 				ID:            modName,
@@ -200,6 +301,11 @@ func main() {
 				CurrentLevel:  curLevel,
 				RuntimeStatus: runtimeStatus,
 				Manifest:      m,
+				StoragePath:   sPath,
+				StorageSize:   sSize,
+				StorageBytes:  sBytes,
+				IsOnNASPool:   isNAS,
+				Mounts:        mounts,
 			})
 		}
 

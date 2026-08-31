@@ -501,6 +501,36 @@ function renderModules() {
       `;
     }
 
+    let storageBoxHtml = ``;
+    if (mod.storage_path) {
+      const nasBadge = mod.is_on_nas_pool 
+        ? `<span class="badge badge-success" style="font-size:10px;">🟢 Pool Btrfs RAID 1</span>` 
+        : `<span class="badge badge-warning" style="font-size:10px;">⚠️ Storage Locale (Home)</span>`;
+
+      storageBoxHtml = `
+        <div style="margin-top:8px; padding:7px 10px; background:rgba(15, 23, 42, 0.6); border-radius:6px; border-left:3px solid ${mod.is_on_nas_pool ? 'var(--success)' : 'var(--warning)'}; font-size:11px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+            <span style="font-weight:600; color:var(--text-main);">💾 Storage NAS Fisico:</span>
+            ${nasBadge}
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--primary);">📁 ${mod.storage_path}</span>
+            <strong style="color:var(--text-main); font-size:11px;">${mod.storage_size || '0 B'}</strong>
+          </div>
+          ${mod.mounts && mod.mounts.length > 0 ? `
+            <div style="border-top:1px dashed rgba(255,255,255,0.1); padding-top:4px; margin-top:4px;">
+              ${mod.mounts.map(m => `
+                <div style="font-size:10px; color:var(--text-muted); display:flex; justify-content:space-between; margin-bottom:2px; font-family:'JetBrains Mono',monospace;">
+                  <span>↳ .../${m.host_path.split('/').slice(-2).join('/')} ➔ <code>${m.container_path}</code></span>
+                  <span style="color:${m.exists ? 'var(--success)' : 'var(--text-muted)'}">${m.exists ? m.size_human : 'In attesa'}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
     card.innerHTML = `
       <div>
         <div class="module-card-header">
@@ -533,6 +563,7 @@ function renderModules() {
 
         ${grantsHtml}
         ${dbInfoHtml}
+        ${storageBoxHtml}
         ${openLinkHtml}
       </div>
 
