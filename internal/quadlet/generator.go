@@ -116,6 +116,22 @@ func StorageBaseDir() string {
 	return "%h/.local/share/allod/storage"
 }
 
+// GenerateNetwork returns the Quadlet .network definition for inter-container communication.
+func GenerateNetwork() string {
+	return `[Network]
+NetworkName=allod
+`
+}
+
+// EnsureAllodNetwork creates allod.network in the systemd quadlet directory if missing.
+func EnsureAllodNetwork(outDir string) {
+	_ = os.MkdirAll(outDir, 0755)
+	netFile := filepath.Join(outDir, "allod.network")
+	if _, err := os.Stat(netFile); err != nil {
+		_ = os.WriteFile(netFile, []byte(GenerateNetwork()), 0644)
+	}
+}
+
 func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image, level manifest.Level, isPrimary bool) string {
 	var sb strings.Builder
 
@@ -135,6 +151,9 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 
 	sb.WriteString("[Container]\n")
 	sb.WriteString(fmt.Sprintf("Image=%s:%s\n", img.Ref, img.Tag))
+	sb.WriteString(fmt.Sprintf("ContainerName=%s\n", unitName))
+	sb.WriteString("Network=allod.network\n")
+	sb.WriteString("AddHost=host.containers.internal:host-gateway\n")
 	if len(img.Args) > 0 {
 		sb.WriteString(fmt.Sprintf("Exec=%s\n", strings.Join(img.Args, " ")))
 	}
@@ -164,7 +183,7 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/html:/var/www/html:Z\n", baseDir))
 			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/data:/var/www/html/data:Z\n", baseDir))
 			if strings.Contains(img.Ref, "nextcloud") {
-				sb.WriteString("Environment=POSTGRES_HOST=127.0.0.1\n")
+				sb.WriteString("Environment=POSTGRES_HOST=cloud-postgres\n")
 				sb.WriteString("Environment=POSTGRES_DB=nextcloud\n")
 				sb.WriteString("Environment=POSTGRES_USER=nextcloud\n")
 				sb.WriteString("Environment=POSTGRES_PASSWORD=allod_secure_pass\n")
@@ -178,6 +197,11 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	case "photos":
 		if isPrimary {
 			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/usr/src/app/upload:Z\n", baseDir))
+			sb.WriteString("Environment=DB_HOSTNAME=photos-postgres\n")
+			sb.WriteString("Environment=DB_DATABASE_NAME=immich\n")
+			sb.WriteString("Environment=DB_USERNAME=postgres\n")
+			sb.WriteString("Environment=DB_PASSWORD=postgres\n")
+			sb.WriteString("Environment=REDIS_HOSTNAME=photos-valkey\n")
 		} else if strings.Contains(img.Ref, "postgres") {
 			sb.WriteString(fmt.Sprintf("Volume=%s/photos/postgres:/var/lib/postgresql/data:Z\n", baseDir))
 			sb.WriteString("Environment=POSTGRES_DB=immich\n")
