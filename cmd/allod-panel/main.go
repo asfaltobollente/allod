@@ -702,6 +702,53 @@ func main() {
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
 	})
 
+	// 5e. API Speedtest (Ping, Download, Upload)
+	mux.HandleFunc("/api/speedtest/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok", "timestamp": time.Now().UnixMilli()})
+	})
+
+	mux.HandleFunc("/api/speedtest/download", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+
+		chunk := make([]byte, 64*1024)
+		for i := range chunk {
+			chunk[i] = byte(i % 256)
+		}
+
+		totalChunks := 480 // ~30 MB stream for high-speed measurement
+		flusher, ok := w.(http.Flusher)
+		for i := 0; i < totalChunks; i++ {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+			if ok && i%10 == 0 {
+				flusher.Flush()
+			}
+		}
+	})
+
+	mux.HandleFunc("/api/speedtest/upload", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		start := time.Now()
+		bytesRead, _ := io.Copy(io.Discard, r.Body)
+		duration := time.Since(start)
+
+		mbps := 0.0
+		if duration.Seconds() > 0 {
+			mbps = (float64(bytesRead) * 8.0) / (duration.Seconds() * 1000 * 1000)
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":     "ok",
+			"bytes":      bytesRead,
+			"duration_s": duration.Seconds(),
+			"mbps":       mbps,
+		})
+	})
+
 	// 6. API Modules Set Level
 	mux.HandleFunc("/api/modules/set", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
