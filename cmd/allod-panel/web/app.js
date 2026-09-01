@@ -3,6 +3,7 @@ let currentStatus = null;
 let currentModules = null;
 let currentRing = null;
 let unlockedModules = new Set();
+let startingModules = new Map(); // modID -> timestamp
 
 document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
@@ -611,6 +612,20 @@ function renderModules() {
       }
     }
 
+    // Check if module is currently starting (disable button and show spinner)
+    if (startingModules.has(mod.id)) {
+      const elapsed = Date.now() - startingModules.get(mod.id);
+      if (mod.runtime_status === 'running' || elapsed > 25000) {
+        startingModules.delete(mod.id);
+      } else {
+        statusBadge = `<span class="badge badge-info" style="opacity:0.9;">⏳ AVVIO IN CORSO...</span>`;
+        actionButtons = `
+          <button class="btn btn-sm btn-secondary" disabled style="opacity:0.65; cursor:wait; padding:2px 10px; font-size:11px; margin-left:8px;">⏳ Avvio in corso...</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
+        `;
+      }
+    }
+
     let dbInfoHtml = ``;
     if (tech.db) {
       dbInfoHtml = `
@@ -733,6 +748,13 @@ function renderModules() {
 }
 
 async function startModule(modID) {
+  if (startingModules.has(modID)) {
+    showAlert(`Avvio del modulo '${modID}' già in corso...`, 'info');
+    return;
+  }
+  startingModules.set(modID, Date.now());
+  renderModules();
+
   try {
     showAlert(`Richiesta avvio per '${modID}' inviata a Podman in background...`, 'info');
     const res = await fetch('/api/modules/start', {
@@ -743,9 +765,12 @@ async function startModule(modID) {
     const data = await res.json();
     if (data.status === 'ok') {
       showAlert(`✓ Avvio del modulo '${modID}' iniziato!`, 'success');
-      setTimeout(refreshData, 1000);
-      setTimeout(refreshData, 3000);
+      setTimeout(refreshData, 1500);
+      setTimeout(refreshData, 4000);
+      setTimeout(refreshData, 8000);
     } else {
+      startingModules.delete(modID);
+      renderModules();
       showAlert(`Errore avvio: ${data.message}`, 'danger');
     }
   } catch (err) {
