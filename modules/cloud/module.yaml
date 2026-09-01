@@ -33,7 +33,7 @@ privileges:
 
 images:
   - ref: docker.io/nextcloud
-    tag: "30"
+    tag: stable
     channel: patch
   - ref: docker.io/library/postgres
     tag: "16-alpine"
