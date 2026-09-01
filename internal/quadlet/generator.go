@@ -230,6 +230,7 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	sb.WriteString("\n[Service]\n")
 	sb.WriteString("Restart=on-failure\n")
 	sb.WriteString("TimeoutStartSec=900s\n")
+	sb.WriteString("SuccessExitStatus=0 143 137\n")
 	if level.RAMMB > 0 {
 		sb.WriteString(fmt.Sprintf("MemoryMax=%dM\n", level.RAMMB))
 	}

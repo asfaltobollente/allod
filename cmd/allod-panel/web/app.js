@@ -742,6 +742,9 @@ function renderModules() {
     }
 
     const tierLabel = t('tier_' + mod.tier, mod.tier);
+    const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
+    const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
+
     card.innerHTML = `
       <div>
         <div class="module-card-header">
@@ -749,6 +752,7 @@ function renderModules() {
             <div class="module-title">
               ${mod.id}
               <span class="badge ${tierBadge}">${tierLabel}</span>
+              ${betaBadge}
             </div>
             <div style="font-size:12px; font-weight:600; color:var(--primary); margin-top:2px;">
               📦 ${tech.product}
