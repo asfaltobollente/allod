@@ -35,13 +35,13 @@ privileges:
 
 images:
   - ref: ghcr.io/immich-app/immich-server
-    tag: v3.1.0
+    tag: release
     channel: pinned
   - ref: ghcr.io/immich-app/postgres
-    tag: "14-vectorchord0.4.3"
+    tag: "14"
     channel: pinned
   - ref: docker.io/valkey/valkey
-    tag: "9"
+    tag: "8"
     channel: patch
 
 update:

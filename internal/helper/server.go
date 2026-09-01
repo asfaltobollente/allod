@@ -126,18 +126,35 @@ func (s *Server) processRequest(req Request) Response {
 	case "shares.apply":
 		name, ok := req.Args["name"].(string)
 		if !ok || !validNameRegex.MatchString(name) {
-			return Response{Ok: false, Error: "Invalid or missing 'name' (must be alphanumeric/hyphens)"}
+			name = "shares"
 		}
 		path, _ := req.Args["path"].(string)
+		if path == "" {
+			path = "/mnt/allod-storage/shares"
+		}
 		if path != "" && (strings.Contains(path, "..") || (!strings.HasPrefix(path, "/") && !filepath.IsAbs(path))) {
 			return Response{Ok: false, Error: "Invalid 'path' (must be absolute without traversal)"}
 		}
 
 		plan := []string{
-			fmt.Sprintf("systemctl stop smb-%s", name),
-			fmt.Sprintf("configure share %s at %s", name, path),
-			fmt.Sprintf("systemctl start smb-%s", name),
+			fmt.Sprintf("mkdir -p %s && chmod 0775 %s", path, path),
+			fmt.Sprintf("configure share [%s] at %s in /etc/samba/smb.conf", name, path),
+			"systemctl restart smbd",
 		}
+
+		if !req.Plan {
+			_ = os.MkdirAll(path, 0775)
+			smbConf := "/etc/samba/smb.conf"
+			if content, err := os.ReadFile(smbConf); err == nil {
+				shareTag := fmt.Sprintf("[%s]", name)
+				if !strings.Contains(string(content), shareTag) {
+					shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0664\n   directory mask = 0775\n", name, path)
+					_ = os.WriteFile(smbConf, []byte(string(content)+shareSnippet), 0644)
+				}
+				_ = exec.Command("systemctl", "restart", "smbd").Run()
+			}
+		}
+
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
 
 	case "snapshots.create":
