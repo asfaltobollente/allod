@@ -7,6 +7,9 @@ let startingModules = new Map(); // modID -> timestamp
 
 document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
+  if (typeof setLanguage === 'function') {
+    setLanguage(currentLang);
+  }
   refreshData();
 });
 
@@ -15,13 +18,6 @@ function switchToTab(tab) {
   const tabPanes = document.querySelectorAll('.tab-pane');
   const pageTitle = document.getElementById('page-title');
   const pageSubtitle = document.getElementById('page-subtitle');
-
-  const titles = {
-    overview: { title: 'Panoramica del Nodo', sub: 'Stato del sistema, risorse e sicurezza' },
-    modules: { title: 'Gestione Moduli & Servizi', sub: 'Adatta le risorse, avvia e ferma i container' },
-    ring: { title: 'Federazione del Ring', sub: 'Topologia del gruppo e repliche remote per dataset' },
-    resilience: { title: 'Test di Resilienza', sub: 'Simulatore di guasti, disconnessioni e rollback automatico' }
-  };
 
   tabButtons.forEach(b => {
     if (b.dataset.tab === tab) {
@@ -35,10 +31,8 @@ function switchToTab(tab) {
   const targetPane = document.getElementById(`tab-${tab}`);
   if (targetPane) targetPane.classList.add('active');
 
-  if (titles[tab]) {
-    if (pageTitle) pageTitle.textContent = titles[tab].title;
-    if (pageSubtitle) pageSubtitle.textContent = titles[tab].sub;
-  }
+  if (pageTitle) pageTitle.textContent = t(`page_${tab}_title`, 'Node Overview');
+  if (pageSubtitle) pageSubtitle.textContent = t(`page_${tab}_sub`, 'System state, hardware resources, and security boundary');
 }
 
 function setupTabs() {
@@ -79,10 +73,10 @@ function renderOverview() {
   if (helperPill) {
     if (currentStatus.helper_connected) {
       helperPill.className = 'helper-status';
-      helperPill.innerHTML = '<span class="status-indicator"></span> Helper Root: Connesso';
+      helperPill.innerHTML = `<span class="status-indicator"></span> ${t('helper_connected')}`;
     } else {
       helperPill.className = 'helper-status offline';
-      helperPill.innerHTML = '<span class="status-indicator offline"></span> Helper Root: Non Avviato';
+      helperPill.innerHTML = `<span class="status-indicator offline"></span> ${t('helper_offline')}`;
     }
   }
 
@@ -105,7 +99,9 @@ function renderOverview() {
   const ramFootEl = document.getElementById('ram-footer');
   if (ramFootEl) {
     const freeGB = Math.max(0, (ramTotalMB - ramUsedMB) / 1024).toFixed(1);
-    ramFootEl.textContent = `Riservato core: ${currentStatus.core_reserved_mb || 600} MB | Disponibile: ${freeGB} GB`;
+    ramFootEl.textContent = (currentLang === 'it')
+      ? `Riservato core: ${currentStatus.core_reserved_mb || 600} MB | Disponibile: ${freeGB} GB`
+      : `Core reserved: ${currentStatus.core_reserved_mb || 600} MB | Available: ${freeGB} GB`;
   }
 
   // Active modules
@@ -113,7 +109,11 @@ function renderOverview() {
     const active = currentModules.filter(m => m.current_level && m.current_level !== 'off');
     const running = currentModules.filter(m => m.runtime_status === 'running');
     const actCountEl = document.getElementById('active-modules-count');
-    if (actCountEl) actCountEl.textContent = `${running.length} in esecuzione (${active.length} configurati)`;
+    if (actCountEl) {
+      actCountEl.textContent = (currentLang === 'it')
+        ? `${running.length} in esecuzione (${active.length} configurati)`
+        : `${running.length} running (${active.length} configured)`;
+    }
     
     const actListEl = document.getElementById('active-modules-list');
     if (actListEl) actListEl.textContent = active.map(m => m.id).join(', ');
@@ -125,12 +125,12 @@ function renderOverview() {
   if (currentRing) {
     const isStandalone = currentRing.is_standalone || Object.keys(currentRing.members || {}).length <= 1;
     if (isStandalone) {
-      if (ringBadge) ringBadge.textContent = '1 Nodo (Locale)';
-      if (ringSubtext) ringSubtext.textContent = 'Modalità Standalone (0 peer remoti)';
+      if (ringBadge) ringBadge.textContent = (currentLang === 'it') ? '1 Nodo (Locale)' : '1 Node (Local)';
+      if (ringSubtext) ringSubtext.textContent = (currentLang === 'it') ? 'Modalità Standalone (0 peer remoti)' : 'Standalone Mode (0 remote peers)';
     } else {
       const count = Object.keys(currentRing.members || {}).length;
-      if (ringBadge) ringBadge.textContent = `${count} Nodi (OK)`;
-      if (ringSubtext) ringSubtext.textContent = 'Regola 2 repliche remote attiva';
+      if (ringBadge) ringBadge.textContent = (currentLang === 'it') ? `${count} Nodi (OK)` : `${count} Nodes (OK)`;
+      if (ringSubtext) ringSubtext.textContent = (currentLang === 'it') ? 'Regola 2 repliche remote attiva' : '2 remote replicas rule active';
     }
   }
 
@@ -143,7 +143,11 @@ function renderOverview() {
         secBadge.className = 'metric-value text-success';
         secBadge.textContent = 'Rootless Safe';
       }
-      if (secSubtext) secSubtext.textContent = `Utente '${currentStatus.current_user || 'non-root'}' (UID: ${currentStatus.uid || 1000})`;
+      if (secSubtext) {
+        secSubtext.textContent = (currentLang === 'it')
+          ? `Utente '${currentStatus.current_user || 'non-root'}' (UID: ${currentStatus.uid || 1000})`
+          : `User '${currentStatus.current_user || 'non-root'}' (UID: ${currentStatus.uid || 1000})`;
+      }
     } else {
       if (secBadge) {
         secBadge.className = 'metric-value text-warning';
@@ -379,77 +383,144 @@ async function initStorageFromGUI() {
 }
 
 const moduleTechInfo = {
-  cloud: {
-    product: 'Nextcloud Hub 30',
-    desc: 'Cloud personale per file, cartelle e sincronizzazione desktop/mobile (alternativa privata a Google Drive / Dropbox).',
-    db: 'SQLite (Embedded)',
-    dbNote: 'Ottimale per uso personale (1 utente) e minimo consumo RAM. Per carichi multi-utente e sync massivi (>100k file) seleziona il livello \'standard\' (PostgreSQL).',
-    linkPort: 8443,
-    linkProtocol: 'http'
+  en: {
+    cloud: {
+      product: 'Nextcloud Hub (Sovereign Cloud)',
+      desc: 'Private cloud for files, contacts, calendar, and desktop/mobile sync (private alternative to Google Drive / Dropbox).',
+      db: 'SQLite / PostgreSQL Dedicated',
+      dbNote: 'Optimal for multi-user collaboration, office suite, and seamless file sync across all client devices.',
+      linkPort: 8443,
+      linkProtocol: 'http'
+    },
+    photos: {
+      product: 'Immich + PostgreSQL + Valkey',
+      desc: 'High-performance photo and video gallery with automatic mobile backup, timeline, albums, and AI search (Google Photos alternative).',
+      db: 'PostgreSQL 14 + Vectorchord + Valkey',
+      dbNote: 'Vector database engine for ultra-fast semantic photo search, face recognition, and mobile camera roll backup.',
+      linkPort: 2283,
+      linkProtocol: 'http'
+    },
+    backup: {
+      product: 'rest-server (Restic Engine)',
+      desc: 'End-to-end encrypted backup engine with strict ransomware-proof append-only lock mode.',
+      db: 'Restic Cryptographic Repository',
+      dbNote: 'Immutable snapshots protected by client-side AES-256 encryption with zero third-party cloud dependencies.',
+      linkPort: null
+    },
+    shares: {
+      product: 'Samba (SMB/CIFS)',
+      desc: 'Ultra-fast local network file sharing for Windows PC, Mac Finder, Linux, and iOS/Android Files app.',
+      db: 'Samba Native TDB',
+      dbNote: 'Kernel-accelerated lock database integrated directly with the Btrfs filesystem.',
+      linkPort: null
+    },
+    storage: {
+      product: 'Btrfs CoW Filesystem + smartmontools',
+      desc: 'Advanced storage pool with hardware-safe RAID 1, instantaneous subvolume snapshots, and S.M.A.R.T. health checks.',
+      db: 'Btrfs B-Trees (On-Disk Metadata)',
+      dbNote: 'Block-level integrity verification and automatic self-healing via CRC32c checksums.',
+      linkPort: null
+    },
+    media: {
+      product: 'Jellyfin Media Server',
+      desc: 'Personal streaming server for movies, TV series, home videos, and high-fidelity music libraries.',
+      db: 'SQLite (Embedded)',
+      dbNote: 'Fast embedded database for media metadata, transcoding queues, and playback resume points.',
+      linkPort: 8096,
+      linkProtocol: 'http'
+    },
+    watch: {
+      product: 'Allod Watchdog + WireGuard Mesh',
+      desc: 'Continuous peer heartbeat monitoring, quorum supervision, and remote replica coordination.',
+      db: 'State.db (Local SQLite)',
+      dbNote: 'Idempotent state tracking for peer nodes and automated ring state transitions.',
+      linkPort: null
+    }
   },
-  photos: {
-    product: 'Immich v3.1 + PostgreSQL + Valkey',
-    desc: 'Galleria foto ad alte prestazioni con backup automatico da telefono, timeline e album (alternativa a Google Foto).',
-    db: 'PostgreSQL 14 + Vectorchord + Valkey',
-    dbNote: 'Database relazionale scalabile e motore vettoriale per indicizzazione IA e ricerca semantica ultra-veloce.',
-    linkPort: 2283,
-    linkProtocol: 'http'
-  },
-  backup: {
-    product: 'rest-server (Restic Backend)',
-    desc: 'Motore di backup cifrato end-to-end con modalità append-only rigorosa a prova di ransomware.',
-    db: 'Repository Crittografico Restic',
-    dbNote: 'Dati immutabili protetti con cifratura client-side AES-256 senza dipendenze da database esterni.',
-    linkPort: null
-  },
-  shares: {
-    product: 'Samba (SMB/CIFS)',
-    desc: 'Condivisione file ad altissima velocità su rete locale per PC Windows, Mac e Linux.',
-    db: 'Samba TDB (Trivial Database nativo)',
-    dbNote: 'Database di lock ad alte prestazioni integrato direttamente nel kernel e filesystem Linux.',
-    linkPort: null
-  },
-  storage: {
-    product: 'Btrfs CoW Filesystem + smartmontools',
-    desc: 'Storage avanzato con RAID 1 hardware-safe, snapshot istantanei e diagnosi di salute S.M.A.R.T.',
-    db: 'Btrfs B-Trees (On-Disk Metadata)',
-    dbNote: 'Controllo di integrità dei blocchi e auto-riparazione con checksum CRC32c automatico.',
-    linkPort: null
-  },
-  media: {
-    product: 'Jellyfin Media Server',
-    desc: 'Streaming multimediale personale per film, serie TV, video e musica.',
-    db: 'SQLite (Embedded)',
-    dbNote: 'Database locale leggero e veloce per librerie musicali e metadati cinematografici.',
-    linkPort: 8096,
-    linkProtocol: 'http'
-  },
-  watch: {
-    product: 'Allod Watchdog + WireGuard Mesh',
-    desc: 'Supervisione continua dei battiti cardiaci dei nodi amici e coordinamento repliche.',
-    db: 'State.db (SQLite locale)',
-    dbNote: 'Tracciamento idempotente dello stato dei nodi e delle transizioni del ring.',
-    linkPort: null
+  it: {
+    cloud: {
+      product: 'Nextcloud Hub (Cloud Sovrano)',
+      desc: 'Cloud personale per file, cartelle e sincronizzazione desktop/mobile (alternativa privata a Google Drive / Dropbox).',
+      db: 'SQLite / PostgreSQL Dedicato',
+      dbNote: 'Ottimale per collaborazione multi-utente, suite office e sync continuo tra tutti i tuoi dispositivi.',
+      linkPort: 8443,
+      linkProtocol: 'http'
+    },
+    photos: {
+      product: 'Immich + PostgreSQL + Valkey',
+      desc: 'Galleria foto ad alte prestazioni con backup automatico da telefono, timeline e album (alternativa a Google Foto).',
+      db: 'PostgreSQL 14 + Vectorchord + Valkey',
+      dbNote: 'Database relazionale scalabile e motore vettoriale per indicizzazione IA e ricerca semantica ultra-veloce.',
+      linkPort: 2283,
+      linkProtocol: 'http'
+    },
+    backup: {
+      product: 'rest-server (Restic Backend)',
+      desc: 'Motore di backup cifrato end-to-end con modalità append-only rigorosa a prova di ransomware.',
+      db: 'Repository Crittografico Restic',
+      dbNote: 'Dati immutabili protetti con cifratura client-side AES-256 senza dipendenze da database esterni.',
+      linkPort: null
+    },
+    shares: {
+      product: 'Samba (SMB/CIFS)',
+      desc: 'Condivisione file ad altissima velocità su rete locale per PC Windows, Mac e Linux.',
+      db: 'Samba TDB (Trivial Database nativo)',
+      dbNote: 'Database di lock ad alte prestazioni integrato direttamente nel kernel e filesystem Linux.',
+      linkPort: null
+    },
+    storage: {
+      product: 'Btrfs CoW Filesystem + smartmontools',
+      desc: 'Storage avanzato con RAID 1 hardware-safe, snapshot istantanei e diagnosi di salute S.M.A.R.T.',
+      db: 'Btrfs B-Trees (On-Disk Metadata)',
+      dbNote: 'Controllo di integrità dei blocchi e auto-riparazione con checksum CRC32c automatico.',
+      linkPort: null
+    },
+    media: {
+      product: 'Jellyfin Media Server',
+      desc: 'Streaming multimediale personale per film, serie TV, video e musica.',
+      db: 'SQLite (Embedded)',
+      dbNote: 'Database locale leggero e veloce per librerie musicali e metadati cinematografici.',
+      linkPort: 8096,
+      linkProtocol: 'http'
+    },
+    watch: {
+      product: 'Allod Watchdog + WireGuard Mesh',
+      desc: 'Supervisione continua dei battiti cardiaci dei nodi amici e coordinamento repliche.',
+      db: 'State.db (SQLite locale)',
+      dbNote: 'Tracciamento idempotente dello stato dei nodi e delle transizioni del ring.',
+      linkPort: null
+    }
   }
 };
 
 function getModuleTechInfo(modID, currentLevel) {
+  const lang = (typeof currentLang !== 'undefined' && i18n[currentLang]) ? currentLang : 'en';
+  const dict = moduleTechInfo[lang] || moduleTechInfo['en'];
+
   if (modID === 'cloud') {
     if (currentLevel === 'standard') {
       return {
-        product: 'Nextcloud Hub 30 (PostgreSQL Dedicated)',
-        desc: 'Cloud personale avanzato con database relazionale PostgreSQL, calendario, contatti e sync multi-utente massivo.',
-        db: 'PostgreSQL 16 (Container Dedicato)',
-        dbNote: 'Massime prestazioni (600 MB RAM): transazioni concorrenti isolate, affidabilità enterprise per migliaia di file e più utenti simultanei.',
+        product: lang === 'it' ? 'Nextcloud Hub (PostgreSQL Dedicato)' : 'Nextcloud Hub (PostgreSQL Dedicated)',
+        desc: lang === 'it' 
+          ? 'Cloud personale avanzato con database relazionale PostgreSQL, calendario, contatti e sync multi-utente massivo.'
+          : 'Advanced personal cloud with PostgreSQL relational database, calendar, contacts, and massive multi-user sync.',
+        db: 'PostgreSQL (Dedicated Container)',
+        dbNote: lang === 'it'
+          ? 'Massime prestazioni (600 MB RAM): transazioni concorrenti isolate, affidabilità enterprise per migliaia di file.'
+          : 'Peak performance (600 MB RAM): isolated concurrent transactions, enterprise reliability for thousands of files.',
         linkPort: 8443,
         linkProtocol: 'http'
       };
     }
     return {
-      product: 'Nextcloud Hub 30 (SQLite Lightweight)',
-      desc: 'Cloud personale per file, cartelle e sincronizzazione desktop/mobile (alternativa privata a Google Drive / Dropbox).',
+      product: lang === 'it' ? 'Nextcloud Hub (SQLite Leggero)' : 'Nextcloud Hub (SQLite Lightweight)',
+      desc: lang === 'it'
+        ? 'Cloud personale per file, cartelle e sincronizzazione desktop/mobile (alternativa privata a Google Drive / Dropbox).'
+        : 'Private cloud for files, folders, and desktop/mobile sync (private alternative to Google Drive / Dropbox).',
       db: 'SQLite (Embedded)',
-      dbNote: 'Consumo minimo (200 MB RAM), perfetto per uso personale (1 utente). Per carichi multi-utente e database PostgreSQL ad alte prestazioni, imposta il livello su \'standard\'!',
+      dbNote: lang === 'it'
+        ? 'Consumo minimo (200 MB RAM), perfetto per uso personale (1 utente).'
+        : 'Minimal consumption (200 MB RAM), perfect for personal use (1 user).',
       linkPort: 8443,
       linkProtocol: 'http'
     };
@@ -457,28 +528,32 @@ function getModuleTechInfo(modID, currentLevel) {
   if (modID === 'photos') {
     if (currentLevel === 'full') {
       return {
-        product: 'Immich v3.1 (Full AI Search & Face Recognition)',
-        desc: 'Galleria foto con IA avanzata: riconoscimento volti automatico, ricerca semantica vettoriale e timeline (4000 MB RAM).',
+        product: lang === 'it' ? 'Immich (Full AI Search & Face Recognition)' : 'Immich (Full AI Search & Face Recognition)',
+        desc: lang === 'it'
+          ? 'Galleria foto con IA avanzata: riconoscimento volti automatico, ricerca semantica vettoriale e timeline (4000 MB RAM).'
+          : 'Photo gallery with advanced AI: facial recognition, vector semantic search, and timeline (4000 MB RAM).',
         db: 'PostgreSQL 14 + Vectorchord + Valkey',
-        dbNote: 'Database vettoriale scalabile per indicizzazione IA e ricerca semantica ad altissima velocità.',
+        dbNote: lang === 'it'
+          ? 'Database vettoriale scalabile per indicizzazione IA e ricerca semantica ad altissima velocità.'
+          : 'Scalable vector database for AI indexing and ultra-fast semantic search.',
         linkPort: 2283,
         linkProtocol: 'http'
       };
     }
-    return {
-      product: 'Immich v3.1 + PostgreSQL + Valkey',
-      desc: 'Galleria foto ad alte prestazioni con backup automatico da telefono, timeline e album (alternativa a Google Foto).',
+    return dict.photos || {
+      product: 'Immich + PostgreSQL + Valkey',
+      desc: 'Photo gallery with mobile backup and timeline',
       db: 'PostgreSQL 14 + Vectorchord + Valkey',
-      dbNote: 'Database relazionale scalabile e motore vettoriale per indicizzazione e timeline ultra-veloce.',
+      dbNote: 'Relational database and vector engine for fast indexing',
       linkPort: 2283,
       linkProtocol: 'http'
     };
   }
-  return moduleTechInfo[modID] || {
+  return dict[modID] || {
     product: modID,
-    desc: 'Modulo Allod',
+    desc: 'Allod Module',
     db: 'Standard',
-    dbNote: 'Configurazione predefinita Allod',
+    dbNote: 'Default configuration',
     linkPort: null
   };
 }
@@ -530,15 +605,15 @@ function renderModules() {
 
     if (isLocked) {
       card.className = 'module-card module-card-locked';
-      statusBadge = `<span class="badge badge-success">🟢 PROTETTO (In Produzione)</span>`;
+      statusBadge = `<span class="badge badge-success">${t('status_protected')}</span>`;
       
       let diagBtn = (mod.id === 'storage')
-        ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 Ispezione Btrfs</button>`
-        : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 Diagnostica</button>`;
+        ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 ${t('btn_inspect_btrfs', 'Inspect Btrfs')}</button>`
+        : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
       actionButtons = `
         ${diagBtn}
-        <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔓 Sblocca</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">${t('btn_unlock')}</button>
       `;
 
       if (tech.linkPort) {
@@ -546,24 +621,24 @@ function renderModules() {
         openLinkHtml = `
           <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
             <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
-              <span>🌐 Apri interfaccia web (${tech.product})</span>
-              <span>Porta ${tech.linkPort} ↗</span>
+              <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
+              <span>Port ${tech.linkPort} ↗</span>
             </a>
           </div>
         `;
       }
     } else if (isUnlocked) {
       card.className = 'module-card';
-      statusBadge = `<span class="badge badge-warning">🔓 IN ESECUZIONE (Sbloccato)</span>`;
+      statusBadge = `<span class="badge badge-warning">${t('status_unlocked')}</span>`;
       
       let diagBtn = (mod.id === 'storage')
-        ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 Ispezione Btrfs</button>`
-        : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 Diagnostica</button>`;
+        ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 ${t('btn_inspect_btrfs', 'Inspect Btrfs')}</button>`
+        : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
       actionButtons = `
-        ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ Ferma</button>` : ''}
+        ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">${t('btn_stop')}</button>` : ''}
         ${diagBtn}
-        <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔒 Blocca</button>
+        <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">${t('btn_lock')}</button>
       `;
 
       if (tech.linkPort) {
@@ -571,18 +646,18 @@ function renderModules() {
         openLinkHtml = `
           <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
             <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
-              <span>🌐 Apri interfaccia web (${tech.product})</span>
-              <span>Porta ${tech.linkPort} ↗</span>
+              <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
+              <span>Port ${tech.linkPort} ↗</span>
             </a>
           </div>
         `;
       }
     } else if (!isOff) {
       if (mod.runtime_status === 'running') {
-        statusBadge = `<span class="badge badge-success">🟢 IN ESECUZIONE</span>`;
+        statusBadge = `<span class="badge badge-success">${t('status_running')}</span>`;
         actionButtons = `
-          <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ Ferma</button>
-          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">${t('btn_stop')}</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
         `;
         
         if (tech.linkPort) {
@@ -590,24 +665,24 @@ function renderModules() {
           openLinkHtml = `
             <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
               <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
-                <span>🌐 Apri interfaccia web (${tech.product})</span>
-                <span>Porta ${tech.linkPort} ↗</span>
+                <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
+                <span>Port ${tech.linkPort} ↗</span>
               </a>
             </div>
           `;
         }
       } else if (mod.runtime_status === 'failed') {
-        statusBadge = `<span class="badge badge-danger">🔴 ERRORE</span>`;
+        statusBadge = `<span class="badge badge-danger">${t('status_error')}</span>`;
         actionButtons = `
-          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Riavvia</button>
-          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="openDangerPurgeModal('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🗑️ Reset</button>
+          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">${t('btn_restart')}</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="openDangerPurgeModal('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">${t('btn_reset')}</button>
         `;
       } else {
-        statusBadge = `<span class="badge badge-warning">⏹ FERMATO</span>`;
+        statusBadge = `<span class="badge badge-warning">${t('status_stopped')}</span>`;
         actionButtons = `
-          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ Avvia</button>
-          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
+          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">${t('btn_start')}</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
         `;
       }
     }
@@ -618,10 +693,10 @@ function renderModules() {
       if (mod.runtime_status === 'running' || elapsed > 25000) {
         startingModules.delete(mod.id);
       } else {
-        statusBadge = `<span class="badge badge-info" style="opacity:0.9;">⏳ AVVIO IN CORSO...</span>`;
+        statusBadge = `<span class="badge badge-info" style="opacity:0.9;">${t('status_starting')}</span>`;
         actionButtons = `
-          <button class="btn btn-sm btn-secondary" disabled style="opacity:0.65; cursor:wait; padding:2px 10px; font-size:11px; margin-left:8px;">⏳ Avvio in corso...</button>
-          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 Diagnostica</button>
+          <button class="btn btn-sm btn-secondary" disabled style="opacity:0.65; cursor:wait; padding:2px 10px; font-size:11px; margin-left:8px;">${t('status_starting')}</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
         `;
       }
     }
@@ -630,7 +705,7 @@ function renderModules() {
     if (tech.db) {
       dbInfoHtml = `
         <div style="margin-top:8px; padding:6px 10px; background:rgba(15, 23, 42, 0.6); border-radius:6px; border-left:3px solid var(--primary); font-size:11px;">
-          <div style="font-weight:600; color:var(--text-main); margin-bottom:2px;">🗄️ Database: <span style="color:var(--primary);">${tech.db}</span></div>
+          <div style="font-weight:600; color:var(--text-main); margin-bottom:2px;">🗄️ ${t('label_database')}: <span style="color:var(--primary);">${tech.db}</span></div>
           <div style="color:var(--text-muted); line-height:1.35;">${tech.dbNote}</div>
         </div>
       `;
@@ -639,13 +714,13 @@ function renderModules() {
     let storageBoxHtml = ``;
     if (mod.storage_path) {
       const nasBadge = mod.is_on_nas_pool 
-        ? `<span class="badge badge-success" style="font-size:10px;">🟢 Pool Btrfs RAID 1</span>` 
-        : `<span class="badge badge-warning" style="font-size:10px;">⚠️ Storage Locale (Home)</span>`;
+        ? `<span class="badge badge-success" style="font-size:10px;">${t('pool_raid1')}</span>` 
+        : `<span class="badge badge-warning" style="font-size:10px;">${t('pool_local')}</span>`;
 
       storageBoxHtml = `
         <div style="margin-top:8px; padding:7px 10px; background:rgba(15, 23, 42, 0.6); border-radius:6px; border-left:3px solid ${mod.is_on_nas_pool ? 'var(--success)' : 'var(--warning)'}; font-size:11px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-            <span style="font-weight:600; color:var(--text-main);">💾 Storage NAS Fisico:</span>
+            <span style="font-weight:600; color:var(--text-main);">${t('label_nas_storage')}</span>
             ${nasBadge}
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -657,7 +732,7 @@ function renderModules() {
               ${mod.mounts.map(m => `
                 <div style="font-size:10px; color:var(--text-muted); display:flex; justify-content:space-between; margin-bottom:2px; font-family:'JetBrains Mono',monospace;">
                   <span>↳ .../${m.host_path.split('/').slice(-2).join('/')} ➔ <code>${m.container_path}</code></span>
-                  <span style="color:${m.exists ? 'var(--success)' : 'var(--text-muted)'}">${m.exists ? m.size_human : 'In attesa'}</span>
+                  <span style="color:${m.exists ? 'var(--success)' : 'var(--text-muted)'}">${m.exists ? m.size_human : t('label_pending')}</span>
                 </div>
               `).join('')}
             </div>
@@ -666,13 +741,14 @@ function renderModules() {
       `;
     }
 
+    const tierLabel = t('tier_' + mod.tier, mod.tier);
     card.innerHTML = `
       <div>
         <div class="module-card-header">
           <div>
             <div class="module-title">
               ${mod.id}
-              <span class="badge ${tierBadge}">${mod.tier || 'module'}</span>
+              <span class="badge ${tierBadge}">${tierLabel}</span>
             </div>
             <div style="font-size:12px; font-weight:600; color:var(--primary); margin-top:2px;">
               📦 ${tech.product}
@@ -689,7 +765,7 @@ function renderModules() {
         </p>
 
         <div class="level-selector-row">
-          <label style="font-size:12px; color:var(--text-muted);">Livello:</label>
+          <label style="font-size:12px; color:var(--text-muted);">${t('label_level')}:</label>
           <select class="form-control" ${isLocked ? 'disabled style="opacity:0.55; cursor:not-allowed; padding:4px 8px; font-size:12px;"' : 'style="padding:4px 8px; font-size:12px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
             ${levelOptions}
           </select>
