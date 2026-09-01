@@ -508,6 +508,9 @@ func main() {
 		}
 
 		cmd := exec.Command("systemctl", "--user", "stop", req.Module)
+		_ = exec.Command("systemctl", "--user", "stop", req.Module+"-postgres").Run()
+		_ = exec.Command("systemctl", "--user", "stop", req.Module+"-valkey").Run()
+		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
 		if err := cmd.Run(); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore arresto %s: %v", req.Module, err)})
