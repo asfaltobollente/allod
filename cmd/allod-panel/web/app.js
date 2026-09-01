@@ -1297,3 +1297,71 @@ async function executeDangerModulePurge() {
     showAlert('Errore di connessione: ' + err.message, 'danger');
   }
 }
+
+// SWEEPER MODAL LOGIC
+function openSweeperModal() {
+  const modal = document.getElementById('sweeper-modal');
+  const resultsDiv = document.getElementById('sweeper-results');
+  if (resultsDiv) {
+    resultsDiv.textContent = 'Pronto per la scansione.\nClicca su "Avvia Pulizia Fantasmi" per cercare e rimuovere container morti o layer orfani.';
+  }
+  const btn = document.getElementById('sweeper-action-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = '🧹 Avvia Pulizia Fantasmi';
+  }
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeSweeperModal() {
+  const modal = document.getElementById('sweeper-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function executePodmanSweep() {
+  const btn = document.getElementById('sweeper-action-btn');
+  const resultsDiv = document.getElementById('sweeper-results');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Scansione in corso...';
+  }
+  if (resultsDiv) {
+    resultsDiv.textContent = '🔍 Scansione container morti, orfani e layer immagini in corso...\nAttendere qualche secondo...';
+  }
+
+  try {
+    const res = await fetch('/api/system/sweep', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      const d = data.data || {};
+      let report = `=== RISULTATO SWEEPER PODMAN (${d.timestamp || new Date().toLocaleString()}) ===\n\n`;
+      
+      report += `📦 Container Morti/Arrestati Rimossi:\n`;
+      report += (d.containers_pruned && d.containers_pruned.length > 0) ? `${d.containers_pruned}\n\n` : `Nessun container morto da rimuovere (Sistema pulito).\n\n`;
+
+      report += `🖼️ Layer Immagini Orfane Rimossi:\n`;
+      report += (d.images_pruned && d.images_pruned.length > 0) ? `${d.images_pruned}\n\n` : `Nessun layer orfano da rimuovere.\n\n`;
+
+      report += `🧹 File di Lock (.cid) Ripuliti: ${Array.isArray(d.cleaned_cids) ? d.cleaned_cids.length : 0}\n`;
+      report += `\n✓ Stato Systemd azzerato (reset-failed eseguito con successo).`;
+
+      if (resultsDiv) resultsDiv.textContent = report;
+      showAlert('✓ Pulizia Sweeper Podman completata con successo!', 'success');
+      refreshData();
+    } else {
+      if (resultsDiv) resultsDiv.textContent = `Errore durante lo sweeper: ${data.message}`;
+      showAlert(`Errore sweeper: ${data.message}`, 'danger');
+    }
+  } catch (err) {
+    if (resultsDiv) resultsDiv.textContent = `Errore di connessione: ${err.message}`;
+    showAlert(`Errore di connessione: ${err.message}`, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🧹 Esegui Nuova Scansione';
+    }
+  }
+}

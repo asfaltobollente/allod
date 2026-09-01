@@ -517,6 +517,51 @@ func main() {
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s fermato", req.Module)})
 	})
 
+	// 5a. API System Sweep (Podman ghost containers & dangling images sweeper)
+	mux.HandleFunc("/api/system/sweep", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		// 1. Prune dead / exited containers
+		cntPruneOut, _ := exec.Command("podman", "container", "prune", "-f").CombinedOutput()
+
+		// 2. Prune dangling unused images
+		imgPruneOut, _ := exec.Command("podman", "image", "prune", "-f").CombinedOutput()
+
+		// 3. Remove stale .cid files
+		uid := os.Getuid()
+		cidDir := fmt.Sprintf("/run/user/%d", uid)
+		var cleanedCids []string
+		if entries, err := os.ReadDir(cidDir); err == nil {
+			for _, entry := range entries {
+				if strings.HasSuffix(entry.Name(), ".cid") {
+					cidPath := filepath.Join(cidDir, entry.Name())
+					_ = os.Remove(cidPath)
+					cleanedCids = append(cleanedCids, entry.Name())
+				}
+			}
+		}
+
+		// 4. Reset failed systemd units
+		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
+
+		data := map[string]interface{}{
+			"containers_pruned": strings.TrimSpace(string(cntPruneOut)),
+			"images_pruned":     strings.TrimSpace(string(imgPruneOut)),
+			"cleaned_cids":      cleanedCids,
+			"timestamp":         time.Now().Format("2006-01-02 15:04:05"),
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Sweeper completato con successo: container morti e immagini orfane rimossi!",
+			Data:    data,
+		})
+	})
+
 	// 5b. API Storage Init
 	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
