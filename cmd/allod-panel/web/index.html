@@ -342,37 +342,39 @@
         <div id="sweeper-results" style="background:#0b1120; border-radius:6px; padding:12px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; max-height:260px; overflow-y:auto; white-space:pre-wrap; border:1px solid rgba(255,255,255,0.05);">Pronto per la scansione. Clicca sul pulsante sottostante per avviare lo sweeper.</div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeSweeperModal()">Chiudi</button>
-        <button class="btn btn-primary" id="sweeper-action-btn" onclick="executePodmanSweep()" style="margin-left:8px;">
-          🧹 Avvia Pulizia Fantasmi
+        <button class="btn btn-secondary" onclick="closeSweeperModal()" data-i18n="sweeper_close">Close</button>
+        <button class="btn btn-primary" id="sweeper-action-btn" onclick="executePodmanSweep()" style="margin-left:8px;" data-i18n="sweeper_btn_start">
+          🧹 Start Ghost Clean-up
         </button>
       </div>
     </div>
+  </div>
+
   <!-- SPEEDTEST MODAL (LAN / Wi-Fi Throughput & Jellyfin Streaming Benchmark) -->
   <div id="speedtest-modal" class="modal-overlay hidden">
     <div class="modal-card" style="max-width:680px;">
       <div class="modal-header">
-        <h3>⚡ Benchmark Velocità Rete LAN (Speedtest)</h3>
+        <h3 data-i18n="speedtest_title">⚡ LAN Network Speedtest Benchmark</h3>
         <button class="modal-close-btn" onclick="closeSpeedtestModal()">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;">
-          Misura in tempo reale la larghezza di banda e la latenza tra questo dispositivo e il server NAS Allod per verificare l'idoneità allo <strong>streaming video 4K/1080p Jellyfin</strong> e ai <strong>trasferimenti Samba</strong>.
+        <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;" data-i18n="speedtest_desc">
+          Benchmark real-time network bandwidth and latency between this client device and the Allod NAS server to verify suitability for <strong>Jellyfin 4K/1080p video streaming</strong> and <strong>Samba file transfers</strong>.
         </p>
 
         <!-- Speedtest Metrics Grid -->
         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:16px;">
           <div style="background:#0f172a; padding:14px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); text-align:center;">
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">⏱️ Latenza (Ping)</div>
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;" data-i18n="speedtest_ping">⏱️ Latency (Ping)</div>
             <div id="speedtest-ping-val" style="font-size:24px; font-weight:700; color:var(--primary); font-family:'JetBrains Mono',monospace;">-- ms</div>
           </div>
           <div style="background:#0f172a; padding:14px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); text-align:center;">
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">📥 Download (Server➔PC)</div>
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;" data-i18n="speedtest_dl">📥 Download (Server➔Client)</div>
             <div id="speedtest-dl-val" style="font-size:24px; font-weight:700; color:var(--success); font-family:'JetBrains Mono',monospace;">-- Mbps</div>
             <div id="speedtest-dl-sub" style="font-size:10px; color:var(--text-muted); margin-top:2px;">-- MB/s</div>
           </div>
           <div style="background:#0f172a; padding:14px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); text-align:center;">
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">📤 Upload (PC➔Server)</div>
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;" data-i18n="speedtest_ul">📤 Upload (Client➔Server)</div>
             <div id="speedtest-ul-val" style="font-size:24px; font-weight:700; color:#38bdf8; font-family:'JetBrains Mono',monospace;">-- Mbps</div>
             <div id="speedtest-ul-sub" style="font-size:10px; color:var(--text-muted); margin-top:2px;">-- MB/s</div>
           </div>
@@ -385,21 +387,21 @@
 
         <!-- Streaming Quality Verdict Box -->
         <div id="speedtest-verdict-box" style="background:#0b1120; border-radius:8px; padding:12px 14px; border:1px solid rgba(56,189,248,0.2); font-size:11.5px; line-height:1.5;">
-          <div style="font-weight:600; color:var(--text-main); margin-bottom:6px;">🎬 Idoneità Streaming & Prestazioni Media:</div>
-          <div id="speedtest-verdict-items" style="color:var(--text-muted);">
-            In attesa di esecuzione test... Clicca su "Avvia Test Velocità" per iniziare.
+          <div style="font-weight:600; color:var(--text-main); margin-bottom:6px;" data-i18n="speedtest_verdict_title">🎬 Streaming Suitability & Media Performance:</div>
+          <div id="speedtest-verdict-items" style="color:var(--text-muted);" data-i18n="speedtest_verdict_wait">
+            Waiting for test execution... Click 'Start Speedtest' to begin.
           </div>
         </div>
 
         <!-- iPerf3 CLI Info Box -->
         <div style="margin-top:12px; padding:8px 12px; background:rgba(30,41,59,0.4); border-radius:6px; font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
-          <span>💡 Per test avanzati da terminale: <code>iperf3 -c <span id="speedtest-server-ip">192.168.0.122</span></code></span>
+          <span>💡 <span data-i18n="speedtest_iperf_info">For advanced terminal benchmarking:</span> <code>iperf3 -c <span id="speedtest-server-ip">192.168.0.122</span></code></span>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeSpeedtestModal()">Chiudi</button>
-        <button class="btn btn-success" id="speedtest-start-btn" onclick="runSpeedtest()" style="margin-left:8px;">
-          ⚡ Avvia Test Velocità
+        <button class="btn btn-secondary" onclick="closeSpeedtestModal()" data-i18n="speedtest_close">Close</button>
+        <button class="btn btn-success" id="speedtest-start-btn" onclick="runSpeedtest()" style="margin-left:8px;" data-i18n="speedtest_btn_start">
+          ⚡ Start Speedtest
         </button>
       </div>
     </div>
