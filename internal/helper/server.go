@@ -136,6 +136,11 @@ func (s *Server) processRequest(req Request) Response {
 			return Response{Ok: false, Error: "Invalid 'path' (must be absolute without traversal)"}
 		}
 
+		enabled := true
+		if en, ok := req.Args["enabled"].(bool); ok {
+			enabled = en
+		}
+
 		plan := []string{
 			fmt.Sprintf("mkdir -p %s && chmod 0775 %s", path, path),
 			fmt.Sprintf("configure share [%s] at %s in /etc/samba/smb.conf", name, path),
@@ -147,11 +152,17 @@ func (s *Server) processRequest(req Request) Response {
 			smbConf := "/etc/samba/smb.conf"
 			if content, err := os.ReadFile(smbConf); err == nil {
 				shareTag := fmt.Sprintf("[%s]", name)
-				if !strings.Contains(string(content), shareTag) {
-					shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0664\n   directory mask = 0775\n", name, path)
-					_ = os.WriteFile(smbConf, []byte(string(content)+shareSnippet), 0644)
+				if enabled {
+					if !strings.Contains(string(content), shareTag) {
+						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0664\n   directory mask = 0775\n", name, path)
+						_ = os.WriteFile(smbConf, []byte(string(content)+shareSnippet), 0644)
+					}
+					_ = exec.Command("systemctl", "restart", "smbd").Run()
+				} else {
+					_ = exec.Command("systemctl", "stop", "smbd").Run()
 				}
-				_ = exec.Command("systemctl", "restart", "smbd").Run()
+			} else if !enabled {
+				_ = exec.Command("systemctl", "stop", "smbd").Run()
 			}
 		}
 
@@ -195,6 +206,9 @@ func (s *Server) processRequest(req Request) Response {
 		unit, ok := req.Args["unit"].(string)
 		if !ok || !validNameRegex.MatchString(unit) {
 			return Response{Ok: false, Error: "Invalid or missing 'unit' name"}
+		}
+		if !req.Plan {
+			_ = exec.Command("systemctl", "restart", unit).Run()
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("systemctl restart %s", unit)}}
 
