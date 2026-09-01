@@ -603,9 +603,9 @@ func main() {
 			if len(statusOut) == 0 {
 				statusOut, _ = exec.Command("systemctl", "status", "smb").CombinedOutput()
 			}
-			logsOut, _ = exec.Command("smbstatus", "-S").CombinedOutput()
-			if len(logsOut) == 0 {
-				logsOut, _ = exec.Command("journalctl", "-u", "smbd", "-n", "30", "--no-pager").CombinedOutput()
+			logsOut, _ = exec.Command("journalctl", "-u", "smbd", "-n", "30", "--no-pager").CombinedOutput()
+			if len(logsOut) == 0 || strings.Contains(string(logsOut), "No entries") {
+				logsOut, _ = exec.Command("testparm", "-s").CombinedOutput()
 			}
 		} else {
 			statusOut, _ = exec.Command("systemctl", "--user", "status", modName).CombinedOutput()
