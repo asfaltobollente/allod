@@ -1365,3 +1365,137 @@ async function executePodmanSweep() {
     }
   }
 }
+
+// SPEEDTEST BENCHMARK LOGIC
+function openSpeedtestModal() {
+  const modal = document.getElementById('speedtest-modal');
+  const ipSpan = document.getElementById('speedtest-server-ip');
+  if (ipSpan) {
+    ipSpan.textContent = window.location.hostname || '192.168.0.122';
+  }
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeSpeedtestModal() {
+  const modal = document.getElementById('speedtest-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function runSpeedtest() {
+  const btn = document.getElementById('speedtest-start-btn');
+  const pingEl = document.getElementById('speedtest-ping-val');
+  const dlValEl = document.getElementById('speedtest-dl-val');
+  const dlSubEl = document.getElementById('speedtest-dl-sub');
+  const ulValEl = document.getElementById('speedtest-ul-val');
+  const ulSubEl = document.getElementById('speedtest-ul-sub');
+  const pBar = document.getElementById('speedtest-progress-bar-bg');
+  const pFill = document.getElementById('speedtest-progress-fill');
+  const verdictEl = document.getElementById('speedtest-verdict-items');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Test in corso...';
+  }
+  if (pBar) pBar.style.display = 'block';
+  if (pFill) pFill.style.width = '10%';
+
+  pingEl.textContent = '...';
+  dlValEl.textContent = '...';
+  dlSubEl.textContent = '-- MB/s';
+  ulValEl.textContent = '...';
+  ulSubEl.textContent = '-- MB/s';
+  if (verdictEl) verdictEl.textContent = '⏱️ Misurazione latenza e ping...';
+
+  try {
+    // 1. PING TEST
+    const pings = [];
+    for (let i = 0; i < 4; i++) {
+      const t0 = performance.now();
+      await fetch('/api/speedtest/ping?t=' + Date.now());
+      const t1 = performance.now();
+      pings.push(t1 - t0);
+    }
+    const avgPing = Math.min(...pings).toFixed(1);
+    pingEl.textContent = `${avgPing} ms`;
+    if (pFill) pFill.style.width = '30%';
+
+    // 2. DOWNLOAD TEST
+    if (verdictEl) verdictEl.textContent = '📥 Test velocità download (Server ➔ Questo dispositivo)...';
+    const dlStart = performance.now();
+    const dlRes = await fetch('/api/speedtest/download?t=' + Date.now());
+    const reader = dlRes.body.getReader();
+    let dlBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      dlBytes += value.length;
+      const curDurationSec = (performance.now() - dlStart) / 1000;
+      if (curDurationSec > 0.3) {
+        const liveMbps = ((dlBytes * 8) / (curDurationSec * 1000 * 1000)).toFixed(1);
+        const liveMBps = (dlBytes / (curDurationSec * 1024 * 1024)).toFixed(1);
+        dlValEl.textContent = `${liveMbps} Mbps`;
+        dlSubEl.textContent = `${liveMBps} MB/s`;
+      }
+    }
+    const dlTotalSec = (performance.now() - dlStart) / 1000;
+    const finalDlMbps = (dlBytes * 8) / (dlTotalSec * 1000 * 1000);
+    const finalDlMBps = dlBytes / (dlTotalSec * 1024 * 1024);
+    dlValEl.textContent = `${finalDlMbps.toFixed(1)} Mbps`;
+    dlSubEl.textContent = `${finalDlMBps.toFixed(1)} MB/s`;
+    if (pFill) pFill.style.width = '70%';
+
+    // 3. UPLOAD TEST
+    if (verdictEl) verdictEl.textContent = '📤 Test velocità upload (Questo dispositivo ➔ Server)...';
+    const uploadSize = 12 * 1024 * 1024; // 12 MB payload
+    const uploadData = new Uint8Array(uploadSize);
+    for (let i = 0; i < uploadSize; i += 1024) {
+      uploadData[i] = i % 255;
+    }
+
+    const ulStart = performance.now();
+    const ulRes = await fetch('/api/speedtest/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: uploadData
+    });
+    const ulJson = await ulRes.json();
+    const ulTotalSec = (performance.now() - ulStart) / 1000;
+    const finalUlMbps = ulJson.mbps || ((uploadSize * 8) / (ulTotalSec * 1000 * 1000));
+    const finalUlMBps = (uploadSize / (ulTotalSec * 1024 * 1024));
+    ulValEl.textContent = `${finalUlMbps.toFixed(1)} Mbps`;
+    ulSubEl.textContent = `${finalUlMBps.toFixed(1)} MB/s`;
+    if (pFill) pFill.style.width = '100%';
+
+    // 4. STREAMING & MEDIA VERDICT
+    let vText = '';
+    if (finalDlMbps >= 80) {
+      vText += `🟢 <strong>Streaming 4K Ultra-HD HDR (Jellyfin):</strong> ECCELLENTE (${finalDlMbps.toFixed(0)} Mbps disponibili, bitrate 4K ~50-80 Mbps coperto senza buffering).\n`;
+      vText += `🟢 <strong>Streaming 1080p Full-HD:</strong> ISTANTANEO (supporta fino a 4+ flussi video simultanei).\n`;
+      vText += (finalDlMbps >= 700)
+        ? `🟢 <strong>Trasferimento File Samba:</strong> GIGABIT WIRE-SPEED (${finalDlMBps.toFixed(1)} MB/s nativi, ideale per montaggio video su NAS).`
+        : `🟡 <strong>Trasferimento File Samba:</strong> Ottimo su Wi-Fi/LAN (${finalDlMBps.toFixed(1)} MB/s).`;
+    } else if (finalDlMbps >= 25) {
+      vText += `🟢 <strong>Streaming 1080p Full-HD (Jellyfin):</strong> PERFETTO (${finalDlMbps.toFixed(0)} Mbps disponibili).\n`;
+      vText += `🟡 <strong>Streaming 4K:</strong> Supportato per film compressi H.265/AV1. Possibili micro-buffering su Remux 4K non compressi da 80+ Mbps.\n`;
+      vText += `🟡 <strong>Trasferimento File Samba:</strong> Buono per documenti e musica (${finalDlMBps.toFixed(1)} MB/s).`;
+    } else {
+      vText += `🟠 <strong>Streaming Video:</strong> Buono fino a 720p / 1080p leggero (${finalDlMbps.toFixed(0)} Mbps disponibili).\n`;
+      vText += `⚠️ <strong>Nota:</strong> Se sei su Wi-Fi, avvicinati al router o usa un cavo Ethernet per massimizzare le prestazioni.`;
+    }
+
+    if (verdictEl) {
+      verdictEl.innerHTML = vText.replace(/\n/g, '<br>');
+    }
+  } catch (err) {
+    if (verdictEl) verdictEl.textContent = 'Errore durante il test di velocità: ' + err.message;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '⚡ Ripeti Test Velocità';
+    }
+    setTimeout(() => {
+      if (pBar) pBar.style.display = 'none';
+    }, 2000);
+  }
+}
