@@ -411,12 +411,24 @@ func main() {
 			}, false)
 			if err != nil {
 				client.SocketPath = "allod-helper.sock"
-				_, _ = client.Execute("shares.apply", map[string]interface{}{
+				res, err = client.Execute("shares.apply", map[string]interface{}{
 					"name": "shares",
 					"path": "/mnt/allod-storage/shares",
 				}, false)
 			}
-			_ = res
+			if err != nil || !res.Ok {
+				w.WriteHeader(http.StatusInternalServerError)
+				errMsg := "Errore comunicazione helper Samba (allod-helperd è avviato con sudo?)"
+				if err != nil {
+					errMsg = err.Error()
+				} else if res.Error != "" {
+					errMsg = res.Error
+				}
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+				return
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Condivisione Samba avviata con successo su /mnt/allod-storage/shares"})
+			return
 		}
 
 		reloadOut, _ := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput()
@@ -457,6 +469,12 @@ func main() {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Module == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Invalid JSON"})
+			return
+		}
+
+		if req.Module == "shares" {
+			_ = exec.Command("systemctl", "stop", "smbd").Run()
+			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Condivisione Samba fermata"})
 			return
 		}
 
@@ -579,10 +597,22 @@ func main() {
 			return
 		}
 
-		statusOut, _ := exec.Command("systemctl", "--user", "status", modName).CombinedOutput()
-		logsOut, _ := exec.Command("podman", "logs", "--tail", "30", "systemd-"+modName).CombinedOutput()
-		if len(logsOut) == 0 {
-			logsOut, _ = exec.Command("journalctl", "--user", "-u", modName, "-n", "30", "--no-pager").CombinedOutput()
+		var statusOut, logsOut []byte
+		if modName == "shares" {
+			statusOut, _ = exec.Command("systemctl", "status", "smbd").CombinedOutput()
+			if len(statusOut) == 0 {
+				statusOut, _ = exec.Command("systemctl", "status", "smb").CombinedOutput()
+			}
+			logsOut, _ = exec.Command("smbstatus", "-S").CombinedOutput()
+			if len(logsOut) == 0 {
+				logsOut, _ = exec.Command("journalctl", "-u", "smbd", "-n", "30", "--no-pager").CombinedOutput()
+			}
+		} else {
+			statusOut, _ = exec.Command("systemctl", "--user", "status", modName).CombinedOutput()
+			logsOut, _ = exec.Command("podman", "logs", "--tail", "30", "systemd-"+modName).CombinedOutput()
+			if len(logsOut) == 0 {
+				logsOut, _ = exec.Command("journalctl", "--user", "-u", modName, "-n", "30", "--no-pager").CombinedOutput()
+			}
 		}
 
 		data := map[string]interface{}{
