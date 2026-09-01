@@ -473,8 +473,24 @@ func main() {
 		}
 
 		if req.Module == "shares" {
-			_ = exec.Command("systemctl", "stop", "smbd").Run()
-			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Condivisione Samba fermata"})
+			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+			res, err := client.Execute("shares.apply", map[string]interface{}{
+				"name":    "shares",
+				"path":    "/mnt/allod-storage/shares",
+				"enabled": false,
+			}, false)
+			if err != nil {
+				client.SocketPath = "allod-helper.sock"
+				res, err = client.Execute("shares.apply", map[string]interface{}{
+					"name":    "shares",
+					"path":    "/mnt/allod-storage/shares",
+					"enabled": false,
+				}, false)
+			}
+			if err != nil || !res.Ok {
+				_ = exec.Command("systemctl", "stop", "smbd").Run()
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Condivisione Samba fermata con successo"})
 			return
 		}
 
