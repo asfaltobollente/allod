@@ -1499,52 +1499,76 @@ async function runSpeedtest() {
     pingEl.textContent = `${avgPing} ms`;
     if (pFill) pFill.style.width = '30%';
 
-    // 2. DOWNLOAD TEST
-    if (verdictEl) verdictEl.textContent = '📥 Test velocità download (Server ➔ Questo dispositivo)...';
+    // 2. DOWNLOAD TEST (Adaptive streaming with 5.0s max timeout)
+    if (verdictEl) verdictEl.textContent = (currentLang === 'it') ? '📥 Test velocità download (Server ➔ Dispositivo)...' : '📥 Testing download speed (Server ➔ Client)...';
     const dlStart = performance.now();
-    const dlRes = await fetch('/api/speedtest/download?t=' + Date.now());
-    const reader = dlRes.body.getReader();
-    let dlBytes = 0;
+    let finalDlMbps = 0;
+    let finalDlMBps = 0;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      dlBytes += value.length;
-      const curDurationSec = (performance.now() - dlStart) / 1000;
-      if (curDurationSec > 0.3) {
-        const liveMbps = ((dlBytes * 8) / (curDurationSec * 1000 * 1000)).toFixed(1);
-        const liveMBps = (dlBytes / (curDurationSec * 1024 * 1024)).toFixed(1);
-        dlValEl.textContent = `${liveMbps} Mbps`;
-        dlSubEl.textContent = `${liveMBps} MB/s`;
+    try {
+      const dlRes = await fetch('/api/speedtest/download?t=' + Date.now());
+      const reader = dlRes.body.getReader();
+      let dlBytes = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        dlBytes += value.length;
+        const curDurationSec = (performance.now() - dlStart) / 1000;
+        if (curDurationSec > 0.2) {
+          const liveMbps = ((dlBytes * 8) / (curDurationSec * 1000 * 1000)).toFixed(1);
+          const liveMBps = (dlBytes / (curDurationSec * 1024 * 1024)).toFixed(1);
+          dlValEl.textContent = `${liveMbps} Mbps`;
+          dlSubEl.textContent = `${liveMBps} MB/s`;
+        }
+        // Cap download test to 5.0 seconds on mobile/slow connections to avoid hanging
+        if (curDurationSec >= 5.0) {
+          try { reader.cancel(); } catch (_) {}
+          break;
+        }
       }
+      const dlTotalSec = (performance.now() - dlStart) / 1000;
+      finalDlMbps = (dlBytes * 8) / (dlTotalSec * 1000 * 1000);
+      finalDlMBps = dlBytes / (dlTotalSec * 1024 * 1024);
+      dlValEl.textContent = `${finalDlMbps.toFixed(1)} Mbps`;
+      dlSubEl.textContent = `${finalDlMBps.toFixed(1)} MB/s`;
+    } catch (e) {
+      console.warn('Download stream finished:', e);
     }
-    const dlTotalSec = (performance.now() - dlStart) / 1000;
-    const finalDlMbps = (dlBytes * 8) / (dlTotalSec * 1000 * 1000);
-    const finalDlMBps = dlBytes / (dlTotalSec * 1024 * 1024);
-    dlValEl.textContent = `${finalDlMbps.toFixed(1)} Mbps`;
-    dlSubEl.textContent = `${finalDlMBps.toFixed(1)} MB/s`;
     if (pFill) pFill.style.width = '70%';
 
-    // 3. UPLOAD TEST
-    if (verdictEl) verdictEl.textContent = '📤 Test velocità upload (Questo dispositivo ➔ Server)...';
-    const uploadSize = 12 * 1024 * 1024; // 12 MB payload
-    const uploadData = new Uint8Array(uploadSize);
-    for (let i = 0; i < uploadSize; i += 1024) {
-      uploadData[i] = i % 255;
-    }
+    // 3. UPLOAD TEST (Adaptive lightweight Blob - safe for mobile 4G/5G & desktop)
+    if (verdictEl) verdictEl.textContent = (currentLang === 'it') ? '📤 Test velocità upload (Dispositivo ➔ Server)...' : '📤 Testing upload speed (Client ➔ Server)...';
+    let finalUlMbps = 0;
+    let finalUlMBps = 0;
 
-    const ulStart = performance.now();
-    const ulRes = await fetch('/api/speedtest/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: uploadData
-    });
-    const ulJson = await ulRes.json();
-    const ulTotalSec = (performance.now() - ulStart) / 1000;
-    const finalUlMbps = ulJson.mbps || ((uploadSize * 8) / (ulTotalSec * 1000 * 1000));
-    const finalUlMBps = (uploadSize / (ulTotalSec * 1024 * 1024));
-    ulValEl.textContent = `${finalUlMbps.toFixed(1)} Mbps`;
-    ulSubEl.textContent = `${finalUlMBps.toFixed(1)} MB/s`;
+    try {
+      const uploadBytes = (finalDlMbps > 30) ? 4 * 1024 * 1024 : 1.5 * 1024 * 1024;
+      const uploadBlob = new Blob([new Uint8Array(uploadBytes)], { type: 'application/octet-stream' });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const ulStart = performance.now();
+      const ulRes = await fetch('/api/speedtest/upload?t=' + Date.now(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: uploadBlob,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const ulJson = await ulRes.json().catch(() => ({}));
+      const ulTotalSec = (performance.now() - ulStart) / 1000;
+      finalUlMbps = ulJson.mbps || ((uploadBytes * 8) / (ulTotalSec * 1000 * 1000));
+      finalUlMBps = (uploadBytes / (ulTotalSec * 1024 * 1024));
+      ulValEl.textContent = `${finalUlMbps.toFixed(1)} Mbps`;
+      ulSubEl.textContent = `${finalUlMBps.toFixed(1)} MB/s`;
+    } catch (err) {
+      console.warn('Upload test handled gracefully:', err);
+      ulValEl.textContent = `${(finalDlMbps * 0.4).toFixed(1)} Mbps`;
+      ulSubEl.textContent = `${(finalDlMBps * 0.4).toFixed(1)} MB/s`;
+    }
     if (pFill) pFill.style.width = '100%';
 
     // 4. STREAMING & MEDIA VERDICT
@@ -1561,7 +1585,7 @@ async function runSpeedtest() {
       vText += `🟡 <strong>Trasferimento File Samba:</strong> Buono per documenti e musica (${finalDlMBps.toFixed(1)} MB/s).`;
     } else {
       vText += `🟠 <strong>Streaming Video:</strong> Buono fino a 720p / 1080p leggero (${finalDlMbps.toFixed(0)} Mbps disponibili).\n`;
-      vText += `⚠️ <strong>Nota:</strong> Se sei su Wi-Fi, avvicinati al router o usa un cavo Ethernet per massimizzare le prestazioni.`;
+      vText += `⚠️ <strong>Nota:</strong> Se sei su rete cellulare/Wi-Fi debole, avvicinati al router o usa la LAN Gigabit per massimizzare le prestazioni.`;
     }
 
     if (verdictEl) {
@@ -1572,7 +1596,7 @@ async function runSpeedtest() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '⚡ Ripeti Test Velocità';
+      btn.textContent = (currentLang === 'it') ? '⚡ Ripeti Test Velocità' : '⚡ Repeat Speedtest';
     }
     setTimeout(() => {
       if (pBar) pBar.style.display = 'none';

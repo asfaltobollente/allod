@@ -735,12 +735,14 @@ func main() {
 
 	mux.HandleFunc("/api/speedtest/upload", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		start := time.Now()
-		bytesRead, _ := io.Copy(io.Discard, r.Body)
+		bytesRead, _ := io.Copy(io.Discard, io.LimitReader(r.Body, 100*1024*1024))
 		duration := time.Since(start)
 
 		mbps := 0.0
-		if duration.Seconds() > 0 {
+		if duration.Seconds() > 0 && bytesRead > 0 {
 			mbps = (float64(bytesRead) * 8.0) / (duration.Seconds() * 1000 * 1000)
 		}
 
