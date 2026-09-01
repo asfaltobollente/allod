@@ -431,6 +431,19 @@ func main() {
 			return
 		}
 
+		baseDir := quadlet.StorageBaseDir()
+		if req.Module == "photos" {
+			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "upload"), 0777)
+			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "postgres"), 0777)
+			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "valkey"), 0777)
+		} else if req.Module == "cloud" {
+			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "html"), 0777)
+			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "data"), 0777)
+			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "postgres"), 0777)
+		} else {
+			_ = os.MkdirAll(filepath.Join(baseDir, req.Module), 0777)
+		}
+
 		reloadOut, _ := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput()
 		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
 
@@ -625,8 +638,11 @@ func main() {
 			}
 		} else {
 			statusOut, _ = exec.Command("systemctl", "--user", "status", modName).CombinedOutput()
-			logsOut, _ = exec.Command("podman", "logs", "--tail", "30", "systemd-"+modName).CombinedOutput()
-			if len(logsOut) == 0 {
+			logsOut, _ = exec.Command("podman", "logs", "--tail", "30", modName).CombinedOutput()
+			if len(logsOut) == 0 || strings.Contains(string(logsOut), "no container") {
+				logsOut, _ = exec.Command("podman", "logs", "--tail", "30", "systemd-"+modName).CombinedOutput()
+			}
+			if len(logsOut) == 0 || strings.Contains(string(logsOut), "no container") {
 				logsOut, _ = exec.Command("journalctl", "--user", "-u", modName, "-n", "30", "--no-pager").CombinedOutput()
 			}
 		}
