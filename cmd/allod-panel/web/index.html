@@ -55,6 +55,9 @@
           <p class="subtitle" id="page-subtitle">Stato del sistema, risorse e sicurezza</p>
         </div>
         <div class="topbar-actions">
+          <button class="btn btn-outline-info" onclick="openSweeperModal()" title="Scansiona e rimuove container morti, orfani e layer inutilizzati">
+            <span class="icon">🧹</span> Sweeper Podman
+          </button>
           <button class="btn btn-secondary" onclick="refreshData()">
             <span class="icon">🔄</span> Aggiorna
           </button>
@@ -312,6 +315,28 @@
         <button class="btn btn-secondary" onclick="closeDangerPurgeModal()">Annulla</button>
         <button class="btn btn-danger" id="danger-purge-confirm-btn" onclick="executeDangerModulePurge()" disabled style="margin-left:8px;">
           🗑️ Conferma Cancellazione Totale
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SWEEPER MODAL (Podman Ghost Containers & Dangling Images Cleanup) -->
+  <div id="sweeper-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:620px;">
+      <div class="modal-header">
+        <h3>🧹 Sweeper & Igiene Podman</h3>
+        <button class="modal-close-btn" onclick="closeSweeperModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:12px; line-height:1.4;">
+          Scansiona e rimuove in modo sicuro <strong>container morti/terminati</strong>, <strong>layer di immagini orfane</strong> e <strong>file di lock (.cid)</strong> lasciati da crash o riavvii, <u>senza mai toccare i container attivi né i dati su disco</u>.
+        </p>
+        <div id="sweeper-results" style="background:#0b1120; border-radius:6px; padding:12px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; max-height:260px; overflow-y:auto; white-space:pre-wrap; border:1px solid rgba(255,255,255,0.05);">Pronto per la scansione. Clicca sul pulsante sottostante per avviare lo sweeper.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSweeperModal()">Chiudi</button>
+        <button class="btn btn-primary" id="sweeper-action-btn" onclick="executePodmanSweep()" style="margin-left:8px;">
+          🧹 Avvia Pulizia Fantasmi
         </button>
       </div>
     </div>
