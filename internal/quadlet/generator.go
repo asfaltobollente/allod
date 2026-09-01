@@ -250,8 +250,7 @@ func generateService(modID string, m *manifest.Manifest, level manifest.Level) s
 	sb.WriteString("[Service]\n")
 	sb.WriteString("Type=oneshot\n")
 	sb.WriteString("RemainAfterExit=yes\n")
-	sb.WriteString(fmt.Sprintf("# Native module: managed by allod-core, no container image\n"))
-	sb.WriteString("Restart=on-failure\n")
+	sb.WriteString("ExecStart=/bin/true\n")
 	if level.RAMMB > 0 {
 		sb.WriteString(fmt.Sprintf("MemoryMax=%dM\n", level.RAMMB))
 	}
