@@ -234,7 +234,8 @@ Complete documentation according to the official project structure is available 
 * **Tutorials**:
   * [Your First Allod Node in 15 Minutes](docs/en/tutorial/first-node.md)
 * **How-to Guides**:
-  * [Physical Disk Management & Btrfs RAID 1](docs/en/howto/disk-management.md)
+  * [Storage Profiles Guide (Nextcloud vs Samba + Immich vs Hybrid)](docs/en/howto/storage-profiles-guide.md) / [🇮🇹 Guida Profili Storage](docs/it/howto/guida-profili-storage.md)
+  * [Physical Disk Management & Btrfs RAID 1](docs/en/howto/disk-management.md) / [🇮🇹 Gestione Dischi](docs/it/howto/gestione-dischi.md)
   * [Invite a Friend to your Ring](docs/en/howto/invite-peer.md)
   * [Disaster Recovery & Ransomware Protection](docs/en/howto/disaster-recovery.md)
   * [Replace a Failed Disk in btrfs RAID 1](docs/en/howto/replace-disk.md)
