@@ -208,6 +208,11 @@ func getModuleRuntimeStatus(modName string, level string) string {
 			return "running"
 		}
 	}
+	if modName == "shares" {
+		if out, err := exec.Command("systemctl", "is-active", "smbd").Output(); err == nil && strings.TrimSpace(string(out)) == "active" {
+			return "running"
+		}
+	}
 	out, err := exec.Command("systemctl", "--user", "is-active", modName).Output()
 	st := strings.TrimSpace(string(out))
 	if err == nil && st == "active" {
@@ -382,15 +387,36 @@ func main() {
 		home, _ := os.UserHomeDir()
 		if home != "" {
 			quadDir := filepath.Join(home, ".config", "containers", "systemd")
+			systemdUserDir := filepath.Join(home, ".config", "systemd", "user")
 			_ = os.MkdirAll(quadDir, 0755)
+			_ = os.MkdirAll(systemdUserDir, 0755)
 			quadlet.EnsureAllodNetwork(quadDir)
 			for fname, content := range genRes.Files {
+				if strings.HasSuffix(fname, ".service") {
+					_ = os.WriteFile(filepath.Join(systemdUserDir, fname), []byte(content), 0644)
+				}
 				if err := os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644); err != nil {
 					w.WriteHeader(http.StatusInternalServerError)
 					json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore scrittura file %s: %v", fname, err)})
 					return
 				}
 			}
+		}
+
+		if req.Module == "shares" {
+			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+			res, err := client.Execute("shares.apply", map[string]interface{}{
+				"name": "shares",
+				"path": "/mnt/allod-storage/shares",
+			}, false)
+			if err != nil {
+				client.SocketPath = "allod-helper.sock"
+				_, _ = client.Execute("shares.apply", map[string]interface{}{
+					"name": "shares",
+					"path": "/mnt/allod-storage/shares",
+				}, false)
+			}
+			_ = res
 		}
 
 		reloadOut, _ := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput()
@@ -635,7 +661,9 @@ func main() {
 		home, _ := os.UserHomeDir()
 		if home != "" {
 			quadDir := filepath.Join(home, ".config", "containers", "systemd")
+			systemdUserDir := filepath.Join(home, ".config", "systemd", "user")
 			_ = os.MkdirAll(quadDir, 0755)
+			_ = os.MkdirAll(systemdUserDir, 0755)
 			if req.Level == "off" {
 				_ = exec.Command("systemctl", "--user", "stop", req.Module).Run()
 				_ = exec.Command("systemctl", "--user", "stop", req.Module+"-postgres").Run()
@@ -644,10 +672,14 @@ func main() {
 				_ = os.Remove(filepath.Join(quadDir, req.Module+"-postgres.container"))
 				_ = os.Remove(filepath.Join(quadDir, req.Module+"-valkey.container"))
 				_ = os.Remove(filepath.Join(quadDir, req.Module+".service"))
+				_ = os.Remove(filepath.Join(systemdUserDir, req.Module+".service"))
 			} else {
 				quadlet.EnsureAllodNetwork(quadDir)
 				if genRes, err := quadlet.Generate(req.Module, m, req.Level); err == nil {
 					for fname, content := range genRes.Files {
+						if strings.HasSuffix(fname, ".service") {
+							_ = os.WriteFile(filepath.Join(systemdUserDir, fname), []byte(content), 0644)
+						}
 						_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
 					}
 				}
