@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Allod — Cloud Personale in Piena Proprietà</title>
+  <title>Allod — Sovereign Personal Cloud & NAS</title>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,22 +17,22 @@
         <div class="logo-icon">🛡️</div>
         <div>
           <h2>Allod</h2>
-          <span class="badge badge-success">v2.1 PoC</span>
+          <span class="badge badge-success">v2.1 Sovereign</span>
         </div>
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-item active" data-tab="overview">
-          <span class="icon">📊</span> Panoramica
+        <button class="nav-item active" data-tab="overview" id="nav-tab-overview">
+          <span class="icon">📊</span> <span data-i18n="tab_overview">Overview</span>
         </button>
-        <button class="nav-item" data-tab="modules">
-          <span class="icon">📦</span> Moduli & Livelli
+        <button class="nav-item" data-tab="modules" id="nav-tab-modules">
+          <span class="icon">📦</span> <span data-i18n="tab_modules">Modules & Levels</span>
         </button>
-        <button class="nav-item" data-tab="ring">
-          <span class="icon">🌐</span> Federazione (Ring)
+        <button class="nav-item" data-tab="ring" id="nav-tab-ring">
+          <span class="icon">🌐</span> <span data-i18n="tab_ring">Ring Federation</span>
         </button>
-        <button class="nav-item" data-tab="resilience">
-          <span class="icon">⚡</span> Test Resilienza
+        <button class="nav-item" data-tab="resilience" id="nav-tab-resilience">
+          <span class="icon">⚡</span> <span data-i18n="tab_resilience">Resilience Tests</span>
         </button>
       </nav>
 
@@ -40,8 +40,8 @@
         <div class="node-badge">
           <span class="pulse-dot"></span>
           <div>
-            <div class="node-title" id="sidebar-node-name">allod-luca</div>
-            <div class="node-subtitle">Overlay WireGuard Mesh</div>
+            <div class="node-title" id="sidebar-node-name">allod-node</div>
+            <div class="node-subtitle" data-i18n="mesh_subtitle">Encrypted WireGuard Mesh</div>
           </div>
         </div>
       </div>
@@ -51,21 +51,26 @@
     <main class="main-content">
       <header class="topbar">
         <div class="topbar-title">
-          <h1 id="page-title">Panoramica del Nodo</h1>
-          <p class="subtitle" id="page-subtitle">Stato del sistema, risorse e sicurezza</p>
+          <h1 id="page-title">Node Overview</h1>
+          <p class="subtitle" id="page-subtitle">System state, hardware resources, and security boundary</p>
         </div>
         <div class="topbar-actions">
-          <button class="btn btn-outline-primary" onclick="openSpeedtestModal()" title="Esegui speedtest di rete LAN/Wi-Fi e verifica streaming 4K Jellyfin">
-            <span class="icon">⚡</span> Test Velocità LAN
+          <!-- Language Selector -->
+          <div class="lang-selector" style="display:flex; align-items:center; background:rgba(30,41,59,0.8); border:1px solid var(--card-border); border-radius:6px; padding:2px; margin-right:6px;">
+            <button class="btn-lang active" id="lang-btn-en" onclick="setLanguage('en')" style="padding:3px 8px; font-size:11px; font-weight:600; border:none; border-radius:4px; cursor:pointer; background:var(--primary); color:#0f172a;">🇬🇧 EN</button>
+            <button class="btn-lang" id="lang-btn-it" onclick="setLanguage('it')" style="padding:3px 8px; font-size:11px; font-weight:600; border:none; border-radius:4px; cursor:pointer; background:transparent; color:var(--text-muted);">🇮🇹 IT</button>
+          </div>
+          <button class="btn btn-outline-primary" onclick="openSpeedtestModal()" title="Run LAN/Wi-Fi speedtest and verify 4K Jellyfin streaming">
+            <span class="icon">⚡</span> <span data-i18n="btn_speedtest">LAN Speedtest</span>
           </button>
-          <button class="btn btn-outline-info" onclick="openSweeperModal()" title="Scansiona e rimuove container morti, orfani e layer inutilizzati">
-            <span class="icon">🧹</span> Sweeper Podman
+          <button class="btn btn-outline-info" onclick="openSweeperModal()" title="Scan and remove ghost containers and unused image layers">
+            <span class="icon">🧹</span> <span data-i18n="btn_sweeper">Podman Sweeper</span>
           </button>
           <button class="btn btn-secondary" onclick="refreshData()">
-            <span class="icon">🔄</span> Aggiorna
+            <span class="icon">🔄</span> <span data-i18n="btn_refresh">Refresh</span>
           </button>
           <div class="helper-status" id="helper-status-pill">
-            <span class="status-indicator"></span> Helper Root: Connesso
+            <span class="status-indicator"></span> <span data-i18n="helper_connected">Root Helper: Connected</span>
           </div>
         </div>
       </header>
@@ -81,19 +86,19 @@
         <div class="metrics-grid">
           <div class="card metric-card">
             <div class="metric-header">
-              <span class="metric-title">Memoria RAM</span>
+              <span class="metric-title" data-i18n="metric_ram">RAM Memory</span>
               <span class="icon">🧠</span>
             </div>
             <div class="metric-value" id="ram-used">2.3 / 8.0 GB</div>
             <div class="progress-bar-bg">
               <div class="progress-bar-fill" id="ram-progress" style="width: 29%;"></div>
             </div>
-            <div class="metric-footer" id="ram-footer">Riservato core: 600 MB</div>
+            <div class="metric-footer" id="ram-footer" data-i18n="metric_ram_footer">Core reserved: 600 MB</div>
           </div>
 
           <div class="card metric-card">
             <div class="metric-header">
-              <span class="metric-title">Moduli Attivi</span>
+              <span class="metric-title" data-i18n="metric_modules">Active Modules</span>
               <span class="icon">📦</span>
             </div>
             <div class="metric-value" id="active-modules-count">5 / 7</div>
@@ -102,30 +107,30 @@
 
           <div class="card metric-card">
             <div class="metric-header">
-              <span class="metric-title">Gruppo Federato</span>
+              <span class="metric-title" data-i18n="metric_ring">Federation Ring</span>
               <span class="icon">🌐</span>
             </div>
-            <div class="metric-value" id="ring-status-badge">1 Nodo (Locale)</div>
-            <div class="metric-subtext" id="ring-status-subtext">Modalità Standalone (0 peer remoti)</div>
+            <div class="metric-value" id="ring-status-badge">1 Node (Local)</div>
+            <div class="metric-subtext" id="ring-status-subtext">Standalone Mode (0 remote peers)</div>
           </div>
 
           <div class="card metric-card">
             <div class="metric-header">
-              <span class="metric-title">Sicurezza & Confine</span>
+              <span class="metric-title" data-i18n="metric_security">Security & Boundary</span>
               <span class="icon">🔒</span>
             </div>
             <div class="metric-value text-success" id="security-status-badge">Rootless Safe</div>
-            <div class="metric-subtext" id="security-status-subtext">Pannello non privilegiato</div>
+            <div class="metric-subtext" id="security-status-subtext">Unprivileged Panel</div>
           </div>
         </div>
 
         <div class="card mt-4">
           <div class="card-header">
-            <h3>Dischi Fisici & Pool Storage NAS</h3>
+            <h3 data-i18n="storage_pool_title">Physical Disks & NAS Storage Pool</h3>
             <span class="badge badge-primary" id="storage-mode-badge">Btrfs Storage</span>
           </div>
           <div class="card-body">
-            <p class="text-muted mb-3" id="storage-mode-summary">Rilevamento automatico dell'hardware di archiviazione.</p>
+            <p class="text-muted mb-3" id="storage-mode-summary">Automatic storage hardware detection.</p>
             <div id="storage-warning-banner" class="alert-banner alert-warning mb-3 hidden" style="margin-bottom:12px;"></div>
             <div class="nodes-visual-grid" id="storage-disks-grid">
               <!-- Rendered by JS -->
@@ -135,11 +140,11 @@
 
         <div class="card mt-4">
           <div class="card-header">
-            <h3>Stato di Salute della Federazione</h3>
-            <span class="badge badge-success">Sorveglianza Attiva</span>
+            <h3 data-i18n="federation_health_title">Federation Ring Health</h3>
+            <span class="badge badge-success" data-i18n="federation_active_badge">Active Quorum</span>
           </div>
           <div class="card-body">
-            <p class="text-muted mb-3">I nodi nel Ring si scambiano battiti cardiaci e sorvegliano i backup cifrati in modalità append-only.</p>
+            <p class="text-muted mb-3" data-i18n="federation_desc">Nodes in the Ring exchange heartbeats and supervise encrypted append-only backups.</p>
             <div class="nodes-visual-grid" id="nodes-visual-grid">
               <!-- Rendered by JS -->
             </div>
@@ -150,8 +155,8 @@
       <!-- TAB 2: MODULES -->
       <section id="tab-modules" class="tab-pane">
         <div class="tab-header mb-3">
-          <h2>Gestione Moduli & Risorse</h2>
-          <p class="text-muted">Ogni modulo adatta il consumo di risorse in base al livello selezionato con controllo preflight istantaneo.</p>
+          <h2 data-i18n="modules_header_title">Module & Resource Management</h2>
+          <p class="text-muted" data-i18n="modules_header_desc">Each module adjusts resource consumption based on the selected level with instant preflight checks.</p>
         </div>
 
         <div class="modules-grid" id="modules-grid">
@@ -162,14 +167,14 @@
       <!-- TAB 3: RING FEDERATION -->
       <section id="tab-ring" class="tab-pane">
         <div class="tab-header mb-3">
-          <h2>Topologia del Ring a Tre Nodi</h2>
-          <p class="text-muted">Ogni dataset critico viene salvato in 2 copie remote indipendenti sui nodi degli amici.</p>
+          <h2 data-i18n="ring_header_title">Multi-Node Ring Topology</h2>
+          <p class="text-muted" data-i18n="ring_header_desc">Each critical dataset is stored across 2 independent remote peer replicas.</p>
         </div>
 
         <div class="grid-2col">
           <div class="card">
             <div class="card-header">
-              <h3>Membri del Gruppo</h3>
+              <h3 data-i18n="ring_members_title">Group Members</h3>
             </div>
             <div class="card-body" id="ring-members-container">
               <!-- Rendered by JS -->
@@ -178,7 +183,7 @@
 
           <div class="card">
             <div class="card-header">
-              <h3>Repliche dei Dataset</h3>
+              <h3 data-i18n="ring_datasets_title">Dataset Replicas</h3>
             </div>
             <div class="card-body" id="ring-datasets-container">
               <!-- Rendered by JS -->
@@ -190,26 +195,26 @@
       <!-- TAB 4: RESILIENCE & SIMULATION -->
       <section id="tab-resilience" class="tab-pane">
         <div class="tab-header mb-3">
-          <h2>Test di Resilienza & Simulatore</h2>
-          <p class="text-muted">Simula scenari critici reali per verificare il comportamento dell'orchestratore Allod.</p>
+          <h2 data-i18n="resilience_header_title">Resilience Testing & Disaster Simulator</h2>
+          <p class="text-muted" data-i18n="resilience_header_desc">Simulate real critical failure scenarios to verify Allod orchestrator behavior.</p>
         </div>
 
         <div class="grid-2col">
           <!-- Simulator 1: Member Removal -->
           <div class="card">
             <div class="card-header">
-              <h3>Simulazione Disconnessione/Uscita Membro</h3>
+              <h3 data-i18n="sim_disconnect_title">Simulate Member Outage / Removal</h3>
             </div>
             <div class="card-body">
-              <p class="text-muted mb-3">Cosa succede se un amico del gruppo stacca il NAS o esce dalla federazione?</p>
+              <p class="text-muted mb-3" data-i18n="sim_disconnect_desc">What happens if a friend turns off their NAS or leaves the federation?</p>
               <div class="form-group mb-3">
-                <label for="simulate-member-select">Seleziona membro da disconnettere:</label>
+                <label for="simulate-member-select" data-i18n="sim_disconnect_select">Select peer member to disconnect:</label>
                 <select id="simulate-member-select" class="form-control">
-                  <option value="">Caricamento membri...</option>
+                  <option value="">Loading members...</option>
                 </select>
               </div>
               <button class="btn btn-warning w-100" id="btn-simulate-removal" onclick="runSimulateRemoval()">
-                <span class="icon">⚠️</span> Simula Rimozione & Calcola Rebalance
+                <span class="icon">⚠️</span> <span data-i18n="sim_btn_rebalance">Simulate Outage & Calculate Rebalance</span>
               </button>
 
               <div id="simulation-results" class="simulation-box hidden mt-3">
@@ -221,29 +226,29 @@
           <!-- Simulator 2: Update with Rollback -->
           <div class="card">
             <div class="card-header">
-              <h3>Macchina a Stati Aggiornamenti & Rollback</h3>
+              <h3 data-i18n="sim_update_title">Upgrade State Machine & Rollback</h3>
             </div>
             <div class="card-body">
-              <p class="text-muted mb-3">Testa il comportamento quando una nuova immagine container fallisce l'healthcheck di avvio.</p>
+              <p class="text-muted mb-3" data-i18n="sim_update_desc">Test behavior when a new container image fails startup healthcheck.</p>
               
               <div class="form-group mb-3">
-                <label for="update-module-select">Modulo da aggiornare:</label>
+                <label for="update-module-select" data-i18n="sim_update_module">Module to upgrade:</label>
                 <select id="update-module-select" class="form-control">
-                  <option value="">Caricamento moduli...</option>
+                  <option value="">Loading modules...</option>
                 </select>
               </div>
 
               <div class="form-group mb-3">
-                <label for="update-tag-input">Nuovo Tag:</label>
+                <label for="update-tag-input" data-i18n="sim_update_tag">New Image Tag:</label>
                 <input type="text" id="update-tag-input" class="form-control font-mono" value="v3.2.0-nightly">
               </div>
 
               <div class="btn-group-2">
                 <button class="btn btn-primary" onclick="runUpdateSimulation(false)">
-                  <span class="icon">✅</span> Aggiornamento Sano
+                  <span class="icon">✅</span> <span data-i18n="sim_btn_healthy">Healthy Upgrade</span>
                 </button>
                 <button class="btn btn-danger" onclick="runUpdateSimulation(true)">
-                  <span class="icon">💥</span> Simula Errore & Rollback
+                  <span class="icon">💥</span> <span data-i18n="sim_btn_rollback">Simulate Crash & Rollback</span>
                 </button>
               </div>
 
@@ -400,6 +405,7 @@
     </div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
