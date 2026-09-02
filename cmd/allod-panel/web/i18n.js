@@ -20,7 +20,10 @@ const i18n = {
 
     btn_speedtest: "LAN Speedtest",
     btn_sweeper: "Podman Sweeper",
+    btn_systemd_reload: "Systemd Reload",
     btn_refresh: "Refresh",
+    msg_systemd_reloading: "Reloading systemd & Quadlet...",
+    msg_systemd_reloaded: "✓ Quadlet units regenerated and systemctl daemon-reload executed!",
     helper_connected: "Root Helper: Connected",
     helper_offline: "Root Helper: Offline / Not Started",
 
@@ -129,7 +132,10 @@ const i18n = {
 
     btn_speedtest: "Test Velocità LAN",
     btn_sweeper: "Sweeper Podman",
+    btn_systemd_reload: "Ricarica Systemd",
     btn_refresh: "Aggiorna",
+    msg_systemd_reloading: "Ricarica systemd & Quadlet in corso...",
+    msg_systemd_reloaded: "✓ Unità Quadlet rigenerate e systemctl daemon-reload eseguito con successo!",
     helper_connected: "Helper Root: Connesso",
     helper_offline: "Helper Root: Non Avviato / Offline",
 
