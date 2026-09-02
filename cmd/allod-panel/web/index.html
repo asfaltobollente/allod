@@ -34,6 +34,9 @@
         <button class="nav-item" data-tab="resilience" id="nav-tab-resilience">
           <span class="icon">⚡</span> <span data-i18n="tab_resilience">Resilience Tests</span>
         </button>
+        <button class="nav-item" data-tab="settings" id="nav-tab-settings">
+          <span class="icon">⚙️</span> <span data-i18n="tab_settings">Settings & Maintenance</span>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -262,7 +265,100 @@
           </div>
         </div>
       </section>
+
+      <!-- TAB 5: ADVANCED SETTINGS & MAINTENANCE -->
+      <section id="tab-settings" class="tab-pane">
+        <div class="grid-2col" style="margin-bottom: 20px;">
+          <!-- Card 1: Software Lifecycle & Aggiornamento Allod -->
+          <div class="card">
+            <div class="card-header">
+              <h3 data-i18n="settings_lifecycle_title">🚀 Software Lifecycle & Self-Update</h3>
+            </div>
+            <p class="text-muted" style="font-size:12.5px; margin-bottom:16px; line-height:1.4;" data-i18n="settings_lifecycle_desc">
+              Fetch latest source code from GitHub, recompile Go binaries, or perform a zero-downtime background self-update.
+            </p>
+
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-outline-primary" id="btn-git-pull" onclick="runGitPull()" style="flex:1;">
+                  <span class="icon">⬇️</span> <span data-i18n="btn_git_pull">Git Pull</span>
+                </button>
+                <button class="btn btn-outline-info" id="btn-go-build" onclick="runGoBuild()" style="flex:1;">
+                  <span class="icon">🔨</span> <span data-i18n="btn_go_build">Go Build</span>
+                </button>
+              </div>
+
+              <button class="btn btn-success" id="btn-self-update" onclick="runSelfUpdate()" style="width:100%; padding:10px; font-weight:700;">
+                <span class="icon">🚀</span> <span data-i18n="btn_self_update">One-Click Update & Restart</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 2: Gestione Globale Systemd & Podman -->
+          <div class="card">
+            <div class="card-header">
+              <h3 data-i18n="settings_maintenance_title">🛠️ Global Systemd & Podman Maintenance</h3>
+            </div>
+            <p class="text-muted" style="font-size:12.5px; margin-bottom:16px; line-height:1.4;" data-i18n="settings_maintenance_desc">
+              Execute administrative system actions directly from the GUI without SSH access.
+            </p>
+
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-outline-warning" onclick="executeSystemdReload()" style="flex:1;">
+                  <span class="icon">⚙️</span> <span data-i18n="btn_systemd_reload">Systemd Reload</span>
+                </button>
+                <button class="btn btn-outline-secondary" onclick="runResetFailed()" style="flex:1;">
+                  <span class="icon">🔄</span> <span data-i18n="btn_reset_failed">Reset-Failed State</span>
+                </button>
+              </div>
+
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-outline-success" id="btn-start-active-mods" onclick="runModulesControl('start')" style="flex:1;" title="Starts only modules configured with an active level (modules with level 'off' remain off)">
+                  <span class="icon">▶️</span> <span data-i18n="btn_start_active">Start Configured Modules</span>
+                </button>
+                <button class="btn btn-outline-danger" id="btn-stop-all-mods" onclick="runModulesControl('stop')" style="flex:1;">
+                  <span class="icon">⏹</span> <span data-i18n="btn_stop_all">Stop All Modules</span>
+                </button>
+              </div>
+
+              <button class="btn btn-outline-info" onclick="openSweeperModal()" style="width:100%;">
+                <span class="icon">🧹</span> <span data-i18n="btn_sweeper">Podman Sweeper</span>
+              </button>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:10px; font-style:italic;" data-i18n="settings_start_active_note">
+              Starts only modules configured with an active level (modules with level 'off' remain off).
+            </p>
+          </div>
+        </div>
+
+        <!-- Card 3: Terminal Console Output Box -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 data-i18n="settings_console_title">💻 Live Maintenance Console Output</h3>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearSettingsConsole()" data-i18n="settings_console_clear">
+              Clear Console
+            </button>
+          </div>
+          <div id="settings-console" style="background:#090d16; border:1px solid var(--card-border); border-radius:8px; padding:14px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; min-height:180px; max-height:380px; overflow-y:auto; white-space:pre-wrap; line-height:1.45;">Welcome to Allod Sovereign Maintenance Console.
+Ready for operations. Click any maintenance action above to see real-time output.</div>
+        </div>
+      </section>
     </main>
+  </div>
+
+  <!-- SELF-UPDATE RESTART OVERLAY -->
+  <div id="self-update-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:480px; text-align:center; padding:30px 20px;">
+      <div style="font-size:48px; margin-bottom:12px;">🚀</div>
+      <h3 style="font-size:20px; font-weight:700; margin-bottom:8px;">Allod Sovereign Self-Update</h3>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;" id="self-update-status-text">
+        Restarting allod-panel in background... Reconnecting automatically in <strong id="self-update-timer">4</strong>s...
+      </p>
+      <div class="progress-bar-bg" style="height:6px; margin:0 auto; width:80%;">
+        <div id="self-update-progress" class="progress-bar-fill" style="width:100%; background:var(--primary);"></div>
+      </div>
+    </div>
   </div>
 
   <!-- DIAGNOSTICS MODAL -->

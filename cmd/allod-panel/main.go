@@ -634,6 +634,258 @@ func main() {
 		})
 	})
 
+	// 5a-3. API System Git Pull
+	mux.HandleFunc("/api/system/git-pull", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		out, err := exec.Command("git", "pull").CombinedOutput()
+		outputStr := strings.TrimSpace(string(out))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Git pull fallito: %v\n%s", err, outputStr),
+				Data:    map[string]interface{}{"output": outputStr},
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Git pull completato con successo",
+			Data:    map[string]interface{}{"output": outputStr},
+		})
+	})
+
+	// 5a-4. API System Go Build
+	mux.HandleFunc("/api/system/go-build", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Build both allod CLI and allod-panel
+		var report strings.Builder
+		cmd1 := exec.Command("go", "build", "-o", "allod", "./cmd/allod")
+		out1, err1 := cmd1.CombinedOutput()
+		report.WriteString("[go build -o allod ./cmd/allod]\n")
+		report.WriteString(string(out1))
+
+		cmd2 := exec.Command("go", "build", "-o", "allod-panel", "./cmd/allod-panel")
+		out2, err2 := cmd2.CombinedOutput()
+		report.WriteString("\n[go build -o allod-panel ./cmd/allod-panel]\n")
+		report.WriteString(string(out2))
+
+		if err1 != nil || err2 != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: "Errore durante la compilazione Go",
+				Data:    map[string]interface{}{"output": report.String()},
+			})
+			return
+		}
+
+		report.WriteString("\n✓ Compilazione completata con successo per 'allod' e 'allod-panel'.")
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Compilazione Go completata con successo",
+			Data:    map[string]interface{}{"output": report.String()},
+		})
+	})
+
+	// 5a-5. API System Self-Update & Restart
+	mux.HandleFunc("/api/system/self-update", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var logReport strings.Builder
+		// 1. git pull
+		gitOut, err := exec.Command("git", "pull").CombinedOutput()
+		logReport.WriteString("[git pull]\n" + string(gitOut) + "\n")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore git pull: %v", err),
+				Data:    map[string]interface{}{"output": logReport.String()},
+			})
+			return
+		}
+
+		// 2. go build
+		buildOut, err := exec.Command("go", "build", "-o", "allod-panel", "./cmd/allod-panel").CombinedOutput()
+		logReport.WriteString("[go build -o allod-panel ./cmd/allod-panel]\n" + string(buildOut) + "\n")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore compilazione allod-panel: %v", err),
+				Data:    map[string]interface{}{"output": logReport.String()},
+			})
+			return
+		}
+
+		// Build allod cli too
+		buildCliOut, _ := exec.Command("go", "build", "-o", "allod", "./cmd/allod").CombinedOutput()
+		logReport.WriteString("[go build -o allod ./cmd/allod]\n" + string(buildCliOut) + "\n")
+
+		logReport.WriteString("✓ Binari aggiornati. Riavvio processo in background...\n")
+
+		// Send success response immediately before terminating
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Aggiornamento completato! Riavvio del pannello web in corso...",
+			Data:    map[string]interface{}{"output": logReport.String()},
+		})
+
+		// Asynchronous restart after 800ms
+		go func() {
+			time.Sleep(800 * time.Millisecond)
+			cmd := exec.Command("sh", "-c", "nohup ./allod-panel > panel.log 2>&1 &")
+			_ = cmd.Start()
+			os.Exit(0)
+		}()
+	})
+
+	// 5a-6. API System Reset Failed
+	mux.HandleFunc("/api/system/reset-failed", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		out, err := exec.Command("systemctl", "--user", "reset-failed").CombinedOutput()
+		outputStr := strings.TrimSpace(string(out))
+		if outputStr == "" {
+			outputStr = "✓ systemctl --user reset-failed eseguito. Tutti i contatori di errore azzerati."
+		}
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore reset-failed: %v", err),
+				Data:    map[string]interface{}{"output": outputStr},
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Reset-failed completato con successo",
+			Data:    map[string]interface{}{"output": outputStr},
+		})
+	})
+
+	// 5a-7. API System Modules Control (Start only configured != off, or stop all)
+	mux.HandleFunc("/api/system/modules-control", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Action string `json:"action"` // "start" or "stop"
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Action != "start" && req.Action != "stop") {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Action deve essere 'start' oppure 'stop'"})
+			return
+		}
+
+		var report strings.Builder
+		report.WriteString(fmt.Sprintf("=== AZIONE GLOBALE: %s ===\n", strings.ToUpper(req.Action)))
+
+		// Read active configuration
+		cfg, _ := config.LoadConfig("configs/config.example.yaml")
+		modConfigs := make(map[string]string)
+		if cfg != nil {
+			for mName, mCfg := range cfg.Modules {
+				modConfigs[mName] = mCfg.Level
+			}
+		}
+
+		// Also check state.db
+		if st, err := state.Open("state.db"); err == nil {
+			if list, err := st.ListModules(); err == nil {
+				for mName, sMod := range list {
+					if _, exists := modConfigs[mName]; !exists || modConfigs[mName] == "" {
+						modConfigs[mName] = sMod.Level
+					}
+				}
+			}
+			st.Close()
+		}
+
+		// Read all existing modules
+		modDir := getModulesDir()
+		entries, _ := os.ReadDir(modDir)
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			modID := entry.Name()
+			curLevel := modConfigs[modID]
+			if curLevel == "" {
+				curLevel = "off"
+			}
+
+			if req.Action == "start" {
+				// USER REQUIREMENT: Only start modules configured != "off"!
+				if curLevel == "off" {
+					report.WriteString(fmt.Sprintf("  ⏸ %-12s SALTATO (livello: off)\n", modID))
+					continue
+				}
+
+				if modID == "shares" {
+					_ = exec.Command("systemctl", "start", "smbd").Run()
+					report.WriteString(fmt.Sprintf("  ▶ %-12s Avviato (Samba native)\n", modID))
+					continue
+				}
+
+				_ = exec.Command("systemctl", "--user", "start", "--no-block", modID+"-postgres").Run()
+				_ = exec.Command("systemctl", "--user", "start", "--no-block", modID+"-valkey").Run()
+				err := exec.Command("systemctl", "--user", "start", "--no-block", modID).Run()
+				if err != nil {
+					report.WriteString(fmt.Sprintf("  ✗ %-12s Errore avvio: %v\n", modID, err))
+				} else {
+					report.WriteString(fmt.Sprintf("  ▶ %-12s Avviato (livello: %s)\n", modID, curLevel))
+				}
+			} else if req.Action == "stop" {
+				// Stop module and its secondary containers
+				if modID == "shares" {
+					_ = exec.Command("systemctl", "stop", "smbd").Run()
+					report.WriteString(fmt.Sprintf("  ⏹ %-12s Fermato (Samba native)\n", modID))
+					continue
+				}
+
+				_ = exec.Command("systemctl", "--user", "stop", modID).Run()
+				_ = exec.Command("systemctl", "--user", "stop", modID+"-postgres").Run()
+				_ = exec.Command("systemctl", "--user", "stop", modID+"-valkey").Run()
+				report.WriteString(fmt.Sprintf("  ⏹ %-12s Fermato\n", modID))
+			}
+		}
+
+		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
+		report.WriteString("\n✓ Operazione completata.")
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Azione %s completata per i moduli", req.Action),
+			Data:    map[string]interface{}{"output": report.String()},
+		})
+	})
+
 	// 5b. API Storage Init
 	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

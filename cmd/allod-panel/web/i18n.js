@@ -7,6 +7,7 @@ const i18n = {
     tab_modules: "Modules & Levels",
     tab_ring: "Ring Federation",
     tab_resilience: "Resilience Tests",
+    tab_settings: "Settings & Maintenance",
     mesh_subtitle: "Encrypted WireGuard Mesh",
 
     page_overview_title: "Node Overview",
@@ -17,6 +18,8 @@ const i18n = {
     page_ring_sub: "Each critical dataset is stored across 2 independent remote peer replicas.",
     page_resilience_title: "Resilience Testing & Disaster Simulator",
     page_resilience_sub: "Simulate real critical failure scenarios to verify Allod orchestrator behavior.",
+    page_settings_title: "Settings & Maintenance",
+    page_settings_sub: "Manage Allod lifecycle, Git/Go updates, and global Systemd/Podman operations.",
 
     btn_speedtest: "LAN Speedtest",
     btn_sweeper: "Podman Sweeper",
@@ -57,6 +60,21 @@ const i18n = {
     sim_update_tag: "New Image Tag:",
     sim_btn_healthy: "Healthy Upgrade",
     sim_btn_rollback: "Simulate Crash & Rollback",
+
+    // Settings & Maintenance
+    settings_lifecycle_title: "🚀 Software Lifecycle & Self-Update",
+    settings_lifecycle_desc: "Fetch latest source code from GitHub, recompile Go binaries, or perform a zero-downtime background self-update.",
+    btn_git_pull: "⬇️ Git Pull",
+    btn_go_build: "🔨 Go Build",
+    btn_self_update: "🚀 One-Click Update & Restart",
+    settings_maintenance_title: "🛠️ Global Systemd & Podman Maintenance",
+    settings_maintenance_desc: "Execute administrative system actions directly from the GUI without SSH access.",
+    btn_reset_failed: "🔄 Reset-Failed State",
+    btn_start_active: "▶️ Start Configured Modules",
+    btn_stop_all: "⏹ Stop All Modules",
+    settings_start_active_note: "Starts only modules configured with an active level (modules with level 'off' remain off).",
+    settings_console_title: "💻 Live Maintenance Console Output",
+    settings_console_clear: "Clear Console",
 
     // Actions & Badges
     status_protected: "🟢 PROTECTED (In Production)",
@@ -119,6 +137,7 @@ const i18n = {
     tab_modules: "Moduli & Livelli",
     tab_ring: "Federazione (Ring)",
     tab_resilience: "Test Resilienza",
+    tab_settings: "Impostazioni & Manutenzione",
     mesh_subtitle: "Overlay WireGuard Mesh",
 
     page_overview_title: "Panoramica del Nodo",
@@ -129,6 +148,8 @@ const i18n = {
     page_ring_sub: "Ogni dataset critico viene salvato in 2 copie remote indipendenti sui nodi degli amici.",
     page_resilience_title: "Test di Resilienza & Simulatore",
     page_resilience_sub: "Simula scenari critici reali per verificare il comportamento dell'orchestratore Allod.",
+    page_settings_title: "Impostazioni Avanzate & Manutenzione",
+    page_settings_sub: "Gestione ciclo di vita di Allod, aggiornamenti Git/Go e manutenzione globale Systemd/Podman.",
 
     btn_speedtest: "Test Velocità LAN",
     btn_sweeper: "Sweeper Podman",
@@ -169,6 +190,21 @@ const i18n = {
     sim_update_tag: "Nuovo Tag Immagine:",
     sim_btn_healthy: "Aggiornamento Sano",
     sim_btn_rollback: "Simula Errore & Rollback",
+
+    // Settings & Maintenance
+    settings_lifecycle_title: "🚀 Ciclo di Vita & Aggiornamento Allod",
+    settings_lifecycle_desc: "Scarica il codice sorgente aggiornato da GitHub, ricompila i binari Go o esegui un aggiornamento completo con riavvio automatico.",
+    btn_git_pull: "⬇️ Git Pull",
+    btn_go_build: "🔨 Go Build",
+    btn_self_update: "🚀 Aggiorna & Riavvia (One-Click)",
+    settings_maintenance_title: "🛠️ Manutenzione Globale Systemd & Podman",
+    settings_maintenance_desc: "Esegui azioni amministrative di sistema direttamente dalla GUI senza dover accedere via SSH.",
+    btn_reset_failed: "🔄 Reset Stati di Errore",
+    btn_start_active: "▶️ Avvia Moduli Configurati",
+    btn_stop_all: "⏹ Ferma Tutti i Moduli",
+    settings_start_active_note: "Avvia solo i moduli configurati con un livello attivo (i moduli con livello 'off' restano spenti).",
+    settings_console_title: "💻 Console di Output Esecuzione Comandi",
+    settings_console_clear: "Pulisci Console",
 
     // Actions & Badges
     status_protected: "🟢 PROTETTO (In Produzione)",

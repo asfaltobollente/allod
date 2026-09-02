@@ -1632,3 +1632,172 @@ async function runSpeedtest() {
     }, 2000);
   }
 }
+
+// ==========================================
+// ADVANCED SETTINGS & MAINTENANCE LOGIC
+// ==========================================
+
+function appendSettingsConsole(title, content, isError = false) {
+  const consoleEl = document.getElementById('settings-console');
+  if (!consoleEl) return;
+  const time = new Date().toLocaleTimeString();
+  const icon = isError ? '❌' : '✓';
+  const prefix = `\n[${time}] ${icon} ${title}\n----------------------------------------\n`;
+  consoleEl.textContent += prefix + (content ? content.trim() : '(Nessun output)') + '\n';
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+function clearSettingsConsole() {
+  const consoleEl = document.getElementById('settings-console');
+  if (consoleEl) {
+    consoleEl.textContent = 'Allod Sovereign Maintenance Console cleared.\nReady for operations.\n';
+  }
+}
+
+async function runGitPull() {
+  const btn = document.getElementById('btn-git-pull');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="icon">⏳</span> <span>Git Pull...</span>`;
+  }
+  try {
+    const res = await fetch('/api/system/git-pull', { method: 'POST' });
+    const data = await res.json();
+    const out = (data.data && data.data.output) || data.message;
+    if (data.status === 'ok') {
+      appendSettingsConsole('GIT PULL SUCCESS', out, false);
+      showAlert(t('msg_git_pull_success', 'Git pull completato con successo!'), 'success');
+    } else {
+      appendSettingsConsole('GIT PULL ERROR', out, true);
+      showAlert('Errore Git pull: ' + data.message, 'danger');
+    }
+  } catch (err) {
+    appendSettingsConsole('GIT PULL CONNECTION ERROR', err.message, true);
+    showAlert('Errore connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span class="icon">⬇️</span> <span data-i18n="btn_git_pull">${t('btn_git_pull')}</span>`;
+    }
+  }
+}
+
+async function runGoBuild() {
+  const btn = document.getElementById('btn-go-build');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="icon">⏳</span> <span>Go Build...</span>`;
+  }
+  try {
+    const res = await fetch('/api/system/go-build', { method: 'POST' });
+    const data = await res.json();
+    const out = (data.data && data.data.output) || data.message;
+    if (data.status === 'ok') {
+      appendSettingsConsole('GO BUILD SUCCESS', out, false);
+      showAlert(t('msg_go_build_success', 'Compilazione Go completata con successo!'), 'success');
+    } else {
+      appendSettingsConsole('GO BUILD ERROR', out, true);
+      showAlert('Errore Go build: ' + data.message, 'danger');
+    }
+  } catch (err) {
+    appendSettingsConsole('GO BUILD CONNECTION ERROR', err.message, true);
+    showAlert('Errore connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span class="icon">🔨</span> <span data-i18n="btn_go_build">${t('btn_go_build')}</span>`;
+    }
+  }
+}
+
+async function runSelfUpdate() {
+  const confirmMsg = (currentLang === 'it')
+    ? 'Vuoi avviare l\'aggiornamento automatico (git pull + go build + riavvio del pannello)?'
+    : 'Do you want to run one-click self-update (git pull + go build + background daemon restart)?';
+  
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  const btn = document.getElementById('btn-self-update');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="icon">⏳</span> <span>Updating & Restarting...</span>`;
+  }
+
+  const modal = document.getElementById('self-update-modal');
+  const timerEl = document.getElementById('self-update-timer');
+  if (modal) modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/system/self-update', { method: 'POST' });
+    const data = await res.json();
+    const out = (data.data && data.data.output) || data.message;
+    appendSettingsConsole('SELF-UPDATE SEQUENCE INITIATED', out, false);
+  } catch (err) {
+    appendSettingsConsole('SELF-UPDATE DISCONNECT EXPECTED', 'Process restart initiated: ' + err.message, false);
+  }
+
+  // Countdown & auto-reconnect loop
+  let secondsLeft = 5;
+  if (timerEl) timerEl.textContent = secondsLeft;
+  const interval = setInterval(async () => {
+    secondsLeft--;
+    if (timerEl) timerEl.textContent = Math.max(0, secondsLeft);
+    if (secondsLeft <= 0) {
+      try {
+        const pingRes = await fetch('/api/status?t=' + Date.now());
+        if (pingRes.ok) {
+          clearInterval(interval);
+          if (modal) modal.classList.add('hidden');
+          window.location.reload();
+        }
+      } catch (_) {
+        // Still rebooting, keep waiting
+      }
+    }
+  }, 1000);
+}
+
+async function runResetFailed() {
+  try {
+    const res = await fetch('/api/system/reset-failed', { method: 'POST' });
+    const data = await res.json();
+    const out = (data.data && data.data.output) || data.message;
+    if (data.status === 'ok') {
+      appendSettingsConsole('SYSTEMCTL RESET-FAILED', out, false);
+      showAlert(t('msg_reset_failed_success', 'Systemd reset-failed eseguito con successo!'), 'success');
+      refreshData();
+    } else {
+      appendSettingsConsole('RESET-FAILED ERROR', out, true);
+      showAlert('Errore reset-failed: ' + data.message, 'danger');
+    }
+  } catch (err) {
+    appendSettingsConsole('RESET-FAILED CONNECTION ERROR', err.message, true);
+    showAlert('Errore connessione: ' + err.message, 'danger');
+  }
+}
+
+async function runModulesControl(action) {
+  const btnId = action === 'start' ? 'btn-start-active-mods' : 'btn-stop-all-mods';
+  const btn = document.getElementById(btnId);
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/system/modules-control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    });
+    const data = await res.json();
+    const out = (data.data && data.data.output) || data.message;
+    appendSettingsConsole(`MODULES ${action.toUpperCase()}`, out, data.status !== 'ok');
+    showAlert(data.message, data.status === 'ok' ? 'success' : 'danger');
+    refreshData();
+  } catch (err) {
+    appendSettingsConsole(`MODULES ${action.toUpperCase()} ERROR`, err.message, true);
+    showAlert('Errore connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
