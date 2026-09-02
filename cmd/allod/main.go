@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -192,7 +193,7 @@ var applyCmd = &cobra.Command{
 		outDir := "out_quadlet"
 		if outDirOverride != "" {
 			outDir = outDirOverride
-		} else if useSystemd {
+		} else if useSystemd || runtime.GOOS == "linux" {
 			outDir = getSystemdDir()
 		}
 
