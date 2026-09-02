@@ -565,6 +565,75 @@ func main() {
 		})
 	})
 
+	// 5a-2. API System Reload (Regenerate Quadlets + systemctl --user daemon-reload)
+	mux.HandleFunc("/api/system/reload", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		home, _ := os.UserHomeDir()
+		var writtenFiles []string
+		if home != "" {
+			quadDir := filepath.Join(home, ".config", "containers", "systemd")
+			systemdUserDir := filepath.Join(home, ".config", "systemd", "user")
+			_ = os.MkdirAll(quadDir, 0755)
+			_ = os.MkdirAll(systemdUserDir, 0755)
+			quadlet.EnsureAllodNetwork(quadDir)
+
+			modDir := getModulesDir()
+			entries, _ := os.ReadDir(modDir)
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				modID := entry.Name()
+				mPath := filepath.Join(modDir, modID, "module.yaml")
+				m, err := manifest.LoadManifest(mPath)
+				if err != nil {
+					continue
+				}
+
+				level := "standard"
+				if _, ok := m.Levels[level]; !ok {
+					for l := range m.Levels {
+						if l != "off" {
+							level = l
+							break
+						}
+					}
+				}
+
+				if genRes, err := quadlet.Generate(modID, m, level); err == nil {
+					for fname, content := range genRes.Files {
+						if strings.HasSuffix(fname, ".service") {
+							_ = os.WriteFile(filepath.Join(systemdUserDir, fname), []byte(content), 0644)
+						}
+						if err := os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644); err == nil {
+							writtenFiles = append(writtenFiles, fname)
+						}
+					}
+				}
+			}
+		}
+
+		reloadOut, _ := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput()
+		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
+
+		data := map[string]interface{}{
+			"written_files": writtenFiles,
+			"reload_output": strings.TrimSpace(string(reloadOut)),
+			"timestamp":     time.Now().Format("2006-01-02 15:04:05"),
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Quadlet rigenerati (%d unità) e daemon-reload eseguito con successo!", len(writtenFiles)),
+			Data:    data,
+		})
+	})
+
 	// 5b. API Storage Init
 	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

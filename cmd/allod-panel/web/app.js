@@ -1446,6 +1446,35 @@ async function executePodmanSweep() {
   }
 }
 
+async function executeSystemdReload() {
+  const btn = document.getElementById('btn-systemd-reload');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="icon">⏳</span> <span>${t('msg_systemd_reloading')}</span>`;
+  }
+
+  try {
+    const res = await fetch('/api/system/reload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(t('msg_systemd_reloaded'), 'success');
+      refreshData();
+    } else {
+      showAlert(`Errore reload: ${data.message}`, 'danger');
+    }
+  } catch (err) {
+    showAlert(`Errore reload: ${err.message}`, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span class="icon">⚙️</span> <span data-i18n="btn_systemd_reload">${t('btn_systemd_reload')}</span>`;
+    }
+  }
+}
+
 // SPEEDTEST BENCHMARK LOGIC
 function openSpeedtestModal() {
   const modal = document.getElementById('speedtest-modal');
