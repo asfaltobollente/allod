@@ -38,7 +38,7 @@ images:
     tag: release
     channel: pinned
   - ref: ghcr.io/immich-app/postgres
-    tag: "14"
+    tag: 14-vectorchord0.4.3-pgvectors0.2.0
     channel: pinned
   - ref: docker.io/valkey/valkey
     tag: "8"
