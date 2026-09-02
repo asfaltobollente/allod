@@ -1190,11 +1190,21 @@ async function showStorageDiagnostics() {
         <div style="font-size:11px; color:var(--text-muted);">${d.timestamp}</div>
       </div>
 
-      <h4 style="margin:12px 0 6px 0; font-size:13px; color:var(--primary);">📊 Allocazione Btrfs Filesystem Usage (RAID 1 Real-Time):</h4>
-      <div class="diag-code-box">${escapeHtml(d.usage)}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 6px 0;">
+        <h4 style="font-size:13px; color:var(--primary); margin:0;">📊 Allocazione Btrfs Filesystem Usage (RAID 1 Real-Time):</h4>
+        <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-storage-usage', this)" style="padding:2px 8px; font-size:11px;">
+          ${t('btn_copy', '📋 Copia')}
+        </button>
+      </div>
+      <div id="diag-storage-usage" class="diag-code-box">${escapeHtml(d.usage)}</div>
 
-      <h4 style="margin:16px 0 6px 0; font-size:13px; color:var(--success);">🛡️ Contatori di Errore Hardware Dischi (btrfs device stats):</h4>
-      <div class="diag-code-box" style="color:#10b981;">${escapeHtml(d.stats)}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:16px 0 6px 0;">
+        <h4 style="font-size:13px; color:var(--success); margin:0;">🛡️ Contatori di Errore Hardware Dischi (btrfs device stats):</h4>
+        <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-storage-stats', this)" style="padding:2px 8px; font-size:11px;">
+          ${t('btn_copy', '📋 Copia')}
+        </button>
+      </div>
+      <div id="diag-storage-stats" class="diag-code-box" style="color:#10b981;">${escapeHtml(d.stats)}</div>
     `;
   } catch (err) {
     body.innerHTML = `<div class="alert-banner alert-danger">Errore di rete: ${err.message}</div>`;
@@ -1225,15 +1235,86 @@ async function showModuleDiagnostics(modId) {
         <div style="font-size:11px; color:var(--text-muted);">${d.timestamp}</div>
       </div>
 
-      <h4 style="margin:12px 0 6px 0; font-size:13px; color:var(--primary);">⚙️ Stato Systemd (systemctl status ${d.module}):</h4>
-      <div class="diag-code-box">${escapeHtml(d.status_text || 'Nessun output')}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 6px 0;">
+        <h4 style="font-size:13px; color:var(--primary); margin:0;">⚙️ Stato Systemd (systemctl status ${d.module}):</h4>
+        <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-box-systemd', this)" style="padding:2px 8px; font-size:11px;">
+          ${t('btn_copy', '📋 Copia')}
+        </button>
+      </div>
+      <div id="diag-box-systemd" class="diag-code-box">${escapeHtml(d.status_text || 'Nessun output')}</div>
 
-      <h4 style="margin:16px 0 6px 0; font-size:13px; color:var(--primary);">📜 Ultimi Log Container Podman (tail -30):</h4>
-      <div class="diag-code-box" style="color:#e2e8f0;">${escapeHtml(d.logs || 'Nessun log recente')}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:16px 0 6px 0;">
+        <h4 style="font-size:13px; color:var(--primary); margin:0;">📜 Ultimi Log Container Podman (tail -30):</h4>
+        <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-box-logs', this)" style="padding:2px 8px; font-size:11px;">
+          ${t('btn_copy', '📋 Copia')}
+        </button>
+      </div>
+      <div id="diag-box-logs" class="diag-code-box" style="color:#e2e8f0;">${escapeHtml(d.logs || 'Nessun log recente')}</div>
     `;
   } catch (err) {
     body.innerHTML = `<div class="alert-banner alert-danger">Errore di rete: ${err.message}</div>`;
   }
+}
+
+function copyDiagBox(boxId, btn) {
+  const el = document.getElementById(boxId);
+  if (!el) return;
+  const text = el.innerText || el.textContent;
+  copyTextToClipboard(text, btn);
+}
+
+function copyAllDiagnostics(btn) {
+  const boxes = document.querySelectorAll('#diag-modal-body .diag-code-box');
+  if (!boxes || boxes.length === 0) return;
+  const sections = [];
+  boxes.forEach((box, i) => {
+    const prevHeader = box.previousElementSibling;
+    const headerTitle = prevHeader ? (prevHeader.innerText || prevHeader.textContent).trim() : `Box ${i+1}`;
+    sections.push(`=== ${headerTitle} ===\n` + (box.innerText || box.textContent).trim());
+  });
+  const fullText = sections.join('\n\n');
+  copyTextToClipboard(fullText, btn);
+}
+
+function copyTextToClipboard(text, btn) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showCopyFeedback(btn);
+    }).catch(() => {
+      fallbackCopyText(text, btn);
+    });
+  } else {
+    fallbackCopyText(text, btn);
+  }
+}
+
+function fallbackCopyText(text, btn) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showCopyFeedback(btn);
+  } catch (err) {
+    console.error('Fallback copy failed:', err);
+  }
+  document.body.removeChild(ta);
+}
+
+function showCopyFeedback(btn) {
+  if (!btn) return;
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = `<span>${t('btn_copied', '✓ Copiato!')}</span>`;
+  btn.style.borderColor = 'var(--success)';
+  btn.style.color = 'var(--success)';
+  setTimeout(() => {
+    btn.innerHTML = origHtml;
+    btn.style.borderColor = '';
+    btn.style.color = '';
+  }, 2000);
 }
 
 function escapeHtml(str) {

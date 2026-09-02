@@ -371,8 +371,11 @@ Ready for operations. Click any maintenance action above to see real-time output
       <div class="modal-body" id="diag-modal-body">
         <p class="text-muted">Caricamento diagnostica in corso...</p>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeDiagModal()">Chiudi</button>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn btn-outline-primary" id="diag-copy-all-btn" onclick="copyAllDiagnostics(this)" style="padding:6px 14px; font-size:12px;">
+          📋 <span data-i18n="btn_copy_all">Copy All</span>
+        </button>
+        <button class="btn btn-secondary" onclick="closeDiagModal()">Close</button>
       </div>
     </div>
   </div>
