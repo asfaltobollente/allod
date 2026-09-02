@@ -145,7 +145,7 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		for i := 1; i < len(m.Images); i++ {
 			parts := strings.Split(m.Images[i].Ref, "/")
 			shortName := parts[len(parts)-1]
-			sb.WriteString(fmt.Sprintf("Wants=%s-%s.service\n", m.ID, shortName))
+			sb.WriteString(fmt.Sprintf("Requires=%s-%s.service\n", m.ID, shortName))
 			sb.WriteString(fmt.Sprintf("After=%s-%s.service\n", m.ID, shortName))
 		}
 	}
@@ -159,7 +159,8 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString(fmt.Sprintf("Exec=%s\n", strings.Join(img.Args, " ")))
 	}
 
-	// Only publish host ports on the primary container of the module
+	// Only publish host ports on the primary container of the module.
+	// Secondary containers (databases, caches) communicate via Network=allod DNS.
 	if isPrimary {
 		for _, p := range m.Ports {
 			cPort := p.N
@@ -167,12 +168,6 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 				cPort = p.ContainerPort
 			}
 			sb.WriteString(fmt.Sprintf("PublishPort=%d:%d\n", p.N, cPort))
-		}
-	} else {
-		if strings.Contains(img.Ref, "postgres") {
-			sb.WriteString("PublishPort=5432:5432\n")
-		} else if strings.Contains(img.Ref, "valkey") {
-			sb.WriteString("PublishPort=6379:6379\n")
 		}
 	}
 
@@ -198,6 +193,7 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	case "photos":
 		if isPrimary {
 			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/usr/src/app/upload:Z\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/data:Z\n", baseDir))
 			sb.WriteString("Environment=DB_HOSTNAME=photos-postgres\n")
 			sb.WriteString("Environment=DB_DATABASE_NAME=immich\n")
 			sb.WriteString("Environment=DB_USERNAME=postgres\n")
@@ -208,6 +204,8 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 			sb.WriteString("Environment=POSTGRES_DB=immich\n")
 			sb.WriteString("Environment=POSTGRES_USER=postgres\n")
 			sb.WriteString("Environment=POSTGRES_PASSWORD=postgres\n")
+			sb.WriteString("Environment=POSTGRES_INITDB_ARGS=--data-checksums\n")
+			sb.WriteString("ShmSize=128m\n")
 		} else if strings.Contains(img.Ref, "valkey") {
 			sb.WriteString(fmt.Sprintf("Volume=%s/photos/valkey:/data:Z\n", baseDir))
 		}
@@ -228,7 +226,8 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	}
 
 	sb.WriteString("\n[Service]\n")
-	sb.WriteString("Restart=on-failure\n")
+	sb.WriteString("Restart=always\n")
+	sb.WriteString("RestartSec=5s\n")
 	sb.WriteString("TimeoutStartSec=900s\n")
 	sb.WriteString("SuccessExitStatus=0 143 137\n")
 	if level.RAMMB > 0 {
