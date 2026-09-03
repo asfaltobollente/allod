@@ -23,7 +23,8 @@
             "snapshots.prune",
             "smart.read",
             "service.restart",
-            "storage.init"
+            "storage.init",
+            "shares.bind_photos"
           ]
         },
         "plan": {
