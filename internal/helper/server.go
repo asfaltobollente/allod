@@ -175,7 +175,7 @@ func (s *Server) processRequest(req Request) Response {
 			enabled = en
 		}
 
-		source := "/mnt/allod-storage/photos/upload/library"
+		source := "/mnt/allod-storage/photos/upload"
 		target := "/mnt/allod-storage/shares/photos"
 		plan := []string{
 			fmt.Sprintf("bind mount %s to %s (enabled=%v)", source, target, enabled),
