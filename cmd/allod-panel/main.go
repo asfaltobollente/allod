@@ -1113,6 +1113,70 @@ WantedBy=default.target
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	})
 
+	// 5a-11. API Shares Set Samba Password
+	mux.HandleFunc("/api/modules/shares/set-password", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
+			return
+		}
+
+		if req.Username == "" {
+			req.Username = os.Getenv("USER")
+			if req.Username == "" {
+				req.Username = "ferretti"
+			}
+		}
+
+		if len(req.Password) < 4 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
+			return
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		resp, err := client.Execute("shares.set_password", map[string]interface{}{
+			"username": req.Username,
+			"password": req.Password,
+		}, false)
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Root Helper non raggiungibile: %v. Assicurati che allod-helperd sia avviato.", err),
+			})
+			return
+		}
+
+		if !resp.Ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore impostazione password Samba: %s", resp.Error),
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Password Samba per l'utente '%s' configurata con successo!", req.Username),
+			Data: map[string]interface{}{
+				"username": req.Username,
+			},
+		})
+	})
+
 	// 5b. API Storage Init
 	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

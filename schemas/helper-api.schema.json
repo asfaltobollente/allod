@@ -24,7 +24,8 @@
             "smart.read",
             "service.restart",
             "storage.init",
-            "shares.bind_photos"
+            "shares.bind_photos",
+            "shares.set_password"
           ]
         },
         "plan": {
