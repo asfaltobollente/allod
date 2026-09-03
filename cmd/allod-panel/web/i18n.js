@@ -101,6 +101,14 @@ const i18n = {
     helper_maintenance_desc: "Privileged micro-daemon (closed 9-action whitelist) for Btrfs RAID 1 formatting, SMART diagnostics, and Samba share reload without root web access.",
     btn_recheck: "Recheck Connection",
 
+    // Photos & Shares Integration
+    photos_shares_toggle: "Integrate with Shares (Samba LAN)",
+    photos_shares_desc: "Creates a transparent pointer in \\allod\\shares\\photos to browse and copy photos directly from your PC without moving files.",
+    photos_shares_connected: "🟢 Linked to \\\\allod\\shares\\photos",
+    photos_shares_unmounted: "⚪ Not linked to Samba",
+    photos_shares_warning_shares: "⚠️ Start the Shares module to browse this folder from Windows/Mac",
+    photos_shares_helper_offline: "⚠️ Start Root Helper to manage the Samba bind mount",
+
     // Actions & Badges
     status_protected: "🟢 PROTECTED (In Production)",
     status_running: "🟢 RUNNING",
@@ -255,6 +263,14 @@ const i18n = {
     helper_maintenance_title: "Demone Root Helper (allod-helperd)",
     helper_maintenance_desc: "Micro-demone con privilegi root (whitelist a 9 azioni) per la formattazione Btrfs RAID 1, controlli SMART e configurazione Samba senza dare permessi root al web server.",
     btn_recheck: "Ricontrolla Connessione",
+
+    // Photos & Shares Integration
+    photos_shares_toggle: "Esponi libreria in Shares (Samba LAN)",
+    photos_shares_desc: "Crea un puntamento trasparente in \\allod\\shares\\photos per sfogliare e copiare le foto dal PC senza spostare i file.",
+    photos_shares_connected: "🟢 Collegato a \\\\allod\\shares\\photos",
+    photos_shares_unmounted: "⚪ Non collegato a Samba",
+    photos_shares_warning_shares: "⚠️ Avvia il modulo Shares per visualizzare la cartella da Windows/Mac",
+    photos_shares_helper_offline: "⚠️ Avvia l'Helper Root per gestire il puntamento Samba",
 
     // Actions & Badges
     status_protected: "🟢 PROTETTO (In Produzione)",

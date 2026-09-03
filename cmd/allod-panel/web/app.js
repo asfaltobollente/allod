@@ -4,6 +4,7 @@ let currentModules = null;
 let currentRing = null;
 let unlockedModules = new Set();
 let startingModules = new Map(); // modID -> timestamp
+let photosSharesState = { enabled: false, mounted: false, shares_active: false };
 
 document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
@@ -55,6 +56,10 @@ async function refreshData() {
     currentStatus = statusRes ? statusRes.data : null;
     currentModules = modulesRes ? modulesRes.data : null;
     currentRing = ringRes ? ringRes.data : null;
+
+    try {
+      await fetchPhotosSharesIntegration();
+    } catch (_) {}
 
     renderOverview();
     renderModules();
@@ -755,6 +760,38 @@ function renderModules() {
       `;
     }
 
+    let photosSharesIntegrationHtml = '';
+    if (mod.id === 'photos') {
+      const isChecked = (photosSharesState && photosSharesState.enabled) ? 'checked' : '';
+      const isMounted = photosSharesState && photosSharesState.mounted;
+      const sharesActive = photosSharesState && photosSharesState.shares_active;
+
+      let badgeHtml = isMounted
+        ? `<span style="color:var(--success); font-weight:600;">${t('photos_shares_connected')}</span>`
+        : `<span style="color:var(--text-muted);">${t('photos_shares_unmounted')}</span>`;
+
+      let warningHtml = '';
+      if (photosSharesState && photosSharesState.enabled && !sharesActive) {
+        warningHtml = `<div style="font-size:10.5px; color:#f59e0b; margin-top:4px;">${t('photos_shares_warning_shares')}</div>`;
+      }
+
+      photosSharesIntegrationHtml = `
+        <div style="margin-top:10px; padding:9px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0; font-size:11.5px; font-weight:600; color:var(--text-main);">
+              <input type="checkbox" id="photos-shares-checkbox" onchange="togglePhotosSharesIntegration(this.checked)" ${isChecked} style="cursor:pointer; width:15px; height:15px; accent-color:var(--primary);">
+              <span>🔗 ${t('photos_shares_toggle')}</span>
+            </label>
+            <div style="font-size:10.5px;">${badgeHtml}</div>
+          </div>
+          <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px; line-height:1.35;">
+            ${t('photos_shares_desc')}
+          </div>
+          ${warningHtml}
+        </div>
+      `;
+    }
+
     const tierLabel = t('tier_' + mod.tier, mod.tier);
     const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
     const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
@@ -793,6 +830,7 @@ function renderModules() {
         ${grantsHtml}
         ${dbInfoHtml}
         ${storageBoxHtml}
+        ${photosSharesIntegrationHtml}
         ${isLocked ? `
           <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
             🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.
@@ -2077,4 +2115,50 @@ sudo cp ~/allod/configs/allod-helperd.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now allod-helperd`;
   copyTextToClipboard(code, btn);
+}
+
+// ==========================================
+// PHOTOS & SHARES INTEGRATION
+// ==========================================
+
+async function fetchPhotosSharesIntegration() {
+  try {
+    const res = await fetch('/api/modules/photos/shares-integration');
+    const json = await res.json();
+    if (json.status === 'ok' && json.data) {
+      photosSharesState = json.data;
+    }
+  } catch (err) {
+    console.warn('Could not fetch photos-shares integration state:', err);
+  }
+}
+
+async function togglePhotosSharesIntegration(enabled) {
+  const cb = document.getElementById('photos-shares-checkbox');
+  if (cb) cb.disabled = true;
+  try {
+    const res = await fetch('/api/modules/photos/shares-integration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enabled })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(data.message, 'success');
+      await fetchPhotosSharesIntegration();
+      renderModules();
+    } else {
+      showAlert('Errore: ' + data.message, 'danger');
+      if (cb) {
+        cb.checked = !enabled;
+        cb.disabled = false;
+      }
+    }
+  } catch (err) {
+    showAlert('Errore di rete: ' + err.message, 'danger');
+    if (cb) {
+      cb.checked = !enabled;
+      cb.disabled = false;
+    }
+  }
 }

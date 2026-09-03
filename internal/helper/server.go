@@ -168,6 +168,40 @@ func (s *Server) processRequest(req Request) Response {
 
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
 
+	case "shares.bind_photos":
+		enabled := true
+		if en, ok := req.Args["enabled"].(bool); ok {
+			enabled = en
+		}
+
+		source := "/mnt/allod-storage/photos/upload"
+		target := "/mnt/allod-storage/shares/photos"
+		plan := []string{
+			fmt.Sprintf("bind mount %s to %s (enabled=%v)", source, target, enabled),
+		}
+
+		if !req.Plan {
+			if enabled {
+				_ = os.MkdirAll(source, 0775)
+				_ = os.MkdirAll(target, 0775)
+				mounts, _ := os.ReadFile("/proc/mounts")
+				if !strings.Contains(string(mounts), target) {
+					cmd := exec.Command("mount", "--bind", source, target)
+					if out, err := cmd.CombinedOutput(); err != nil {
+						return Response{Ok: false, Error: fmt.Sprintf("mount --bind failed: %v (%s)", err, strings.TrimSpace(string(out)))}
+					}
+				}
+				_ = exec.Command("chmod", "-R", "0775", target).Run()
+			} else {
+				mounts, _ := os.ReadFile("/proc/mounts")
+				if strings.Contains(string(mounts), target) {
+					_ = exec.Command("umount", target).Run()
+				}
+			}
+		}
+
+		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
+
 	case "snapshots.create":
 		subvol, _ := req.Args["subvolume"].(string)
 		if subvol != "" && !validNameRegex.MatchString(subvol) {

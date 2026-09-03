@@ -1015,6 +1015,104 @@ WantedBy=default.target
 		})
 	})
 
+	// 5a-10. API Photos & Shares Integration (Bind mount /mnt/allod-storage/photos/upload to /mnt/allod-storage/shares/photos)
+	mux.HandleFunc("/api/modules/photos/shares-integration", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		targetPath := "/mnt/allod-storage/shares/photos"
+
+		if r.Method == http.MethodGet {
+			isMounted := false
+			if mounts, err := os.ReadFile("/proc/mounts"); err == nil {
+				isMounted = strings.Contains(string(mounts), targetPath)
+			}
+
+			savedEnabled := isMounted
+			if st, err := state.Open("state.db"); err == nil {
+				if val, err := st.GetMeta("photos_shares_integration"); err == nil && val != "" {
+					savedEnabled = (val == "true")
+				}
+				st.Close()
+			}
+
+			sharesActive := false
+			out, err := exec.Command("systemctl", "is-active", "smbd").CombinedOutput()
+			if err == nil && strings.TrimSpace(string(out)) == "active" {
+				sharesActive = true
+			}
+
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status: "ok",
+				Data: map[string]interface{}{
+					"enabled":       savedEnabled,
+					"mounted":       isMounted,
+					"shares_active": sharesActive,
+					"target_path":   targetPath,
+				},
+			})
+			return
+		}
+
+		if r.Method == http.MethodPost {
+			var req struct {
+				Enabled bool `json:"enabled"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
+				return
+			}
+
+			if st, err := state.Open("state.db"); err == nil {
+				val := "false"
+				if req.Enabled {
+					val = "true"
+				}
+				_ = st.SetMeta("photos_shares_integration", val)
+				st.Close()
+			}
+
+			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+			resp, err := client.Execute("shares.bind_photos", map[string]interface{}{
+				"enabled": req.Enabled,
+			}, false)
+
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(PanelResponse{
+					Status:  "error",
+					Message: fmt.Sprintf("Root Helper non raggiungibile: %v. Assicurati che allod-helperd sia avviato.", err),
+				})
+				return
+			}
+
+			if !resp.Ok {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(PanelResponse{
+					Status:  "error",
+					Message: fmt.Sprintf("Errore applicazione bind mount: %s", resp.Error),
+				})
+				return
+			}
+
+			msg := "Collegamento Photos ➔ Shares attivato con successo!"
+			if !req.Enabled {
+				msg = "Collegamento Photos ➔ Shares disattivato."
+			}
+
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "ok",
+				Message: msg,
+				Data: map[string]interface{}{
+					"enabled": req.Enabled,
+				},
+			})
+			return
+		}
+
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	})
+
 	// 5b. API Storage Init
 	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
