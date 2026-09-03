@@ -1134,7 +1134,7 @@ WantedBy=default.target
 		if req.Username == "" {
 			req.Username = os.Getenv("USER")
 			if req.Username == "" {
-				req.Username = "ferretti"
+				req.Username = "user"
 			}
 		}
 
