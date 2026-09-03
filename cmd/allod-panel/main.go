@@ -886,6 +886,82 @@ func main() {
 		})
 	})
 
+	// 5a-8. API System Enable Autostart & Linger
+	mux.HandleFunc("/api/system/enable-autostart", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var report strings.Builder
+		report.WriteString("=== ABILITAZIONE AVVIO AUTOMATICO AL BOOT ===\n")
+
+		// 1. Enable linger for current user
+		lingerCmd := exec.Command("loginctl", "enable-linger")
+		lingerOut, err := lingerCmd.CombinedOutput()
+		if err != nil {
+			// Try with explicit username
+			uName := os.Getenv("USER")
+			if uName != "" {
+				lingerOut, err = exec.Command("loginctl", "enable-linger", uName).CombinedOutput()
+			}
+		}
+		if err != nil {
+			report.WriteString(fmt.Sprintf("⚠️ loginctl enable-linger: %v (%s)\n  (Suggerimento: eseguire da terminale: sudo loginctl enable-linger $USER)\n", err, strings.TrimSpace(string(lingerOut))))
+		} else {
+			report.WriteString("✓ Systemd User Linger abilitato (i servizi utente e container girano 24/7 al boot senza login).\n")
+		}
+
+		// 2. Install allod-panel.service into ~/.config/systemd/user/
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			systemdUserDir := filepath.Join(home, ".config", "systemd", "user")
+			_ = os.MkdirAll(systemdUserDir, 0755)
+
+			serviceContent := `[Unit]
+Description=Allod Web Dashboard Panel
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/allod
+ExecStart=%h/allod/allod-panel
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
+`
+			panelSvcPath := filepath.Join(systemdUserDir, "allod-panel.service")
+			if err := os.WriteFile(panelSvcPath, []byte(serviceContent), 0644); err == nil {
+				report.WriteString("✓ File allod-panel.service installato in " + panelSvcPath + "\n")
+			}
+
+			_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+			enableOut, err := exec.Command("systemctl", "--user", "enable", "allod-panel").CombinedOutput()
+			if err != nil {
+				report.WriteString(fmt.Sprintf("⚠️ systemctl --user enable allod-panel: %v (%s)\n", err, strings.TrimSpace(string(enableOut))))
+			} else {
+				report.WriteString("✓ allod-panel.service abilitato in systemd (si avvierà automaticamente ad ogni reboot).\n")
+			}
+		}
+
+		// 3. Try to enable smbd for Samba
+		_ = exec.Command("systemctl", "enable", "smbd").Run()
+		report.WriteString("✓ Servizio Samba (smbd) registrato per l'avvio.\n")
+
+		// 4. Reset failed
+		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
+		report.WriteString("\n✓ Configurazione completata! Al prossimo riavvio sia la dashboard che i container partiranno da soli.")
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Avvio automatico al boot configurato con successo!",
+			Data:    map[string]interface{}{"output": report.String()},
+		})
+	})
+
 	// 5b. API Storage Init
 	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

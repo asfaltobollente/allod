@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 WorkingDirectory=%h/allod
 ExecStart=%h/allod/allod-panel
-Restart=on-failure
+Restart=always
 RestartSec=5s
 
 [Install]

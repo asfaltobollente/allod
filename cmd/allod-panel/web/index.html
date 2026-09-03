@@ -322,9 +322,14 @@
                 </button>
               </div>
 
-              <button class="btn btn-outline-info" onclick="openSweeperModal()" style="width:100%;">
-                <span class="icon">🧹</span> <span data-i18n="btn_sweeper">Podman Sweeper</span>
-              </button>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-outline-info" onclick="openSweeperModal()" style="flex:1;">
+                  <span class="icon">🧹</span> <span data-i18n="btn_sweeper">Podman Sweeper</span>
+                </button>
+                <button class="btn btn-outline-warning" id="btn-enable-autostart" onclick="runEnableAutostart()" style="flex:1;" title="Enable systemd user linger and register allod-panel as a permanent boot service">
+                  <span class="icon">📌</span> <span data-i18n="btn_enable_autostart">Enable Boot Autostart</span>
+                </button>
+              </div>
             </div>
             <p style="font-size:11px; color:var(--text-muted); margin-top:10px; font-style:italic;" data-i18n="settings_start_active_note">
               Starts only modules configured with an active level (modules with level 'off' remain off).

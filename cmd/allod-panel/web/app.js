@@ -1882,3 +1882,30 @@ async function runModulesControl(action) {
     if (btn) btn.disabled = false;
   }
 }
+
+async function runEnableAutostart() {
+  const btn = document.getElementById('btn-enable-autostart');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="icon">⏳</span> <span>Configuring Autostart...</span>`;
+  }
+  try {
+    const res = await fetch('/api/system/enable-autostart', { method: 'POST' });
+    const data = await res.json();
+    const out = (data.data && data.data.output) || data.message;
+    appendSettingsConsole('BOOT AUTOSTART CONFIGURATION', out, data.status !== 'ok');
+    if (data.status === 'ok') {
+      showAlert(t('msg_autostart_enabled', 'Avvio automatico al boot configurato con successo!'), 'success');
+    } else {
+      showAlert('Errore autostart: ' + data.message, 'danger');
+    }
+  } catch (err) {
+    appendSettingsConsole('BOOT AUTOSTART ERROR', err.message, true);
+    showAlert('Errore connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span class="icon">📌</span> <span data-i18n="btn_enable_autostart">${t('btn_enable_autostart')}</span>`;
+    }
+  }
+}
