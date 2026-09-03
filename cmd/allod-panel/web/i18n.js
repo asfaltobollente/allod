@@ -103,7 +103,7 @@ const i18n = {
 
     // Photos & Shares Integration
     photos_shares_toggle: "Integrate with Shares (Samba LAN)",
-    photos_shares_desc: "Creates a transparent pointer in \\allod\\shares\\photos to browse and copy original photos directly from your PC without thumbnails or internal caches.",
+    photos_shares_desc: "Links \\allod\\shares\\photos directly to clean photo albums (requires Immich 'Storage Template' enabled in Settings to organize photos into /user/year/).",
     photos_shares_connected: "🟢 Linked to \\\\allod\\shares\\photos",
     photos_shares_unmounted: "⚪ Not linked to Samba",
     photos_shares_warning_shares: "⚠️ Start the Shares module to browse this folder from Windows/Mac",
@@ -277,7 +277,7 @@ const i18n = {
 
     // Photos & Shares Integration
     photos_shares_toggle: "Esponi libreria in Shares (Samba LAN)",
-    photos_shares_desc: "Crea un puntamento trasparente in \\allod\\shares\\photos per sfogliare e copiare le foto originali dal PC senza cartelle di sistema o miniature.",
+    photos_shares_desc: "Collega \\allod\\shares\\photos agli album puliti (richiede 'Storage Template' attivo in Immich per organizzare le foto in /utente/anno/).",
     photos_shares_connected: "🟢 Collegato a \\\\allod\\shares\\photos",
     photos_shares_unmounted: "⚪ Non collegato a Samba",
     photos_shares_warning_shares: "⚠️ Avvia il modulo Shares per visualizzare la cartella da Windows/Mac",
