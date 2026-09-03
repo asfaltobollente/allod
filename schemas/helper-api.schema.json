@@ -24,6 +24,7 @@
             "smart.read",
             "service.restart",
             "storage.init",
+            "storage.diagnostics",
             "shares.bind_photos",
             "shares.set_password"
           ]
@@ -56,6 +57,9 @@
         },
         "applied": {
           "type": "boolean"
+        },
+        "output": {
+          "type": "string"
         },
         "error": {
           "type": "string"
