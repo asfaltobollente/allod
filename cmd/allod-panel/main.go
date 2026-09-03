@@ -253,8 +253,8 @@ func main() {
 			return
 		}
 
+		realRAM := preflight.GetRealRAMStats()
 		committed, _ := preflight.CommittedRAMInfo(cfg, "")
-		usedMB := preflight.CoreReservedMB + committed
 
 		helperConnected := checkHelperConnectivity()
 		topo, isStandalone := getRingTopology(cfg)
@@ -270,9 +270,12 @@ func main() {
 		data := map[string]interface{}{
 			"node_name":        cfg.Node.Name,
 			"channel":          cfg.Node.Channel,
-			"ram_total_mb":     preflight.GetSystemRAMMB(),
+			"ram_total_mb":     realRAM.TotalMB,
+			"ram_used_mb":      realRAM.UsedMB,
+			"ram_available_mb": realRAM.AvailableMB,
+			"ram_free_mb":      realRAM.FreeMB,
 			"core_reserved_mb": preflight.CoreReservedMB,
-			"ram_used_mb":      usedMB,
+			"ram_committed_mb": committed,
 			"helper_connected": helperConnected,
 			"group_repo":       cfg.Node.Group,
 			"is_standalone":    isStandalone,

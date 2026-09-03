@@ -179,28 +179,81 @@ func parseRota(raw interface{}) bool {
 	}
 }
 
-// GetSystemRAMMB reads total memory from /proc/meminfo on Linux, or falls back to default.
-func GetSystemRAMMB() int {
+// RealRAMStats holds live physical memory metrics read from /proc/meminfo.
+type RealRAMStats struct {
+	TotalMB     int `json:"total_mb"`
+	UsedMB      int `json:"used_mb"`
+	AvailableMB int `json:"available_mb"`
+	FreeMB      int `json:"free_mb"`
+}
+
+// GetRealRAMStats reads actual real-time memory stats from /proc/meminfo (matching free -h).
+func GetRealRAMStats() RealRAMStats {
 	file, err := os.Open("/proc/meminfo")
 	if err != nil {
-		return DefaultSystemRAMMB
+		return RealRAMStats{
+			TotalMB:     DefaultSystemRAMMB,
+			UsedMB:      1300,
+			AvailableMB: DefaultSystemRAMMB - 1300,
+			FreeMB:      DefaultSystemRAMMB - 1300,
+		}
 	}
 	defer file.Close()
 
+	var memTotalKB, memFreeKB, memAvailableKB, buffersKB, cachedKB int
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		val, _ := strconv.Atoi(fields[1])
 		if strings.HasPrefix(line, "MemTotal:") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				kb, err := strconv.Atoi(fields[1])
-				if err == nil && kb > 0 {
-					return kb / 1024
-				}
-			}
+			memTotalKB = val
+		} else if strings.HasPrefix(line, "MemFree:") {
+			memFreeKB = val
+		} else if strings.HasPrefix(line, "MemAvailable:") {
+			memAvailableKB = val
+		} else if strings.HasPrefix(line, "Buffers:") {
+			buffersKB = val
+		} else if strings.HasPrefix(line, "Cached:") {
+			cachedKB = val
 		}
 	}
-	return DefaultSystemRAMMB
+
+	totalMB := memTotalKB / 1024
+	if totalMB <= 0 {
+		totalMB = DefaultSystemRAMMB
+	}
+
+	var usedMB, availMB int
+	if memAvailableKB > 0 {
+		availMB = memAvailableKB / 1024
+		usedMB = (memTotalKB - memAvailableKB) / 1024
+	} else {
+		freeKB := memFreeKB + buffersKB + cachedKB
+		usedMB = (memTotalKB - freeKB) / 1024
+		availMB = totalMB - usedMB
+	}
+	if usedMB < 0 {
+		usedMB = 0
+	}
+	if availMB < 0 {
+		availMB = 0
+	}
+
+	return RealRAMStats{
+		TotalMB:     totalMB,
+		UsedMB:      usedMB,
+		AvailableMB: availMB,
+		FreeMB:      memFreeKB / 1024,
+	}
+}
+
+// GetSystemRAMMB reads total memory from /proc/meminfo on Linux, or falls back to default.
+func GetSystemRAMMB() int {
+	return GetRealRAMStats().TotalMB
 }
 
 type CheckResult struct {
