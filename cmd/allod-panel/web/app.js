@@ -81,6 +81,19 @@ function renderOverview() {
     }
   }
 
+  // Settings Helper Root connection pill (maintenance tab)
+  const settingsHelperPill = document.getElementById('settings-helper-status-pill');
+  const settingsHelperText = document.getElementById('settings-helper-status-text');
+  if (settingsHelperPill && settingsHelperText) {
+    if (currentStatus.helper_connected) {
+      settingsHelperPill.className = 'helper-status';
+      settingsHelperText.textContent = t('helper_connected');
+    } else {
+      settingsHelperPill.className = 'helper-status offline';
+      settingsHelperText.textContent = t('helper_offline');
+    }
+  }
+
   const sidebarName = document.getElementById('sidebar-node-name');
   if (sidebarName) sidebarName.textContent = currentStatus.node_name || 'allod-node';
   
@@ -1378,6 +1391,7 @@ window.addEventListener('keydown', (e) => {
     closeDiagModal();
     closeDangerStorageModal();
     closeDangerPurgeModal();
+    closeHelperModal();
   }
 });
 
@@ -1388,6 +1402,8 @@ document.addEventListener('click', (e) => {
   if (dangerModal && e.target === dangerModal) closeDangerStorageModal();
   const purgeModal = document.getElementById('danger-purge-modal');
   if (purgeModal && e.target === purgeModal) closeDangerPurgeModal();
+  const helperModal = document.getElementById('helper-modal');
+  if (helperModal && e.target === helperModal) closeHelperModal();
 });
 
 function toggleModuleUnlock(modId) {
@@ -2005,4 +2021,60 @@ function copyFirstSetupCli(btn) {
   if (!el) return;
   const text = el.innerText || el.textContent;
   copyTextToClipboard(text, btn);
+}
+
+// ==========================================
+// ROOT HELPER (allod-helperd) LOGIC
+// ==========================================
+
+function openHelperModal() {
+  const modal = document.getElementById('helper-modal');
+  if (!modal) return;
+  const banner = document.getElementById('helper-modal-status-banner');
+  const text = document.getElementById('helper-modal-status-text');
+
+  if (currentStatus && currentStatus.helper_connected) {
+    if (banner) banner.className = 'alert-banner alert-success';
+    if (text) text.innerHTML = '🟢 <strong>Stato: Connesso & Operativo</strong> (/run/allod/helper.sock)';
+  } else {
+    if (banner) banner.className = 'alert-banner alert-danger';
+    if (text) text.innerHTML = '🔴 <strong>Stato: Offline / Non Avviato</strong> (/run/allod/helper.sock non risponde)';
+  }
+  modal.classList.remove('hidden');
+}
+
+function closeHelperModal() {
+  const modal = document.getElementById('helper-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function recheckHelperConnection(btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Controllo in corso...</span>';
+  }
+  await refreshData();
+  const banner = document.getElementById('helper-modal-status-banner');
+  const text = document.getElementById('helper-modal-status-text');
+  if (currentStatus && currentStatus.helper_connected) {
+    if (banner) banner.className = 'alert-banner alert-success';
+    if (text) text.innerHTML = '🟢 <strong>Stato: Connesso & Operativo!</strong>';
+    showAlert(t('helper_connected', 'Root Helper: Connesso'), 'success');
+  } else {
+    if (banner) banner.className = 'alert-banner alert-danger';
+    if (text) text.innerHTML = '🔴 <strong>Stato: Ancora Offline</strong> — esegui i comandi per avviarlo.';
+    showAlert(t('helper_offline', 'Root Helper: Offline / Non Avviato'), 'warning');
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = `🔄 <span>${t('btn_recheck', 'Ricontrolla Connessione')}</span>`;
+  }
+}
+
+function copyHelperInstallCli(btn) {
+  const code = `sudo cp ~/allod/allod-helperd /usr/local/bin/
+sudo cp ~/allod/configs/allod-helperd.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now allod-helperd`;
+  copyTextToClipboard(code, btn);
 }

@@ -91,6 +91,16 @@ const i18n = {
     first_setup_cli_title: "💻 Or run manually via CLI on your server:",
     first_setup_completed: "✓ Boot persistence configured! Allod is 100% ready for 24/7 unattended operation.",
 
+    // Helper Modal & Maintenance
+    helper_modal_title: "Root Helper Daemon (allod-helperd)",
+    helper_modal_desc: "allod-helperd is the privileged micro-daemon of Allod (executes as root with a closed 9-action whitelist). It allows the dashboard (100% rootless) to safely partition disks, format Btrfs RAID 1 pools, take subvolume snapshots, and reload Samba shares.",
+    helper_service_box_title: "⚙️ Register & Run as Permanent Systemd Service (Recommended):",
+    helper_restart_box_title: "🔄 Quick Service Restart (if already registered):",
+    helper_manual_box_title: "⚡ Quick Manual Run (Foreground / Test):",
+    helper_maintenance_title: "Root Helper Daemon (allod-helperd)",
+    helper_maintenance_desc: "Privileged micro-daemon (closed 9-action whitelist) for Btrfs RAID 1 formatting, SMART diagnostics, and Samba share reload without root web access.",
+    btn_recheck: "Recheck Connection",
+
     // Actions & Badges
     status_protected: "🟢 PROTECTED (In Production)",
     status_running: "🟢 RUNNING",
@@ -235,6 +245,16 @@ const i18n = {
     first_setup_check_panel: "Servizio allod-panel (Web UI al Boot)",
     first_setup_cli_title: "💻 Oppure esegui manualmente via CLI sul server:",
     first_setup_completed: "✓ Persistenza al boot configurata! Allod è pronto al 100% per operare 24/7 senza interventi.",
+
+    // Helper Modal & Maintenance
+    helper_modal_title: "Demone Root Helper (allod-helperd)",
+    helper_modal_desc: "allod-helperd è il micro-demone privilegiato di Allod (eseguito come root con whitelist chiusa a 9 azioni). Permette al pannello (100% rootless) di gestire in sicurezza i dischi fisici, formattare il pool Btrfs RAID 1, creare snapshot e ricaricare Samba.",
+    helper_service_box_title: "⚙️ Avvia o Registra come Servizio Systemd Permanente (Consigliato):",
+    helper_restart_box_title: "🔄 Riavvio Rapido Servizio (se già installato):",
+    helper_manual_box_title: "⚡ Esecuzione Rapida Manuale (Foreground / Test):",
+    helper_maintenance_title: "Demone Root Helper (allod-helperd)",
+    helper_maintenance_desc: "Micro-demone con privilegi root (whitelist a 9 azioni) per la formattazione Btrfs RAID 1, controlli SMART e configurazione Samba senza dare permessi root al web server.",
+    btn_recheck: "Ricontrolla Connessione",
 
     // Actions & Badges
     status_protected: "🟢 PROTETTO (In Produzione)",
