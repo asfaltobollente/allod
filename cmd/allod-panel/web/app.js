@@ -117,10 +117,11 @@ function renderOverview() {
   
   const ramFootEl = document.getElementById('ram-footer');
   if (ramFootEl) {
-    const freeGB = Math.max(0, (ramTotalMB - ramUsedMB) / 1024).toFixed(1);
+    const availGB = (currentStatus.ram_available_mb ? (currentStatus.ram_available_mb / 1024) : Math.max(0, (ramTotalMB - ramUsedMB) / 1024)).toFixed(1);
+    const committedMB = currentStatus.ram_committed_mb || 0;
     ramFootEl.textContent = (currentLang === 'it')
-      ? `Riservato core: ${currentStatus.core_reserved_mb || 600} MB | Disponibile: ${freeGB} GB`
-      : `Core reserved: ${currentStatus.core_reserved_mb || 600} MB | Available: ${freeGB} GB`;
+      ? `Disponibile: ${availGB} GB | Allocati moduli: ${committedMB} MB`
+      : `Available: ${availGB} GB | Committed: ${committedMB} MB`;
   }
 
   // Active modules
