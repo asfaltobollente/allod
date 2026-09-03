@@ -72,6 +72,55 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 
 ---
 
+## 🚀 Quickstart & First Installation Guide
+
+Set up a sovereign Allod node on **Ubuntu Server 24.04 LTS** in less than 5 minutes.
+
+### 1. Prerequisites
+```bash
+sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools
+```
+
+### 2. Clone & Compile
+```bash
+cd ~
+git clone https://github.com/asfaltobollente/allod.git
+cd allod
+go build -o allod ./cmd/allod
+go build -o allod-panel ./cmd/allod-panel
+```
+
+### 3. Essential: Enable 24/7 Boot Autostart (Linger & Systemd) ⚠️
+> [!IMPORTANT]
+> **Why is this step mandatory?**  
+> Allod and Podman run in **rootless** mode under your unprivileged user account. On Linux, systemd normally shuts down unprivileged user sessions when you disconnect from SSH.  
+> Enabling **linger** (`loginctl enable-linger $USER`) tells systemd to boot your user session and start all Podman containers (Immich, Nextcloud, Samba) **automatically at machine power-on**, running 24/7 without requiring anyone to log in!
+
+Execute these commands on your server:
+```bash
+# A. Enable systemd user linger for 24/7 background execution
+loginctl enable-linger $USER
+
+# B. Register the Web Dashboard as a permanent systemd boot service
+mkdir -p ~/.config/systemd/user
+cp configs/allod-panel.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now allod-panel
+```
+
+*(Note: You can also start `./allod-panel` once and click the **"⚡ Completa Configurazione Boot (1-Click Setup)"** button directly from the Web Dashboard!)*
+
+### 4. Open the Web Dashboard
+Access the dashboard from any phone, tablet, or PC on your local network:  
+👉 **`http://<SERVER-IP>:8080`**
+
+From the Web GUI, you can:
+* Initialize your physical storage pool (Btrfs RAID 1) with 1 click.
+* Start modules (**Photos / Immich**, **Shares / Samba**, **Cloud / Nextcloud**).
+* Run speedtests, Podman sweeper, and self-updates directly from the browser.
+
+---
+
 ## 💾 Storage Architecture & Physical Disk Management (A Safe Harbor for Everyone)
 
 Allod is designed from the ground up as a **"Storage First"** system: personal cloud files, photos, and shared directories live on a dedicated storage pool and **never fill up your operating system drive**.

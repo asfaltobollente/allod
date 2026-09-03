@@ -962,6 +962,50 @@ WantedBy=default.target
 		})
 	})
 
+	// 5a-9. API System Setup Status (Checks linger and systemd user services)
+	mux.HandleFunc("/api/system/setup-status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		uName := os.Getenv("USER")
+		if uName == "" {
+			uName = "user"
+		}
+
+		// 1. Check if linger is enabled
+		lingerEnabled := false
+		if _, err := os.Stat("/var/lib/systemd/linger/" + uName); err == nil {
+			lingerEnabled = true
+		} else {
+			out, err := exec.Command("loginctl", "show-user", uName, "--property=Linger").CombinedOutput()
+			if err == nil && strings.Contains(string(out), "Linger=yes") {
+				lingerEnabled = true
+			}
+		}
+
+		// 2. Check if allod-panel.service is enabled
+		panelEnabled := false
+		out, err := exec.Command("systemctl", "--user", "is-enabled", "allod-panel").CombinedOutput()
+		if err == nil && strings.TrimSpace(string(out)) == "enabled" {
+			panelEnabled = true
+		}
+
+		allReady := lingerEnabled && panelEnabled
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data: map[string]interface{}{
+				"linger_enabled": lingerEnabled,
+				"panel_enabled":  panelEnabled,
+				"all_ready":      allReady,
+				"user":           uName,
+			},
+		})
+	})
+
 	// 5b. API Storage Init
 	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
