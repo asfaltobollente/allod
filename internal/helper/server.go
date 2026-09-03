@@ -219,12 +219,34 @@ func (s *Server) processRequest(req Request) Response {
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("useradd -m %s", username)}}
 
-	case "users.passwd":
+	case "users.passwd", "shares.set_password":
 		username, ok := req.Args["username"].(string)
 		if !ok || !validNameRegex.MatchString(username) {
 			return Response{Ok: false, Error: "Invalid or missing 'username'"}
 		}
-		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("update password for %s", username)}}
+		password, _ := req.Args["password"].(string)
+		if password == "" {
+			return Response{Ok: false, Error: "Password cannot be empty"}
+		}
+
+		plan := []string{fmt.Sprintf("smbpasswd -a -s %s", username)}
+
+		if !req.Plan {
+			cmd := exec.Command("smbpasswd", "-a", "-s", username)
+			cmd.Stdin = strings.NewReader(password + "\n" + password + "\n")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				// If adding failed, try updating existing entry
+				cmd2 := exec.Command("smbpasswd", "-s", username)
+				cmd2.Stdin = strings.NewReader(password + "\n" + password + "\n")
+				if out2, err2 := cmd2.CombinedOutput(); err2 != nil {
+					return Response{Ok: false, Error: fmt.Sprintf("smbpasswd error: %v (%s)", err, strings.TrimSpace(string(out)+"\n"+string(out2)))}
+				}
+			}
+			_ = exec.Command("smbpasswd", "-e", username).Run()
+			_ = exec.Command("systemctl", "reload", "smbd").Run()
+		}
+
+		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
 
 	case "firewall.apply":
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{"nftables reload /etc/allod/nftables.conf"}}

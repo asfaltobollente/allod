@@ -109,6 +109,17 @@ const i18n = {
     photos_shares_warning_shares: "⚠️ Start the Shares module to browse this folder from Windows/Mac",
     photos_shares_helper_offline: "⚠️ Start Root Helper to manage the Samba bind mount",
 
+    // SMB Password Modal
+    smb_modal_title: "Set Samba Password (Windows / Mac Access)",
+    smb_modal_desc: "Set your network password to access shared folders (\\\\IP\\shares) from Windows File Explorer, Mac Finder, or mobile apps without SSH.",
+    label_smb_username: "Samba Username:",
+    label_smb_password: "New Samba Password:",
+    smb_win_path_label: "💻 Windows Network Path:",
+    btn_save_smb_pass: "Save Samba Password",
+    btn_smb_password: "Set SMB Password",
+    label_smb_credentials: "Windows / Mac Network Credentials",
+    desc_smb_credentials: "Set or change the Samba password to connect PCs and Macs to your shares.",
+
     // Actions & Badges
     status_protected: "🟢 PROTECTED (In Production)",
     status_running: "🟢 RUNNING",
@@ -271,6 +282,17 @@ const i18n = {
     photos_shares_unmounted: "⚪ Non collegato a Samba",
     photos_shares_warning_shares: "⚠️ Avvia il modulo Shares per visualizzare la cartella da Windows/Mac",
     photos_shares_helper_offline: "⚠️ Avvia l'Helper Root per gestire il puntamento Samba",
+
+    // SMB Password Modal
+    smb_modal_title: "Imposta Password Samba (Accesso Windows / Mac)",
+    smb_modal_desc: "Imposta la password di rete per accedere alle cartelle condivise (\\\\IP\\shares) da Esplora Risorse di Windows, Mac Finder o app mobili senza usare la console SSH.",
+    label_smb_username: "Nome Utente Samba:",
+    label_smb_password: "Nuova Password Samba:",
+    smb_win_path_label: "💻 Percorso di Rete Windows:",
+    btn_save_smb_pass: "Salva Password Samba",
+    btn_smb_password: "Imposta Password SMB",
+    label_smb_credentials: "Credenziali di Rete Windows / Mac",
+    desc_smb_credentials: "Imposta o modifica la password Samba per connettere PC e Mac alle cartelle condivise.",
 
     // Actions & Badges
     status_protected: "🟢 PROTETTO (In Produzione)",

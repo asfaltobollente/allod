@@ -792,6 +792,21 @@ function renderModules() {
       `;
     }
 
+    let sharesSmbBoxHtml = '';
+    if (mod.id === 'shares') {
+      sharesSmbBoxHtml = `
+        <div style="margin-top:10px; padding:9px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🔑 ${t('label_smb_credentials')}</div>
+            <div style="font-size:10.5px; color:var(--text-muted);">${t('desc_smb_credentials')}</div>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="openSmbPasswordModal()" style="padding:4px 12px; font-size:11px; font-weight:600;">
+            🔑 ${t('btn_smb_password')}
+          </button>
+        </div>
+      `;
+    }
+
     const tierLabel = t('tier_' + mod.tier, mod.tier);
     const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
     const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
@@ -831,6 +846,7 @@ function renderModules() {
         ${dbInfoHtml}
         ${storageBoxHtml}
         ${photosSharesIntegrationHtml}
+        ${sharesSmbBoxHtml}
         ${isLocked ? `
           <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
             🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.
@@ -1430,6 +1446,7 @@ window.addEventListener('keydown', (e) => {
     closeDangerStorageModal();
     closeDangerPurgeModal();
     closeHelperModal();
+    closeSmbPasswordModal();
   }
 });
 
@@ -1442,6 +1459,8 @@ document.addEventListener('click', (e) => {
   if (purgeModal && e.target === purgeModal) closeDangerPurgeModal();
   const helperModal = document.getElementById('helper-modal');
   if (helperModal && e.target === helperModal) closeHelperModal();
+  const smbModal = document.getElementById('smb-password-modal');
+  if (smbModal && e.target === smbModal) closeSmbPasswordModal();
 });
 
 function toggleModuleUnlock(modId) {
@@ -2159,6 +2178,94 @@ async function togglePhotosSharesIntegration(enabled) {
     if (cb) {
       cb.checked = !enabled;
       cb.disabled = false;
+    }
+  }
+}
+
+// ==========================================
+// SAMBA SMB PASSWORD MANAGEMENT
+// ==========================================
+
+function openSmbPasswordModal() {
+  const modal = document.getElementById('smb-password-modal');
+  if (!modal) return;
+
+  const host = window.location.hostname || '192.168.0.122';
+  const pathEl = document.getElementById('smb-network-path');
+  if (pathEl) {
+    pathEl.textContent = `\\\\${host}\\shares`;
+  }
+
+  const userInput = document.getElementById('smb-user-input');
+  if (userInput && currentStatus && currentStatus.user) {
+    userInput.value = currentStatus.user;
+  }
+
+  const passInput = document.getElementById('smb-pass-input');
+  if (passInput) {
+    passInput.value = '';
+    passInput.type = 'password';
+  }
+
+  modal.classList.remove('hidden');
+  if (passInput) passInput.focus();
+}
+
+function closeSmbPasswordModal() {
+  const modal = document.getElementById('smb-password-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function toggleSmbPassVisibility() {
+  const passInput = document.getElementById('smb-pass-input');
+  if (!passInput) return;
+  passInput.type = passInput.type === 'password' ? 'text' : 'password';
+}
+
+function copySmbPath(btn) {
+  const pathEl = document.getElementById('smb-network-path');
+  if (!pathEl) return;
+  copyTextToClipboard(pathEl.innerText || pathEl.textContent, btn);
+}
+
+async function saveSmbPassword() {
+  const userInput = document.getElementById('smb-user-input');
+  const passInput = document.getElementById('smb-pass-input');
+  const btn = document.getElementById('btn-save-smb-pass');
+
+  const username = (userInput && userInput.value.trim()) || 'ferretti';
+  const password = passInput ? passInput.value : '';
+
+  if (!password || password.length < 4) {
+    showAlert('La password deve contenere almeno 4 caratteri', 'warning');
+    if (passInput) passInput.focus();
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Salvataggio...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/modules/shares/set-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(data.message || 'Password Samba impostata con successo!', 'success');
+      closeSmbPasswordModal();
+    } else {
+      showAlert('Errore impostazione password: ' + data.message, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `💾 <span>${t('btn_save_smb_pass', 'Salva Password Samba')}</span>`;
     }
   }
 }
