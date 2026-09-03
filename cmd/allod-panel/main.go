@@ -681,7 +681,12 @@ func main() {
 		report.WriteString("\n[go build -o allod-panel ./cmd/allod-panel]\n")
 		report.WriteString(string(out2))
 
-		if err1 != nil || err2 != nil {
+		cmd3 := exec.Command("go", "build", "-o", "allod-helperd", "./cmd/allod-helperd")
+		out3, err3 := cmd3.CombinedOutput()
+		report.WriteString("\n[go build -o allod-helperd ./cmd/allod-helperd]\n")
+		report.WriteString(string(out3))
+
+		if err1 != nil || err2 != nil || err3 != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{
 				Status:  "error",
@@ -691,7 +696,7 @@ func main() {
 			return
 		}
 
-		report.WriteString("\n✓ Compilazione completata con successo per 'allod' e 'allod-panel'.")
+		report.WriteString("\n✓ Compilazione completata con successo per 'allod', 'allod-panel' e 'allod-helperd'.")
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
 			Message: "Compilazione Go completata con successo",
@@ -737,6 +742,10 @@ func main() {
 		// Build allod cli too
 		buildCliOut, _ := exec.Command("go", "build", "-o", "allod", "./cmd/allod").CombinedOutput()
 		logReport.WriteString("[go build -o allod ./cmd/allod]\n" + string(buildCliOut) + "\n")
+
+		// Build allod-helperd too
+		buildHelperOut, _ := exec.Command("go", "build", "-o", "allod-helperd", "./cmd/allod-helperd").CombinedOutput()
+		logReport.WriteString("[go build -o allod-helperd ./cmd/allod-helperd]\n" + string(buildHelperOut) + "\n")
 
 		logReport.WriteString("✓ Binari aggiornati. Riavvio processo in background...\n")
 

@@ -4,9 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/home/%u/allod/allod-helperd
-WorkingDirectory=/home/%u/allod
-Restart=on-failure
+ExecStart=/usr/local/bin/allod-helperd
+Restart=always
 RestartSec=5s
 
 [Install]

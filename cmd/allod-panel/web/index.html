@@ -75,7 +75,7 @@
           <button class="btn btn-secondary" onclick="refreshData()">
             <span class="icon">🔄</span> <span data-i18n="btn_refresh">Refresh</span>
           </button>
-          <div class="helper-status" id="helper-status-pill">
+          <div class="helper-status" id="helper-status-pill" onclick="openHelperModal()" style="cursor:pointer;" title="Click to view Root Helper status and restart instructions">
             <span class="status-indicator"></span> <span data-i18n="helper_connected">Root Helper: Connected</span>
           </div>
         </div>
@@ -387,6 +387,45 @@ systemctl --user enable --now allod-panel</pre>
           </div>
         </div>
 
+        <!-- Card 2b: Root Helper Daemon (allod-helperd) Maintenance -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <h3 style="margin:0; font-size:15px; display:flex; align-items:center; gap:8px;">
+              <span>🛡️</span> <span data-i18n="helper_maintenance_title">Root Helper Daemon (allod-helperd)</span>
+            </h3>
+            <div id="settings-helper-status-pill" class="helper-status" onclick="openHelperModal()" style="cursor:pointer;">
+              <span class="status-indicator"></span> <span id="settings-helper-status-text">Root Helper</span>
+            </div>
+          </div>
+          <p class="text-muted" style="font-size:12.5px; margin-top:8px; margin-bottom:14px; line-height:1.4;" data-i18n="helper_maintenance_desc">
+            Micro-demone con privilegi root (whitelist a 9 azioni) per la formattazione Btrfs RAID 1, controlli SMART e configurazione Samba.
+          </p>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:12px;">
+            <div style="background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:6px; padding:10px 12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:11px; font-weight:600; color:var(--primary);" data-i18n="helper_service_box_title">⚙️ Registra come Servizio Systemd (Boot 24/7):</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyHelperInstallCli(this)" style="padding:2px 8px; font-size:10.5px;">📋 <span data-i18n="btn_copy">Copia</span></button>
+              </div>
+              <pre id="settings-helper-install-code" style="margin:0; font-family:'JetBrains Mono',monospace; font-size:11px; color:#38bdf8; overflow-x:auto; line-height:1.4;">sudo cp ~/allod/allod-helperd /usr/local/bin/
+sudo cp ~/allod/configs/allod-helperd.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now allod-helperd</pre>
+            </div>
+            <div style="background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:6px; padding:10px 12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:11px; font-weight:600; color:var(--success);" data-i18n="helper_restart_box_title">🔄 Riavvio Rapido Servizio:</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyTextToClipboard('sudo systemctl restart allod-helperd', this)" style="padding:2px 8px; font-size:10.5px;">📋 <span data-i18n="btn_copy">Copia</span></button>
+              </div>
+              <pre style="margin:0 0 10px 0; font-family:'JetBrains Mono',monospace; font-size:11px; color:#10b981; overflow-x:auto; line-height:1.4;">sudo systemctl restart allod-helperd</pre>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:11px; font-weight:600; color:var(--text-muted);" data-i18n="helper_manual_box_title">⚡ Esecuzione Rapida Manuale:</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyTextToClipboard('sudo ~/allod/allod-helperd', this)" style="padding:2px 8px; font-size:10.5px;">📋 <span data-i18n="btn_copy">Copia</span></button>
+              </div>
+              <pre style="margin:0; font-family:'JetBrains Mono',monospace; font-size:11px; color:#e2e8f0; overflow-x:auto; line-height:1.4;">sudo ~/allod/allod-helperd</pre>
+            </div>
+          </div>
+        </div>
+
         <!-- Card 3: Terminal Console Output Box -->
         <div class="card" style="margin-top:16px;">
           <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
@@ -412,6 +451,72 @@ Ready for operations. Click any maintenance action above to see real-time output
       </p>
       <div class="progress-bar-bg" style="height:6px; margin:0 auto; width:80%;">
         <div id="self-update-progress" class="progress-bar-fill" style="width:100%; background:var(--primary);"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROOT HELPER DAEMON MODAL -->
+  <div id="helper-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:620px;">
+      <div class="modal-header">
+        <h3 style="display:flex; align-items:center; gap:8px;">
+          <span>🛡️</span> <span data-i18n="helper_modal_title">Root Helper Daemon (allod-helperd)</span>
+        </h3>
+        <button class="modal-close-btn" onclick="closeHelperModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="helper-modal-status-banner" class="alert-banner alert-warning" style="margin-bottom:14px;">
+          <strong id="helper-modal-status-text">Stato: Verifica in corso...</strong>
+        </div>
+
+        <p style="font-size:12.5px; line-height:1.5; color:var(--text-muted); margin-bottom:16px;" data-i18n="helper_modal_desc">
+          <code>allod-helperd</code> è il micro-demone privileged di Allod (eseguito come root con whitelist chiusa a 9 azioni). Permette al pannello (100% rootless) di gestire in sicurezza dischi fisici, formattazione Btrfs RAID 1, snapshot e reload Samba.
+        </p>
+
+        <div style="margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong style="font-size:12px; color:var(--primary);" data-i18n="helper_service_box_title">
+              ⚙️ Avvia o Registra come Servizio Systemd Permanente (Consigliato):
+            </strong>
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyHelperInstallCli(this)" style="padding:2px 8px; font-size:11px;">
+              📋 <span data-i18n="btn_copy">Copia</span>
+            </button>
+          </div>
+          <pre id="helper-modal-install-code" style="margin:0; background:#090d16; border:1px solid var(--card-border); border-radius:6px; padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; overflow-x:auto; line-height:1.4;">sudo cp ~/allod/allod-helperd /usr/local/bin/
+sudo cp ~/allod/configs/allod-helperd.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now allod-helperd</pre>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong style="font-size:12px; color:var(--success);" data-i18n="helper_restart_box_title">
+              🔄 Riavvio Rapido (se già installato):
+            </strong>
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyTextToClipboard('sudo systemctl restart allod-helperd', this)" style="padding:2px 8px; font-size:11px;">
+              📋 <span data-i18n="btn_copy">Copia</span>
+            </button>
+          </div>
+          <pre style="margin:0; background:#090d16; border:1px solid var(--card-border); border-radius:6px; padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#10b981; overflow-x:auto; line-height:1.4;">sudo systemctl restart allod-helperd</pre>
+        </div>
+
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong style="font-size:12px; color:var(--text-muted);" data-i18n="helper_manual_box_title">
+              ⚡ Esecuzione Rapida Manuale (Foreground / Test):
+            </strong>
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyTextToClipboard('sudo ~/allod/allod-helperd', this)" style="padding:2px 8px; font-size:11px;">
+              📋 <span data-i18n="btn_copy">Copia</span>
+            </button>
+          </div>
+          <pre style="margin:0; background:#090d16; border:1px solid var(--card-border); border-radius:6px; padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#e2e8f0; overflow-x:auto; line-height:1.4;">sudo ~/allod/allod-helperd</pre>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn btn-primary" onclick="recheckHelperConnection(this)">
+          🔄 <span data-i18n="btn_recheck">Ricontrolla Connessione</span>
+        </button>
+        <button class="btn btn-secondary" onclick="closeHelperModal()" data-i18n="btn_close">Chiudi</button>
       </div>
     </div>
   </div>
