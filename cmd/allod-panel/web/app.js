@@ -2233,7 +2233,7 @@ async function saveSmbPassword() {
   const passInput = document.getElementById('smb-pass-input');
   const btn = document.getElementById('btn-save-smb-pass');
 
-  const username = (userInput && userInput.value.trim()) || 'ferretti';
+  const username = (userInput && userInput.value.trim()) || ((currentStatus && currentStatus.user) ? currentStatus.user : 'user');
   const password = passInput ? passInput.value : '';
 
   if (!password || password.length < 4) {
