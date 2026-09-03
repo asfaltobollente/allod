@@ -174,7 +174,7 @@ func (s *Server) processRequest(req Request) Response {
 			enabled = en
 		}
 
-		source := "/mnt/allod-storage/photos/upload"
+		source := "/mnt/allod-storage/photos/upload/library"
 		target := "/mnt/allod-storage/shares/photos"
 		plan := []string{
 			fmt.Sprintf("bind mount %s to %s (enabled=%v)", source, target, enabled),
@@ -185,11 +185,12 @@ func (s *Server) processRequest(req Request) Response {
 				_ = os.MkdirAll(source, 0775)
 				_ = os.MkdirAll(target, 0775)
 				mounts, _ := os.ReadFile("/proc/mounts")
-				if !strings.Contains(string(mounts), target) {
-					cmd := exec.Command("mount", "--bind", source, target)
-					if out, err := cmd.CombinedOutput(); err != nil {
-						return Response{Ok: false, Error: fmt.Sprintf("mount --bind failed: %v (%s)", err, strings.TrimSpace(string(out)))}
-					}
+				if strings.Contains(string(mounts), target) {
+					_ = exec.Command("umount", target).Run()
+				}
+				cmd := exec.Command("mount", "--bind", source, target)
+				if out, err := cmd.CombinedOutput(); err != nil {
+					return Response{Ok: false, Error: fmt.Sprintf("mount --bind failed: %v (%s)", err, strings.TrimSpace(string(out)))}
 				}
 				_ = exec.Command("chmod", "-R", "0775", target).Run()
 			} else {

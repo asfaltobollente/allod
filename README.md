@@ -161,6 +161,43 @@ Allod automatically inspects your physical hardware and adapts to 3 deployment t
 
 ---
 
+## 🧩 Modules, Levels & Safe Runtime Transitions
+
+Allod abandons primitive binary switches in favor of **hardware-aware resource levels**. This ensures you can run powerful modern applications (like Immich or Jellyfin) tailored to your hardware without crashing your server due to Out-Of-Memory (OOM) events.
+
+### 📊 Level Comparison & System Requirements
+
+| Module | Level | RAM Allocated | Minimum System Specs | Features & Capabilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **`photos`** *(Immich)* | **`standard`** | **1.5 GB** | 8 GB System RAM, SSE4.2 | Full iOS/Android auto-backup, chronological timeline, shared albums, GPS map, EXIF metadata. Ultra-lightweight and battery-friendly. |
+| **`photos`** *(Immich)* | **`full`** | **4.0 GB** | 16 GB System RAM, AVX2 | Everything in `standard` + **Facial Recognition AI** (clusters people automatically) and **Semantic AI Search** (e.g., search *"dog on a sunny beach"* without manual tags). |
+| **`shares`** *(Samba)* | **`basic`** | **50 MB** | 4 GB System RAM | Unified network share `\\<SERVER-IP>\shares` for Windows, Mac, and Linux with rapid credential setup from the GUI. |
+| **`shares`** *(Samba)* | **`custom`** | **100 MB** | 4 GB System RAM | Granular multi-share permissions and independent user/group Access Control Lists (ACLs). |
+| **`media`** *(Jellyfin)* | **`basic`** | **500 MB** | 4 GB System RAM | 4K/1080p direct streaming of movies, TV shows, and music to Smart TVs, phones, and web browsers. |
+| **`media`** *(Jellyfin)* | **`full`** | **1000 MB** | 8 GB System RAM, GPU | Everything in `basic` + **Hardware Transcoding** via Intel QuickSync / AMD VA-API (`/dev/dri/renderD128`). |
+| **`cloud`** *(Nextcloud)* | **`basic`** | **1.0 GB** | 8 GB System RAM | Files sync, mobile file explorer, WebDAV, notes, and calendar. |
+
+### 🛡️ What Happens When You Change a Level on an Active Service?
+
+1. **Zero Data Loss (`safe` transitions)**:  
+   Your personal photos, databases (PostgreSQL, SQLite), video collections, and configuration files reside on the persistent Btrfs RAID 1 pool (`/mnt/allod-storage`), **never inside ephemeral containers**. Changing a level never touches your stored files.
+2. **Atomic Quadlet Update**:  
+   When you change a level, Allod's preflight engine validates memory and hardware requirements, updates `config.yaml`, regenerates the systemd Quadlet container files with updated `MemoryMax` limits and flags, and executes a clean `systemctl --user daemon-reload`.
+3. **Graceful Restart (~5 seconds)**:  
+   The containers reload cleanly with the new resource allocation. When online, all your existing accounts, timeline, and libraries are exactly as you left them.
+4. **Production Lock Protection**:  
+   To prevent accidental level switches on live production databases, active cards are automatically marked with **`🟢 PROTECTED (In Production)`**. The level dropdown is disabled until you intentionally click **"Unlock"**.
+
+### 📁 Clean Storage Isolation (Media vs Config)
+
+Allod enforces strict boundaries between internal service databases and user-accessible files:
+* **Internal System Data (`/config`, `db/`)**: Hidden from the network, preventing accidental deletion or corruption of SQLite/Postgres databases and transcode caches.
+* **User Media Libraries (`/media`, `shares/`)**: Cleanly linked to Samba LAN shares:
+  * Drop video files into `\\allod\shares\media\movies` or `tv` from Windows Explorer for instant Jellyfin streaming.
+  * Browse original photos directly in `\\allod\shares\photos` with zero clutter from machine-learning thumbnail caches.
+
+---
+
 ## ⚡ Prerequisites & Requirements
 
 * **Operating System**: Ubuntu Server 24.04 LTS (recommended) or any Debian 12+ system (x86-64 or ARM64 / Raspberry Pi 5).

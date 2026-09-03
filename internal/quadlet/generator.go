@@ -94,7 +94,8 @@ func EnsureStorageDirectories(modID string) {
 		}
 	case "media":
 		dirs = []string{
-			filepath.Join(baseDir, "media", "data"),
+			filepath.Join(baseDir, "shares", "media", "movies"),
+			filepath.Join(baseDir, "shares", "media", "tv"),
 			filepath.Join(baseDir, "media", "config"),
 		}
 	default:
@@ -213,13 +214,18 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString(fmt.Sprintf("Volume=%s/backup/vault:/data:Z\n", baseDir))
 	case "media":
 		sb.WriteString(fmt.Sprintf("Volume=%s/media/config:/config:Z\n", baseDir))
-		sb.WriteString(fmt.Sprintf("Volume=%s/media/data:/media:Z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares/media:/media:Z\n", baseDir))
 	default:
 		sb.WriteString(fmt.Sprintf("Volume=%s/%s:/data:Z\n", baseDir, m.ID))
 	}
 
 	if m.Privileges.Userns == "host" {
 		sb.WriteString("UserNS=host\n")
+	}
+	for _, dev := range m.Privileges.Devices {
+		if _, err := os.Stat(dev); err == nil {
+			sb.WriteString(fmt.Sprintf("AddDevice=%s\n", dev))
+		}
 	}
 	for _, cap := range m.Privileges.Caps {
 		sb.WriteString(fmt.Sprintf("AddCapability=%s\n", cap))
