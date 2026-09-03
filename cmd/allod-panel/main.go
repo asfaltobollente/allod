@@ -1252,28 +1252,57 @@ WantedBy=default.target
 		w.Header().Set("Content-Type", "application/json")
 
 		mountPoint := "/mnt/allod-storage"
-		usageOut, err := exec.Command("btrfs", "filesystem", "usage", mountPoint).CombinedOutput()
-		if err != nil {
-			usageOut = []byte(fmt.Sprintf("btrfs filesystem usage error: %v\nOutput: %s", err, string(usageOut)))
+		var usageStr, statsStr, dfStr string
+		isMounted := true
+
+		// Try privileged helper first for 100% complete root device stats and detailed chunks
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		if resp, err := client.Execute("storage.diagnostics", map[string]interface{}{"mount": mountPoint}, false); err == nil && resp.Ok && resp.Output != "" {
+			var diagData struct {
+				Usage string `json:"usage"`
+				Stats string `json:"stats"`
+				Df    string `json:"df"`
+			}
+			if err := json.Unmarshal([]byte(resp.Output), &diagData); err == nil {
+				usageStr = diagData.Usage
+				statsStr = diagData.Stats
+				dfStr = diagData.Df
+			}
 		}
 
-		statsOut, err := exec.Command("btrfs", "device", "stats", mountPoint).CombinedOutput()
-		if err != nil {
-			statsOut = []byte(fmt.Sprintf("btrfs device stats error: %v\nOutput: %s", err, string(statsOut)))
+		// Fallback to unprivileged exec if helper didn't provide results
+		if usageStr == "" {
+			usageOut, err := exec.Command("btrfs", "filesystem", "usage", mountPoint).CombinedOutput()
+			if err != nil {
+				usageOut = []byte(fmt.Sprintf("btrfs filesystem usage error: %v\nOutput: %s", err, string(usageOut)))
+			}
+			usageStr = string(usageOut)
+			isMounted = (err == nil)
 		}
 
-		dfOut, err := exec.Command("btrfs", "filesystem", "df", mountPoint).CombinedOutput()
-		if err != nil {
-			dfOut = []byte(fmt.Sprintf("btrfs filesystem df error: %v\nOutput: %s", err, string(dfOut)))
+		if statsStr == "" {
+			statsOut, err := exec.Command("btrfs", "device", "stats", mountPoint).CombinedOutput()
+			if err != nil {
+				statsOut = []byte(fmt.Sprintf("btrfs device stats error: %v\nOutput: %s", err, string(statsOut)))
+			}
+			statsStr = string(statsOut)
+		}
+
+		if dfStr == "" {
+			dfOut, err := exec.Command("btrfs", "filesystem", "df", mountPoint).CombinedOutput()
+			if err != nil {
+				dfOut = []byte(fmt.Sprintf("btrfs filesystem df error: %v\nOutput: %s", err, string(dfOut)))
+			}
+			dfStr = string(dfOut)
 		}
 
 		data := map[string]interface{}{
-			"mount_point":  mountPoint,
-			"usage":        string(usageOut),
-			"stats":        string(statsOut),
-			"df":           string(dfOut),
-			"is_mounted":   err == nil,
-			"timestamp":    time.Now().Format("2006-01-02 15:04:05"),
+			"mount_point": mountPoint,
+			"usage":       usageStr,
+			"stats":       statsStr,
+			"df":          dfStr,
+			"is_mounted":  isMounted,
+			"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})

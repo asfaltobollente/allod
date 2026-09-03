@@ -29,6 +29,7 @@ type Response struct {
 	Ok      bool     `json:"ok"`
 	Applied bool     `json:"applied"`
 	Plan    []string `json:"plan,omitempty"`
+	Output  string   `json:"output,omitempty"`
 	Error   string   `json:"error,omitempty"`
 }
 
@@ -371,6 +372,37 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
+
+	case "storage.diagnostics":
+		mountPoint, _ := req.Args["mount"].(string)
+		if mountPoint == "" {
+			mountPoint = "/mnt/allod-storage"
+		}
+
+		usageOut, _ := exec.Command("btrfs", "filesystem", "usage", mountPoint).CombinedOutput()
+		statsOut, _ := exec.Command("btrfs", "device", "stats", mountPoint).CombinedOutput()
+		dfOut, _ := exec.Command("btrfs", "filesystem", "df", mountPoint).CombinedOutput()
+
+		type diagResult struct {
+			Usage string `json:"usage"`
+			Stats string `json:"stats"`
+			Df    string `json:"df"`
+		}
+		raw, _ := json.Marshal(diagResult{
+			Usage: string(usageOut),
+			Stats: string(statsOut),
+			Df:    string(dfOut),
+		})
+
+		return Response{
+			Ok:      true,
+			Applied: true,
+			Output:  string(raw),
+			Plan: []string{
+				fmt.Sprintf("btrfs filesystem usage %s", mountPoint),
+				fmt.Sprintf("btrfs device stats %s", mountPoint),
+			},
+		}
 
 	default:
 		// Rifiuta tassativamente tutto ciò che non è nella lista chiusa
