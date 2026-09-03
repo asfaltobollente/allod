@@ -81,6 +81,16 @@ const i18n = {
     settings_console_title: "💻 Live Maintenance Console Output",
     settings_console_clear: "Clear Console",
 
+    // First Setup & Onboarding
+    first_setup_title: "Welcome to Allod — 24/7 Boot Persistence Setup",
+    first_setup_sub: "Ensure all sovereign services and Podman containers remain active after server reboots",
+    first_setup_btn_1click: "Complete Boot Setup (1-Click)",
+    first_setup_desc: "Allod and Podman operate in rootless mode for maximum security. On Ubuntu, user containers (Immich, Nextcloud, Samba) and the dashboard require systemd linger and service registration to start automatically at power-on without requiring an active SSH session.",
+    first_setup_check_linger: "Systemd User Linger (Podman 24/7)",
+    first_setup_check_panel: "allod-panel.service (Web UI at Boot)",
+    first_setup_cli_title: "💻 Or run manually via CLI on your server:",
+    first_setup_completed: "✓ Boot persistence configured! Allod is 100% ready for 24/7 unattended operation.",
+
     // Actions & Badges
     status_protected: "🟢 PROTECTED (In Production)",
     status_running: "🟢 RUNNING",
@@ -215,6 +225,16 @@ const i18n = {
     settings_start_active_note: "Avvia solo i moduli configurati con un livello attivo (i moduli con livello 'off' restano spenti).",
     settings_console_title: "💻 Console di Output Esecuzione Comandi",
     settings_console_clear: "Pulisci Console",
+
+    // First Setup & Onboarding
+    first_setup_title: "Benvenuto su Allod — Configurazione Iniziale Boot 24/7",
+    first_setup_sub: "Garantisci la persistenza di tutti i servizi e dei container Podman anche dopo il riavvio del server",
+    first_setup_btn_1click: "Completa Configurazione Boot (1-Click)",
+    first_setup_desc: "Allod e Podman operano in modalità rootless per la massima sicurezza. Su Ubuntu, i container utente (Immich, Nextcloud, Samba) e la dashboard necessitano dell'abilitazione del linger e del servizio systemd per ripartire in autonomia all'accensione della macchina senza bisogno di login SSH.",
+    first_setup_check_linger: "Systemd User Linger (Container 24/7)",
+    first_setup_check_panel: "Servizio allod-panel (Web UI al Boot)",
+    first_setup_cli_title: "💻 Oppure esegui manualmente via CLI sul server:",
+    first_setup_completed: "✓ Persistenza al boot configurata! Allod è pronto al 100% per operare 24/7 senza interventi.",
 
     // Actions & Badges
     status_protected: "🟢 PROTETTO (In Produzione)",

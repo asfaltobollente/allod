@@ -89,6 +89,56 @@
 
       <!-- TAB 1: OVERVIEW -->
       <section id="tab-overview" class="tab-pane active">
+        <!-- FIRST SETUP & BOOT PERSISTENCE GUIDE (Auto-hides once all_ready is true) -->
+        <div id="first-setup-card" class="card hidden" style="border: 2px solid var(--warning); background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(15, 23, 42, 0.95)); margin-bottom: 24px; box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15);">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:24px;">🚀</span>
+              <div>
+                <h3 style="margin:0; font-size:16px; color:#f59e0b;" data-i18n="first_setup_title">Benvenuto su Allod — Configurazione Iniziale Boot 24/7</h3>
+                <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);" data-i18n="first_setup_sub">Garantisci la persistenza di tutti i servizi e dei container Podman anche dopo il riavvio del server</p>
+              </div>
+            </div>
+            <button class="btn btn-primary" id="btn-first-setup-action" onclick="runFirstSetupAuto()" style="font-weight:700; padding:8px 16px;">
+              ⚡ <span data-i18n="first_setup_btn_1click">Completa Configurazione Boot (1-Click)</span>
+            </button>
+          </div>
+
+          <div style="margin-top:14px; font-size:12.5px; line-height:1.5; color:var(--text);">
+            <p data-i18n="first_setup_desc" style="margin-bottom:12px;">
+              Allod e Podman operano in modalità rootless per la massima sicurezza. Su Ubuntu, i container utente (Immich, Nextcloud, Samba) e la dashboard necessitano dell'abilitazione del linger e del servizio systemd per ripartire in autonomia all'accensione della macchina senza bisogno di login SSH.
+            </p>
+
+            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:14px;">
+              <div id="setup-check-linger" style="display:flex; align-items:center; gap:8px; background:rgba(30,41,59,0.7); padding:6px 12px; border-radius:6px; font-size:12px;">
+                <span id="setup-icon-linger">⏳</span>
+                <span data-i18n="first_setup_check_linger">Systemd User Linger (Container 24/7)</span>
+              </div>
+              <div id="setup-check-panel" style="display:flex; align-items:center; gap:8px; background:rgba(30,41,59,0.7); padding:6px 12px; border-radius:6px; font-size:12px;">
+                <span id="setup-icon-panel">⏳</span>
+                <span data-i18n="first_setup_check_panel">Servizio allod-panel (Web UI al Boot)</span>
+              </div>
+            </div>
+
+            <!-- Manual CLI Commands with Quick Copy Button -->
+            <div style="background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:6px; padding:10px 14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;" data-i18n="first_setup_cli_title">
+                  💻 Oppure esegui manualmente via CLI sul server:
+                </span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyFirstSetupCli(this)" style="padding:2px 10px; font-size:11px;">
+                  📋 <span data-i18n="btn_copy">Copia Comandi</span>
+                </button>
+              </div>
+              <pre id="first-setup-cli-code" style="margin:0; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; overflow-x:auto; line-height:1.4;">loginctl enable-linger $USER
+mkdir -p ~/.config/systemd/user
+cp ~/allod/configs/allod-panel.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now allod-panel</pre>
+            </div>
+          </div>
+        </div>
+
         <div class="metrics-grid">
           <div class="card metric-card">
             <div class="metric-header">

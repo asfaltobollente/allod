@@ -60,6 +60,7 @@ async function refreshData() {
     renderModules();
     renderRing();
     renderResilience();
+    checkSetupStatus();
   } catch (err) {
     showAlert('Errore di comunicazione con il backend Allod: ' + err.message, 'danger');
   }
@@ -1908,4 +1909,100 @@ async function runEnableAutostart() {
       btn.innerHTML = `<span class="icon">📌</span> <span data-i18n="btn_enable_autostart">${t('btn_enable_autostart')}</span>`;
     }
   }
+}
+
+// ==========================================
+// FIRST SETUP & BOOT PERSISTENCE LOGIC
+// ==========================================
+
+async function checkSetupStatus() {
+  try {
+    const res = await fetch('/api/system/setup-status');
+    const json = await res.json();
+    if (json.status !== 'ok' || !json.data) return;
+    const d = json.data;
+    const card = document.getElementById('first-setup-card');
+    if (!card) return;
+
+    if (d.all_ready) {
+      card.classList.add('hidden');
+      return;
+    }
+
+    card.classList.remove('hidden');
+
+    const iconLinger = document.getElementById('setup-icon-linger');
+    if (iconLinger) {
+      iconLinger.textContent = d.linger_enabled ? '✅' : '❌';
+      iconLinger.parentElement.style.borderColor = d.linger_enabled ? 'var(--success)' : 'var(--danger)';
+    }
+
+    const iconPanel = document.getElementById('setup-icon-panel');
+    if (iconPanel) {
+      iconPanel.textContent = d.panel_enabled ? '✅' : '❌';
+      iconPanel.parentElement.style.borderColor = d.panel_enabled ? 'var(--success)' : 'var(--danger)';
+    }
+  } catch (err) {
+    console.warn('Could not check setup status:', err);
+  }
+}
+
+async function runFirstSetupAuto() {
+  const btn = document.getElementById('btn-first-setup-action');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Configurazione in corso...</span>';
+  }
+  try {
+    const res = await fetch('/api/system/enable-autostart', { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(t('first_setup_completed'), 'success');
+
+      const iconLinger = document.getElementById('setup-icon-linger');
+      if (iconLinger) {
+        iconLinger.textContent = '✅';
+        iconLinger.parentElement.style.borderColor = 'var(--success)';
+      }
+      const iconPanel = document.getElementById('setup-icon-panel');
+      if (iconPanel) {
+        iconPanel.textContent = '✅';
+        iconPanel.parentElement.style.borderColor = 'var(--success)';
+      }
+      if (btn) {
+        btn.innerHTML = '<span>✓ Configurato!</span>';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-success');
+      }
+
+      setTimeout(() => {
+        const card = document.getElementById('first-setup-card');
+        if (card) {
+          card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+          card.style.opacity = '0';
+          card.style.transform = 'translateY(-10px)';
+          setTimeout(() => card.classList.add('hidden'), 600);
+        }
+      }, 1500);
+    } else {
+      showAlert('Errore configurazione: ' + data.message, 'danger');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `⚡ <span>${t('first_setup_btn_1click')}</span>`;
+      }
+    }
+  } catch (err) {
+    showAlert('Errore di rete: ' + err.message, 'danger');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `⚡ <span>${t('first_setup_btn_1click')}</span>`;
+    }
+  }
+}
+
+function copyFirstSetupCli(btn) {
+  const el = document.getElementById('first-setup-cli-code');
+  if (!el) return;
+  const text = el.innerText || el.textContent;
+  copyTextToClipboard(text, btn);
 }
