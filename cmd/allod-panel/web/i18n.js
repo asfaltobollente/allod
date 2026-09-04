@@ -120,6 +120,26 @@ const i18n = {
     label_smb_credentials: "Windows / Mac Network Credentials",
     desc_smb_credentials: "Set or change the Samba password to connect PCs and Macs to your shares.",
 
+    // Network & Remote Access
+    network_module_title: "Remote Network & Mesh (Headscale)",
+    network_config_btn: "⚙️ Setup Cloudflare Tunnel",
+    network_pairing_btn: "📱 Add Smartphone / PC",
+    network_mesh_ip_label: "Private Mesh IP:",
+    network_modal_title: "Headscale + Cloudflare Shield Setup",
+    network_modal_desc: "Configure your Cloudflare Tunnel to expose your private Headscale control plane with zero open router ports.",
+    network_modal_domain_label: "Public Domain (e.g. vpn.yourdomain.com):",
+    network_modal_token_label: "Cloudflare Tunnel Token:",
+    network_modal_save: "Save & Restart Services",
+    network_pairing_title: "Pair Device to Mesh Network",
+    network_pairing_desc: "Use this one-time key to connect your smartphone or PC to your private WireGuard mesh using the free official Tailscale app.",
+    network_pairing_server_label: "Headscale Server URL:",
+    network_pairing_key_label: "Pre-Auth Key (valid for 1 hour):",
+    network_pairing_steps_title: "How to connect from your smartphone:",
+    network_step1: "1. Install the official Tailscale app from Google Play or App Store.",
+    network_step2: "2. Open Tailscale, tap the three dots in top right ➔ 'Change server'.",
+    network_step3: "3. Enter your Headscale server URL and tap Connect.",
+    network_step4: "4. Paste your Pre-Auth Key: you are connected in direct WireGuard P2P!",
+
     // Actions & Badges
     status_protected: "🟢 PROTECTED (In Production)",
     status_running: "🟢 RUNNING",
@@ -293,6 +313,26 @@ const i18n = {
     btn_smb_password: "Imposta Password SMB",
     label_smb_credentials: "Credenziali di Rete Windows / Mac",
     desc_smb_credentials: "Imposta o modifica la password Samba per connettere PC e Mac alle cartelle condivise.",
+
+    // Network & Remote Access
+    network_module_title: "Rete Remota & Mesh (Headscale)",
+    network_config_btn: "⚙️ Configura Tunnel Cloudflare",
+    network_pairing_btn: "📱 Aggiungi Smartphone / PC",
+    network_mesh_ip_label: "IP Mesh Privato:",
+    network_modal_title: "Configurazione Headscale + Cloudflare Shield",
+    network_modal_desc: "Configura il tunnel Cloudflare per esporre il tuo coordinatore Headscale privato con zero porte aperte sul router.",
+    network_modal_domain_label: "Dominio Pubblico Tunnel (es. vpn.tuodominio.it):",
+    network_modal_token_label: "Token Cloudflare Tunnel:",
+    network_modal_save: "Salva e Riavvia Servizi",
+    network_pairing_title: "Associa Dispositivo alla Rete Mesh",
+    network_pairing_desc: "Usa questa chiave monouso per collegare il tuo smartphone o PC alla rete privata WireGuard con l'app ufficiale gratuita Tailscale.",
+    network_pairing_server_label: "URL Server Headscale:",
+    network_pairing_key_label: "Chiave Pre-Auth (valida per 1 ora):",
+    network_pairing_steps_title: "Come collegarsi dallo smartphone:",
+    network_step1: "1. Scarica l'app ufficiale Tailscale da Google Play o App Store.",
+    network_step2: "2. Apri Tailscale, tocca i tre puntini in alto a destra ➔ 'Change server' (o Cambia server).",
+    network_step3: "3. Incolla l'URL del server Headscale e premi Connetti.",
+    network_step4: "4. Incolla la Chiave Pre-Auth: il tuo dispositivo è connesso in P2P WireGuard diretto!",
 
     // Actions & Badges
     status_protected: "🟢 PROTETTO (In Produzione)",

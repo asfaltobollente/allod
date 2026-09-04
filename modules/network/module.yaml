@@ -1,0 +1,64 @@
+id: network
+tier: recommended
+provides: [vpn-mesh, remote-access]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  hybrid:
+    ram_mb: 120
+    requires:
+      modules: [storage]
+    grants: [Accesso remoto sicuro WireGuard tramite Headscale + Cloudflare Shield, zero porte aperte]
+  wireguard:
+    ram_mb: 50
+    requires:
+      modules: [storage]
+    grants: [WireGuard nativo sovrano con QR code, zero cloud terze parti]
+  tailscale:
+    ram_mb: 60
+    requires:
+      modules: [storage]
+    grants: [Client Tailscale connesso a control plane cloud ufficiale]
+
+ports:
+  - n: 8085
+    scope: localhost
+    share: none
+
+privileges:
+  userns: rootless
+  devices: []
+  caps: [NET_ADMIN]
+
+images:
+  - ref: docker.io/headscale/headscale
+    tag: "0.25.1"
+    channel: patch
+  - ref: docker.io/cloudflare/cloudflared
+    tag: "latest"
+    channel: patch
+
+update:
+  requires_release_notes: false
+  breaks_mobile_apps: false
+
+transitions:
+  off -> hybrid: safe
+  hybrid -> off: safe
+  off -> wireguard: safe
+  wireguard -> off: safe
+  off -> tailscale: safe
+  tailscale -> off: safe
+  hybrid -> wireguard: safe
+  wireguard -> hybrid: safe
+
+datasets:
+  - id: network
+    includes: [config, db]
+
+help:
+  en: help/network.en.md
+  it: help/network.it.md

@@ -1349,7 +1349,163 @@ WantedBy=default.target
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
 	})
 
-	// 5e. API Speedtest (Ping, Download, Upload)
+	// 5e. API Network Status & Headscale Control
+	mux.HandleFunc("/api/network/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		cfgPath := getConfigPath()
+		cfg, _ := config.LoadConfig(cfgPath)
+
+		netLevel := "off"
+		if cfg != nil && cfg.Modules != nil {
+			if m, ok := cfg.Modules["network"]; ok {
+				netLevel = m.Level
+			}
+		}
+
+		baseDir := quadlet.StorageBaseDir()
+		tokenFile := filepath.Join(baseDir, "network", "cloudflared.token")
+		tokBytes, _ := os.ReadFile(tokenFile)
+		hasToken := len(strings.TrimSpace(string(tokBytes))) > 0
+
+		hsConfigFile := filepath.Join(baseDir, "network", "headscale", "config", "config.yaml")
+		domain := ""
+		if hsBytes, err := os.ReadFile(hsConfigFile); err == nil {
+			lines := strings.Split(string(hsBytes), "\n")
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "server_url:") {
+					parts := strings.SplitN(trimmed, ":", 2)
+					if len(parts) == 2 {
+						domain = strings.TrimSpace(parts[1])
+						domain = strings.Trim(domain, `"'`)
+					}
+					break
+				}
+			}
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		nodesList := []map[string]interface{}{}
+		meshIP := "100.64.0.1"
+		if resp, err := client.Execute("network.headscale_cli", map[string]interface{}{"command": "nodes_list"}, false); err == nil && resp.Ok && resp.Output != "" {
+			_ = json.Unmarshal([]byte(resp.Output), &nodesList)
+		}
+
+		data := map[string]interface{}{
+			"level":       netLevel,
+			"enabled":     netLevel != "off",
+			"has_token":   hasToken,
+			"server_url":  domain,
+			"mesh_ip":     meshIP,
+			"nodes_count": len(nodesList),
+			"nodes":       nodesList,
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
+	})
+
+	mux.HandleFunc("/api/network/configure", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Domain      string `json:"domain"`
+			TunnelToken string `json:"tunnel_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "JSON non valido"})
+			return
+		}
+
+		domain := strings.TrimSpace(req.Domain)
+		if domain != "" && !strings.HasPrefix(domain, "http://") && !strings.HasPrefix(domain, "https://") {
+			domain = "https://" + domain
+		}
+
+		baseDir := quadlet.StorageBaseDir()
+		netDir := filepath.Join(baseDir, "network")
+		_ = os.MkdirAll(netDir, 0777)
+
+		if req.TunnelToken != "" {
+			tokenFile := filepath.Join(netDir, "cloudflared.token")
+			_ = os.WriteFile(tokenFile, []byte(strings.TrimSpace(req.TunnelToken)), 0600)
+		}
+
+		if domain != "" {
+			hsConfigFile := filepath.Join(netDir, "headscale", "config", "config.yaml")
+			if hsBytes, err := os.ReadFile(hsConfigFile); err == nil {
+				content := string(hsBytes)
+				lines := strings.Split(content, "\n")
+				newLines := []string{}
+				for _, l := range lines {
+					if strings.HasPrefix(strings.TrimSpace(l), "server_url:") {
+						newLines = append(newLines, fmt.Sprintf("server_url: %s", domain))
+					} else {
+						newLines = append(newLines, l)
+					}
+				}
+				_ = os.WriteFile(hsConfigFile, []byte(strings.Join(newLines, "\n")), 0644)
+			}
+		}
+
+		// Riavvia micro-servizi se attivi
+		_ = exec.Command("systemctl", "--user", "restart", "network-headscale", "network-cloudflared").Run()
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Configurazione salvata"})
+	})
+
+	mux.HandleFunc("/api/network/preauth-key", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		resp, err := client.Execute("network.headscale_cli", map[string]interface{}{"command": "preauthkey_create"}, false)
+		if err != nil || !resp.Ok {
+			errMsg := "Errore esecuzione comando Headscale (verifica che il modulo network sia avviato)"
+			if resp.Error != "" {
+				errMsg = resp.Error
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
+
+		baseDir := quadlet.StorageBaseDir()
+		hsConfigFile := filepath.Join(baseDir, "network", "headscale", "config", "config.yaml")
+		domain := ""
+		if hsBytes, err := os.ReadFile(hsConfigFile); err == nil {
+			lines := strings.Split(string(hsBytes), "\n")
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "server_url:") {
+					parts := strings.SplitN(trimmed, ":", 2)
+					if len(parts) == 2 {
+						domain = strings.TrimSpace(parts[1])
+						domain = strings.Trim(domain, `"'`)
+					}
+					break
+				}
+			}
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data: map[string]interface{}{
+				"key":        strings.TrimSpace(resp.Output),
+				"server_url": domain,
+				"expires_in": "1 ora",
+			},
+		})
+	})
+
+	// 5f. API Speedtest (Ping, Download, Upload)
 	mux.HandleFunc("/api/speedtest/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok", "timestamp": time.Now().UnixMilli()})
