@@ -404,6 +404,39 @@ func (s *Server) processRequest(req Request) Response {
 			},
 		}
 
+	case "network.headscale_cli":
+		cmdType, _ := req.Args["command"].(string)
+		var args []string
+		switch cmdType {
+		case "preauthkey_create":
+			// Assicura che l'utente 'default' esista in Headscale
+			_ = exec.Command("podman", "exec", "network-headscale", "headscale", "users", "create", "default").Run()
+			args = []string{"exec", "network-headscale", "headscale", "preauthkeys", "create", "-u", "default", "--reusable=false", "--expiration", "1h"}
+		case "nodes_list":
+			args = []string{"exec", "network-headscale", "headscale", "nodes", "list", "--output", "json"}
+		case "users_list":
+			args = []string{"exec", "network-headscale", "headscale", "users", "list", "--output", "json"}
+		default:
+			return Response{Ok: false, Error: "Comando Headscale non consentito: " + cmdType}
+		}
+
+		plan := []string{fmt.Sprintf("podman %s", strings.Join(args, " "))}
+		if !req.Plan {
+			out, err := exec.Command("podman", args...).CombinedOutput()
+			if err != nil {
+				// Fallback su comando host se disponibile
+				if len(args) > 3 {
+					directArgs := args[3:]
+					if out2, err2 := exec.Command("headscale", directArgs...).CombinedOutput(); err2 == nil {
+						return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out2)), Plan: plan}
+					}
+				}
+				return Response{Ok: false, Error: fmt.Sprintf("Errore esecuzione Headscale: %v (%s)", err, strings.TrimSpace(string(out)))}
+			}
+			return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
 	default:
 		// Rifiuta tassativamente tutto ciò che non è nella lista chiusa
 		return Response{Ok: false, Error: "Action not allowed: " + req.Action}

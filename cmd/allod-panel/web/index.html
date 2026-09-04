@@ -713,6 +713,72 @@ sudo systemctl enable --now allod-helperd</pre>
     </div>
   </div>
 
+  <!-- NETWORK CONFIG MODAL (Headscale + Cloudflare Shield) -->
+  <div id="network-config-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:580px;">
+      <div class="modal-header">
+        <h3 data-i18n="network_modal_title">🛡️ Headscale + Cloudflare Shield Setup</h3>
+        <button class="modal-close-btn" onclick="closeNetworkConfigModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;" data-i18n="network_modal_desc">
+          Configure your Cloudflare Tunnel to expose your private Headscale control plane with zero open router ports.
+        </p>
+        <div class="form-group mb-3">
+          <label for="network-domain-input" style="font-size:12px; font-weight:600;" data-i18n="network_modal_domain_label">Public Domain (e.g. vpn.yourdomain.com):</label>
+          <input type="text" id="network-domain-input" class="form-control" placeholder="https://vpn.example.com" />
+        </div>
+        <div class="form-group mb-3">
+          <label for="network-token-input" style="font-size:12px; font-weight:600;" data-i18n="network_modal_token_label">Cloudflare Tunnel Token:</label>
+          <textarea id="network-token-input" class="form-control" rows="3" placeholder="eyJhIjoi..." style="font-family:monospace; font-size:11.5px;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeNetworkConfigModal()" data-i18n="sweeper_close">Close</button>
+        <button class="btn btn-primary" id="network-save-btn" onclick="saveNetworkConfig()" style="margin-left:8px;" data-i18n="network_modal_save">
+          Save & Restart Services
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NETWORK PAIRING MODAL (Add Smartphone / PC with Pre-Auth Key) -->
+  <div id="network-pairing-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:620px;">
+      <div class="modal-header">
+        <h3 data-i18n="network_pairing_title">📱 Pair Device to Mesh Network</h3>
+        <button class="modal-close-btn" onclick="closeNetworkPairingModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;" data-i18n="network_pairing_desc">
+          Use this one-time key to connect your smartphone or PC to your private WireGuard mesh using the free official Tailscale app.
+        </p>
+
+        <div style="background:#0f172a; border-radius:8px; padding:14px; border:1px solid rgba(255,255,255,0.08); margin-bottom:16px;">
+          <div style="margin-bottom:10px;">
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_pairing_server_label">Headscale Server URL:</div>
+            <div id="pairing-server-url" style="font-size:14px; font-weight:700; color:var(--primary); font-family:monospace;">--</div>
+          </div>
+          <div>
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_pairing_key_label">Pre-Auth Key (valid 1 hour):</div>
+            <div id="pairing-auth-key" style="font-size:14px; font-weight:700; color:var(--success); font-family:monospace; word-break:break-all;">--</div>
+          </div>
+        </div>
+
+        <div style="background:#0b1120; border-radius:8px; padding:14px; border:1px solid rgba(56,189,248,0.2); font-size:12px; line-height:1.6;">
+          <div style="font-weight:700; color:var(--text-main); margin-bottom:6px;" data-i18n="network_pairing_steps_title">How to connect from your smartphone:</div>
+          <div data-i18n="network_step1">1. Install the official Tailscale app from Google Play or App Store.</div>
+          <div data-i18n="network_step2">2. Open Tailscale, tap the three dots in top right ➔ 'Change server'.</div>
+          <div data-i18n="network_step3">3. Enter your Headscale server URL and tap Connect.</div>
+          <div data-i18n="network_step4">4. Paste your Pre-Auth Key: you are connected in direct WireGuard P2P!</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeNetworkPairingModal()" data-i18n="sweeper_close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>

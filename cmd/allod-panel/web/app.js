@@ -449,6 +449,14 @@ const moduleTechInfo = {
       linkPort: 8096,
       linkProtocol: 'http'
     },
+    network: {
+      product: 'Headscale (WireGuard) + Cloudflare Shield',
+      desc: 'Zero-trust WireGuard mesh network for ultra-secure remote access to Immich, Jellyfin, and Web Panel with zero open router ports.',
+      db: 'SQLite (Embedded /var/lib/headscale)',
+      dbNote: 'Coordinates WireGuard public keys and IP allocation. Actual media and photos travel direct P2P outside Cloudflare.',
+      linkPort: 8085,
+      linkProtocol: 'http'
+    },
     watch: {
       product: 'Allod Watchdog + WireGuard Mesh',
       desc: 'Continuous peer heartbeat monitoring, quorum supervision, and remote replica coordination.',
@@ -501,6 +509,14 @@ const moduleTechInfo = {
       db: 'SQLite (Embedded)',
       dbNote: 'Database locale leggero e veloce per librerie musicali e metadati cinematografici.',
       linkPort: 8096,
+      linkProtocol: 'http'
+    },
+    network: {
+      product: 'Headscale (WireGuard) + Cloudflare Shield',
+      desc: 'Rete mesh privata WireGuard a zero-trust per accedere a Immich, Jellyfin e al pannello da fuori casa senza aprire porte sul router.',
+      db: 'SQLite (Incorporato /var/lib/headscale)',
+      dbNote: 'Gestisce lo scambio chiavi crittografiche. Streaming e foto viaggiano in P2P diretto WireGuard fuori da Cloudflare.',
+      linkPort: 8085,
       linkProtocol: 'http'
     },
     watch: {
@@ -808,6 +824,30 @@ function renderModules() {
       `;
     }
 
+    let networkBoxHtml = '';
+    if (mod.id === 'network') {
+      networkBoxHtml = `
+        <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🌐 ${t('network_module_title')}</div>
+              <div style="font-size:10.5px; color:var(--text-muted);">
+                ${t('network_mesh_ip_label')} <code>100.64.0.1</code>
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn btn-sm btn-info" onclick="openNetworkConfigModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
+                ${t('network_config_btn')}
+              </button>
+              <button class="btn btn-sm btn-success" onclick="openNetworkPairingModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
+                ${t('network_pairing_btn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     const tierLabel = t('tier_' + mod.tier, mod.tier);
     const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
     const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
@@ -848,6 +888,7 @@ function renderModules() {
         ${storageBoxHtml}
         ${photosSharesIntegrationHtml}
         ${sharesSmbBoxHtml}
+        ${networkBoxHtml}
         ${isLocked ? `
           <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
             🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.
@@ -2269,4 +2310,108 @@ async function saveSmbPassword() {
       btn.innerHTML = `💾 <span>${t('btn_save_smb_pass', 'Salva Password Samba')}</span>`;
     }
   }
+}
+
+// ==========================================
+// NETWORK & MESH ACCESS (Headscale + Cloudflare)
+// ==========================================
+
+async function openNetworkConfigModal() {
+  const modal = document.getElementById('network-config-modal');
+  if (!modal) return;
+
+  try {
+    const res = await fetch('/api/network/status');
+    const json = await res.json();
+    if (json.status === 'ok' && json.data) {
+      const domainInput = document.getElementById('network-domain-input');
+      if (domainInput && json.data.server_url) {
+        domainInput.value = json.data.server_url;
+      }
+    }
+  } catch (_) {}
+
+  modal.classList.remove('hidden');
+}
+
+function closeNetworkConfigModal() {
+  const modal = document.getElementById('network-config-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function saveNetworkConfig() {
+  const domainInput = document.getElementById('network-domain-input');
+  const tokenInput = document.getElementById('network-token-input');
+  const btn = document.getElementById('network-save-btn');
+
+  const domain = domainInput ? domainInput.value.trim() : '';
+  const token = tokenInput ? tokenInput.value.trim() : '';
+
+  if (!domain && !token) {
+    showAlert('Inserisci il dominio o il token del tunnel', 'warning');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Salvataggio...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/network/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain: domain, tunnel_token: token })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(data.message || 'Configurazione tunnel salvata!', 'success');
+      closeNetworkConfigModal();
+      refreshData();
+    } else {
+      showAlert('Errore: ' + data.message, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = t('network_modal_save', 'Save & Restart Services');
+    }
+  }
+}
+
+async function openNetworkPairingModal() {
+  const modal = document.getElementById('network-pairing-modal');
+  if (!modal) return;
+
+  const serverUrlEl = document.getElementById('pairing-server-url');
+  const authKeyEl = document.getElementById('pairing-auth-key');
+
+  if (serverUrlEl) serverUrlEl.textContent = 'Caricamento...';
+  if (authKeyEl) authKeyEl.textContent = 'Generazione chiave crittografica in corso...';
+
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/network/preauth-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (data.status === 'ok' && data.data) {
+      if (serverUrlEl) serverUrlEl.textContent = data.data.server_url || 'https://tuodominio.it';
+      if (authKeyEl) authKeyEl.textContent = data.data.key;
+    } else {
+      if (authKeyEl) authKeyEl.textContent = 'Errore: ' + (data.message || 'Verifica che il modulo network sia avviato');
+    }
+  } catch (err) {
+    if (authKeyEl) authKeyEl.textContent = 'Errore di connessione: ' + err.message;
+  }
+}
+
+function closeNetworkPairingModal() {
+  const modal = document.getElementById('network-pairing-modal');
+  if (modal) modal.classList.add('hidden');
 }

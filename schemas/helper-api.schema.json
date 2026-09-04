@@ -26,7 +26,8 @@
             "storage.init",
             "storage.diagnostics",
             "shares.bind_photos",
-            "shares.set_password"
+            "shares.set_password",
+            "network.headscale_cli"
           ]
         },
         "plan": {
