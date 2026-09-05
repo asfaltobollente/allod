@@ -22,6 +22,8 @@ modules:
         level: basic
     media:
         level: "off"
+    network:
+        level: hybrid
     photos:
         level: standard
     shares:

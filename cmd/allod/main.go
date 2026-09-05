@@ -351,6 +351,7 @@ var startCmd = &cobra.Command{
 				}
 				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-postgres").Run()
 				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-valkey").Run()
+				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-cloudflared").Run()
 				runCmd := exec.Command("systemctl", "--user", "start", "--no-block", modName)
 				if err := runCmd.Run(); err != nil {
 					fmt.Printf("  ✗ %-12s Errore avvio (systemd unit %s): %v\n", modName, modName, err)
@@ -361,6 +362,7 @@ var startCmd = &cobra.Command{
 		} else {
 			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-postgres").Run()
 			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-valkey").Run()
+			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-cloudflared").Run()
 			runCmd := exec.Command("systemctl", "--user", "start", "--no-block", target)
 			if err := runCmd.Run(); err != nil {
 				fmt.Printf("✗ Errore avvio modulo '%s': %v\n", target, err)
@@ -634,6 +636,7 @@ var initCmd = &cobra.Command{
 					"photos":  {Level: "standard"},
 					"backup":  {Level: "peers"},
 					"watch":   {Level: "federated"},
+					"network": {Level: "hybrid"},
 				},
 			}
 		} else {

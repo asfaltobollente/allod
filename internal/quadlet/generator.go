@@ -69,7 +69,7 @@ func Generate(modID string, m *manifest.Manifest, levelName string) (*GenerateRe
 
 // EnsureStorageDirectories creates all host volume mount paths with permissive access.
 func EnsureStorageDirectories(modID string) {
-	baseDir := StorageBaseDir()
+	baseDir := ResolvedStorageBaseDir()
 	var dirs []string
 	switch modID {
 	case "cloud":
@@ -112,29 +112,34 @@ func EnsureStorageDirectories(modID string) {
 		if _, err := os.Stat(cfgFile); err != nil {
 			defaultHeadscaleYaml := `server_url: http://127.0.0.1:8085
 listen_addr: 0.0.0.0:8085
-metrics_listen_addr: 0.0.0.0:9095
+metrics_listen_addr: 127.0.0.1:9095
 grpc_listen_addr: 0.0.0.0:50443
 grpc_allow_insecure: true
-ip_prefixes:
-  - 100.64.0.0/10
-  - fd7a:115c:a1e0::/48
+
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+
 derp:
   server:
-    enabled: true
-    region_id: 999
-    region_code: "allod"
-    region_name: "Allod Embedded DERP"
-    stun_listen_addr: "0.0.0.0:3478"
+    enabled: false
   urls:
     - https://controlplane.tailscale.com/derpmap/default
   auto_update_enabled: true
   update_frequency: 24h
+
 disable_check_updates: true
 ephemeral_node_inactivity_timeout: 30m
+
 database:
-  type: sqlite3
+  type: sqlite
   sqlite:
     path: /var/lib/headscale/db.sqlite
+
 dns:
   magic_dns: true
   base_domain: mesh.allod
@@ -164,6 +169,21 @@ func StorageBaseDir() string {
 		return "/mnt/allod-storage"
 	}
 	return "%h/.local/share/allod/storage"
+}
+
+// ResolvedStorageBaseDir returns the actual filesystem path on disk for host operations,
+// resolving systemd's %h specifier to the user's home directory.
+func ResolvedStorageBaseDir() string {
+	baseDir := StorageBaseDir()
+	if strings.HasPrefix(baseDir, "%h") {
+		if home, err := os.UserHomeDir(); err == nil {
+			rel := strings.TrimPrefix(baseDir, "%h")
+			rel = strings.TrimPrefix(rel, "/")
+			rel = strings.TrimPrefix(rel, "\\")
+			return filepath.Join(home, rel)
+		}
+	}
+	return baseDir
 }
 
 // GenerateNetwork returns the Quadlet .network definition for inter-container communication.
@@ -203,7 +223,11 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	sb.WriteString("[Container]\n")
 	sb.WriteString(fmt.Sprintf("Image=%s:%s\n", img.Ref, img.Tag))
 	sb.WriteString(fmt.Sprintf("ContainerName=%s\n", unitName))
-	sb.WriteString("Network=allod\n")
+	if strings.Contains(img.Ref, "cloudflared") {
+		sb.WriteString("Network=host\n")
+	} else {
+		sb.WriteString("Network=allod\n")
+	}
 	if len(img.Args) > 0 {
 		sb.WriteString(fmt.Sprintf("Exec=%s\n", strings.Join(img.Args, " ")))
 	}
@@ -216,7 +240,11 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 			if p.ContainerPort > 0 {
 				cPort = p.ContainerPort
 			}
-			sb.WriteString(fmt.Sprintf("PublishPort=%d:%d\n", p.N, cPort))
+			if p.Scope == "localhost" || p.Scope == "loopback" {
+				sb.WriteString(fmt.Sprintf("PublishPort=127.0.0.1:%d:%d\n", p.N, cPort))
+			} else {
+				sb.WriteString(fmt.Sprintf("PublishPort=%d:%d\n", p.N, cPort))
+			}
 		}
 	}
 
@@ -270,9 +298,14 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 			sb.WriteString("Exec=serve\n")
 		} else if strings.Contains(img.Ref, "cloudflared") {
 			sb.WriteString("Exec=tunnel --no-autoupdate run\n")
-			tokenFile := filepath.Join(baseDir, "network", "cloudflared.token")
+			resBaseDir := ResolvedStorageBaseDir()
+			tokenFile := filepath.Join(resBaseDir, "network", "cloudflared.token")
 			if tokBytes, err := os.ReadFile(tokenFile); err == nil && len(strings.TrimSpace(string(tokBytes))) > 0 {
 				sb.WriteString(fmt.Sprintf("Environment=TUNNEL_TOKEN=%s\n", strings.TrimSpace(string(tokBytes))))
+			}
+			envFile := filepath.Join(resBaseDir, "network", "cloudflared.env")
+			if _, err := os.Stat(envFile); err == nil {
+				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s\n", filepath.Join(baseDir, "network", "cloudflared.env")))
 			}
 		}
 	default:

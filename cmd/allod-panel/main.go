@@ -396,6 +396,23 @@ func main() {
 			return
 		}
 
+		if _, ok := m.Levels[level]; !ok {
+			if _, ok := m.Levels["hybrid"]; ok {
+				level = "hybrid"
+			} else if _, ok := m.Levels["basic"]; ok {
+				level = "basic"
+			} else if _, ok := m.Levels["standard"]; ok {
+				level = "standard"
+			} else {
+				for k := range m.Levels {
+					if k != "off" {
+						level = k
+						break
+					}
+				}
+			}
+		}
+
 		genRes, err := quadlet.Generate(req.Module, m, level)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1458,8 +1475,11 @@ WantedBy=default.target
 		_ = os.MkdirAll(netDir, 0777)
 
 		if req.TunnelToken != "" {
+			tokClean := strings.TrimSpace(req.TunnelToken)
 			tokenFile := filepath.Join(netDir, "cloudflared.token")
-			_ = os.WriteFile(tokenFile, []byte(strings.TrimSpace(req.TunnelToken)), 0600)
+			_ = os.WriteFile(tokenFile, []byte(tokClean), 0600)
+			envFile := filepath.Join(netDir, "cloudflared.env")
+			_ = os.WriteFile(envFile, []byte(fmt.Sprintf("TUNNEL_TOKEN=%s\n", tokClean)), 0600)
 		}
 
 		if domain != "" {
@@ -1479,8 +1499,23 @@ WantedBy=default.target
 			}
 		}
 
+		// Rigenera unità Quadlet per riflettere le modifiche
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			quadDir := filepath.Join(home, ".config", "containers", "systemd")
+			mPath := filepath.Join(getModulesDir(), "network", "module.yaml")
+			if m, err := manifest.LoadManifest(mPath); err == nil {
+				if genRes, err := quadlet.Generate("network", m, "hybrid"); err == nil {
+					for fname, content := range genRes.Files {
+						_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
+					}
+				}
+			}
+			_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		}
+
 		// Riavvia micro-servizi se attivi
-		_ = exec.Command("systemctl", "--user", "restart", "network-headscale", "network-cloudflared").Run()
+		_ = exec.Command("systemctl", "--user", "restart", "network", "network-headscale", "network-cloudflared").Run()
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Configurazione salvata"})
 	})
