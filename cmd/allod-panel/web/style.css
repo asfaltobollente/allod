@@ -1,3 +1,8 @@
+/* ==========================================================================
+   THEMES SYSTEM
+   ========================================================================== */
+
+/* 1. Default Slate (Current Baseline) */
 :root {
   --bg-dark: #0f172a;
   --bg-sidebar: #090d16;
@@ -7,11 +12,184 @@
   --text-muted: #94a3b8;
   --primary: #38bdf8;
   --primary-hover: #0ea5e9;
+  --primary-gradient: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  --primary-light: rgba(56, 189, 248, 0.15);
+  --primary-text: #0f172a;
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
+  --console-bg: #090d16;
+  --input-bg: #0f172a;
   --radius: 12px;
+  --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
   --transition: all 0.2s ease-in-out;
+}
+
+/* 2. Theme: Moderno (Creative Tim Material Dashboard) */
+[data-theme="moderno"] {
+  --bg-dark: #1a2035;
+  --bg-sidebar: #1f283e;
+  --card-bg: #202940;
+  --card-border: rgba(255, 255, 255, 0.08);
+  --text-main: #ffffff;
+  --text-muted: #8b9bb4;
+  --primary: #e91e63;
+  --primary-hover: #d81b60;
+  --primary-gradient: linear-gradient(195deg, #ec407a 0%, #d81b60 100%);
+  --primary-light: rgba(233, 30, 99, 0.16);
+  --primary-text: #ffffff;
+  --success: #4caf50;
+  --warning: #fb8c00;
+  --danger: #f44336;
+  --console-bg: #14192b;
+  --input-bg: #161b2d;
+  --radius: 16px;
+  --font-main: 'Roboto', 'Inter', system-ui, sans-serif;
+  --font-display: 'Roboto', 'Inter', system-ui, sans-serif;
+  --card-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(233, 30, 99, 0.15);
+}
+
+[data-theme="moderno"] .sidebar {
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="moderno"] .nav-item.active {
+  background: linear-gradient(195deg, #ec407a 0%, #d81b60 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(233, 30, 99, 0.4);
+}
+
+[data-theme="moderno"] .btn-primary,
+[data-theme="moderno"] .launchpad-btn-primary {
+  background: linear-gradient(195deg, #ec407a 0%, #d81b60 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 5px -1px rgba(233, 30, 99, 0.2), 0 2px 3px -1px rgba(233, 30, 99, 0.2) !important;
+}
+
+[data-theme="moderno"] .btn-primary:hover,
+[data-theme="moderno"] .launchpad-btn-primary:hover {
+  background: linear-gradient(195deg, #f06292 0%, #e91e63 100%) !important;
+  box-shadow: 0 5px 12px rgba(233, 30, 99, 0.35) !important;
+}
+
+[data-theme="moderno"] .card,
+[data-theme="moderno"] .module-card,
+[data-theme="moderno"] .launchpad-card {
+  border-radius: 16px;
+}
+
+/* 3. Theme: CIA (Tom Clancy Jack Ryan / Tactical Radar Intel) */
+[data-theme="cia"] {
+  --bg-dark: #060908;
+  --bg-sidebar: #040705;
+  --card-bg: #0c1410;
+  --card-border: #183321;
+  --text-main: #e6f4ea;
+  --text-muted: #567c64;
+  --primary: #00ff66;
+  --primary-hover: #00cc52;
+  --primary-gradient: linear-gradient(135deg, #00ff66 0%, #059669 100%);
+  --primary-light: rgba(0, 255, 102, 0.12);
+  --primary-text: #040705;
+  --success: #00ff66;
+  --warning: #ffb000;
+  --danger: #ff3344;
+  --console-bg: #030504;
+  --input-bg: #080d0a;
+  --radius: 4px;
+  --font-main: 'JetBrains Mono', 'Courier New', monospace;
+  --font-display: 'JetBrains Mono', 'Courier New', monospace;
+  --card-shadow: 0 0 15px rgba(0, 255, 102, 0.04), inset 0 0 20px rgba(0, 255, 102, 0.02);
+}
+
+[data-theme="cia"] .sidebar {
+  border-right: 1px solid #183321;
+}
+
+[data-theme="cia"] .nav-item.active {
+  background: rgba(0, 255, 102, 0.14) !important;
+  color: #00ff66 !important;
+  border-left: 3px solid #00ff66 !important;
+  border-radius: 2px !important;
+  box-shadow: inset 0 0 10px rgba(0, 255, 102, 0.08);
+}
+
+[data-theme="cia"] .card,
+[data-theme="cia"] .module-card,
+[data-theme="cia"] .launchpad-card {
+  border-radius: 4px;
+  border-color: #183321;
+}
+
+[data-theme="cia"] .card-header h3,
+[data-theme="cia"] .topbar-title h1,
+[data-theme="cia"] .launchpad-title {
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+[data-theme="cia"] .btn {
+  border-radius: 4px;
+}
+
+[data-theme="cia"] .launchpad-btn-primary,
+[data-theme="cia"] .btn-primary {
+  box-shadow: 0 0 12px rgba(0, 255, 102, 0.25) !important;
+}
+
+/* 4. Theme: Allod (Medioevo / Allodio Feudale / Terre Libere) */
+[data-theme="allod"] {
+  --bg-dark: #15110d;
+  --bg-sidebar: #1c1510;
+  --card-bg: #221a13;
+  --card-border: #453422;
+  --text-main: #f7f0e6;
+  --text-muted: #a69580;
+  --primary: #d4af37;
+  --primary-hover: #bfa030;
+  --primary-gradient: linear-gradient(135deg, #eab308 0%, #a16207 100%);
+  --primary-light: rgba(212, 175, 55, 0.15);
+  --primary-text: #1c1510;
+  --success: #65a30d;
+  --warning: #d97706;
+  --danger: #b91c1c;
+  --console-bg: #120e0a;
+  --input-bg: #18120d;
+  --radius: 8px;
+  --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Cinzel', Georgia, 'Times New Roman', serif;
+  --card-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(212, 175, 55, 0.1);
+}
+
+[data-theme="allod"] .sidebar {
+  border-right: 1px solid #3d2e1f;
+}
+
+[data-theme="allod"] .nav-item.active {
+  background: rgba(212, 175, 55, 0.16) !important;
+  color: #eab308 !important;
+  border: 1px solid rgba(212, 175, 55, 0.35) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="allod"] .logo h2,
+[data-theme="allod"] .topbar-title h1,
+[data-theme="allod"] .card-header h3,
+[data-theme="allod"] .launchpad-title {
+  font-family: var(--font-display);
+  letter-spacing: 0.5px;
+}
+
+[data-theme="allod"] .btn {
+  border-radius: 6px;
+}
+
+[data-theme="allod"] .launchpad-btn-primary,
+[data-theme="allod"] .btn-primary {
+  background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%) !important;
+  box-shadow: 0 3px 8px rgba(212, 175, 55, 0.25) !important;
 }
 
 * {
@@ -21,7 +199,7 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-main, 'Inter', system-ui, -apple-system, sans-serif);
   background-color: var(--bg-dark);
   color: var(--text-main);
   line-height: 1.5;
@@ -870,4 +1048,135 @@ body {
 .launchpad-btn-secondary:hover {
   background: rgba(51, 65, 85, 0.9);
 }
+
+/* ==========================================================================
+   THEME SELECTOR GRID & PREVIEWS
+   ========================================================================== */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.theme-card {
+  background: rgba(0, 0, 0, 0.25);
+  border: 2px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  user-select: none;
+}
+
+.theme-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.theme-card.active {
+  border-color: var(--primary);
+  background: var(--primary-light, rgba(56, 189, 248, 0.12));
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--primary);
+}
+
+.theme-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.theme-check {
+  display: none;
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--primary);
+}
+
+.theme-card.active .theme-check {
+  display: inline-block;
+}
+
+.theme-card-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+/* Theme Previews (Miniature UI representation) */
+.theme-preview {
+  height: 80px;
+  border-radius: 8px;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.theme-preview-sidebar {
+  width: 25%;
+  height: 100%;
+}
+
+.theme-preview-body {
+  width: 75%;
+  height: 100%;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.theme-preview-topbar {
+  height: 12px;
+  border-radius: 3px;
+  width: 100%;
+}
+
+.theme-preview-cards {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+}
+
+.theme-preview-box {
+  flex: 1;
+  border-radius: 4px;
+}
+
+/* Theme Preview: Default */
+.theme-preview-default { background: #0f172a; }
+.theme-preview-default .theme-preview-sidebar { background: #090d16; border-right: 1px solid #334155; }
+.theme-preview-default .theme-preview-topbar { background: #1e293b; }
+.theme-preview-default .theme-preview-box { background: #1e293b; border: 1px solid #334155; }
+.theme-preview-default .theme-preview-box.active { border-color: #38bdf8; background: rgba(56, 189, 248, 0.25); }
+
+/* Theme Preview: Moderno (Material Dashboard) */
+.theme-preview-moderno { background: #1a2035; }
+.theme-preview-moderno .theme-preview-sidebar { background: #1f283e; border-right: 1px solid rgba(255,255,255,0.08); }
+.theme-preview-moderno .theme-preview-topbar { background: #202940; }
+.theme-preview-moderno .theme-preview-box { background: #202940; border-radius: 6px; }
+.theme-preview-moderno .theme-preview-box.active { background: linear-gradient(195deg, #ec407a, #d81b60); box-shadow: 0 2px 6px rgba(233,30,99,0.5); }
+
+/* Theme Preview: CIA */
+.theme-preview-cia { background: #060908; }
+.theme-preview-cia .theme-preview-sidebar { background: #040705; border-right: 1px solid #183321; }
+.theme-preview-cia .theme-preview-topbar { background: #0c1410; border-bottom: 1px solid #183321; }
+.theme-preview-cia .theme-preview-box { background: #0c1410; border: 1px solid #183321; border-radius: 2px; }
+.theme-preview-cia .theme-preview-box.active { border-color: #00ff66; background: rgba(0, 255, 102, 0.18); box-shadow: 0 0 6px rgba(0,255,102,0.4); }
+
+/* Theme Preview: Allod */
+.theme-preview-allod { background: #15110d; }
+.theme-preview-allod .theme-preview-sidebar { background: #1c1510; border-right: 1px solid #453422; }
+.theme-preview-allod .theme-preview-topbar { background: #221a13; }
+.theme-preview-allod .theme-preview-box { background: #221a13; border: 1px solid #453422; border-radius: 4px; }
+.theme-preview-allod .theme-preview-box.active { border-color: #d4af37; background: rgba(212, 175, 55, 0.22); }
+
 

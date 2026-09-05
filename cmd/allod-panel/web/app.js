@@ -7,6 +7,7 @@ let startingModules = new Map(); // modID -> timestamp
 let photosSharesState = { enabled: false, mounted: false, shares_active: false };
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   setupTabs();
   if (typeof setLanguage === 'function') {
     setLanguage(currentLang);
@@ -2673,3 +2674,76 @@ function closeNetworkPairingModal() {
   const modal = document.getElementById('network-pairing-modal');
   if (modal) modal.classList.add('hidden');
 }
+
+// ==========================================================================
+// THEME MANAGEMENT (Client-Side, 0% Server CPU / RAM Load)
+// ==========================================================================
+function initTheme() {
+  const savedTheme = localStorage.getItem('allod_theme') || 'default';
+  applyTheme(savedTheme, false);
+}
+
+function selectTheme(themeName) {
+  applyTheme(themeName, true);
+}
+
+function applyTheme(themeName, save = true) {
+  const validThemes = ['default', 'moderno', 'cia', 'allod'];
+  if (!validThemes.includes(themeName)) {
+    themeName = 'default';
+  }
+
+  if (themeName === 'default') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', themeName);
+  }
+
+  if (save) {
+    localStorage.setItem('allod_theme', themeName);
+  }
+
+  // Update active state on theme cards in settings
+  validThemes.forEach(tName => {
+    const card = document.getElementById(`theme-card-${tName}`);
+    if (card) {
+      if (tName === themeName) {
+        card.classList.add('active');
+      } else {
+        card.classList.remove('active');
+      }
+    }
+  });
+
+  updateThemeBadge(themeName);
+}
+
+function updateThemeBadge(themeName) {
+  if (!themeName) {
+    themeName = localStorage.getItem('allod_theme') || 'default';
+  }
+
+  const badge = document.getElementById('current-theme-badge');
+  if (badge) {
+    const names = {
+      default: (typeof t === 'function' ? t('theme_default', 'Default Slate') : 'Default Slate'),
+      moderno: (typeof t === 'function' ? t('theme_moderno', 'Moderno') : 'Moderno'),
+      cia: (typeof t === 'function' ? t('theme_cia', 'CIA // Tactical') : 'CIA // Tactical'),
+      allod: (typeof t === 'function' ? t('theme_allod', 'Allod') : 'Allod')
+    };
+    badge.textContent = names[themeName] || themeName;
+  }
+}
+
+function openThemeSelector() {
+  switchToTab('settings');
+  const themeCard = document.getElementById('settings-theme-card');
+  if (themeCard) {
+    themeCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    themeCard.style.outline = '2px solid var(--primary)';
+    setTimeout(() => {
+      themeCard.style.outline = 'none';
+    }, 1500);
+  }
+}
+
