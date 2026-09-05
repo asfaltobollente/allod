@@ -2681,6 +2681,41 @@ function closeNetworkPairingModal() {
 function initTheme() {
   const savedTheme = localStorage.getItem('allod_theme') || 'default';
   applyTheme(savedTheme, false);
+  initThemeCollapse();
+}
+
+function initThemeCollapse() {
+  const isExpanded = localStorage.getItem('allod_theme_expanded') === 'true';
+  const themeBody = document.getElementById('settings-theme-body');
+  const chevron = document.getElementById('theme-chevron');
+  if (themeBody) {
+    if (isExpanded) {
+      themeBody.classList.remove('hidden');
+      if (chevron) chevron.classList.add('expanded');
+    } else {
+      themeBody.classList.add('hidden');
+      if (chevron) chevron.classList.remove('expanded');
+    }
+  }
+}
+
+function toggleThemeCollapse(forceExpand) {
+  const themeBody = document.getElementById('settings-theme-body');
+  const chevron = document.getElementById('theme-chevron');
+  if (!themeBody) return;
+
+  const isHidden = themeBody.classList.contains('hidden');
+  const shouldExpand = (typeof forceExpand === 'boolean') ? forceExpand : isHidden;
+
+  if (shouldExpand) {
+    themeBody.classList.remove('hidden');
+    if (chevron) chevron.classList.add('expanded');
+    localStorage.setItem('allod_theme_expanded', 'true');
+  } else {
+    themeBody.classList.add('hidden');
+    if (chevron) chevron.classList.remove('expanded');
+    localStorage.setItem('allod_theme_expanded', 'false');
+  }
 }
 
 function selectTheme(themeName) {
@@ -2737,13 +2772,16 @@ function updateThemeBadge(themeName) {
 
 function openThemeSelector() {
   switchToTab('settings');
+  toggleThemeCollapse(true);
   const themeCard = document.getElementById('settings-theme-card');
   if (themeCard) {
-    themeCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    themeCard.style.outline = '2px solid var(--primary)';
     setTimeout(() => {
-      themeCard.style.outline = 'none';
-    }, 1500);
+      themeCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      themeCard.style.outline = '2px solid var(--primary)';
+      setTimeout(() => {
+        themeCard.style.outline = 'none';
+      }, 1500);
+    }, 100);
   }
 }
 

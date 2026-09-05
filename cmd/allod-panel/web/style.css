@@ -1179,4 +1179,37 @@ body {
 .theme-preview-allod .theme-preview-box { background: #221a13; border: 1px solid #453422; border-radius: 4px; }
 .theme-preview-allod .theme-preview-box.active { border-color: #d4af37; background: rgba(212, 175, 55, 0.22); }
 
+/* Theme Collapsible Section */
+.theme-collapse-header {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+  border-radius: var(--radius);
+}
 
+.theme-collapse-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.theme-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: transform 0.25s ease, background 0.2s ease, color 0.2s ease;
+  transform: rotate(-90deg);
+}
+
+.theme-collapse-header:hover .theme-chevron {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.theme-chevron.expanded {
+  transform: rotate(0deg);
+}
