@@ -68,6 +68,7 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **`shares`** | **[Samba (SMB/CIFS)](https://www.samba.org)** | High-speed LAN shared folders for Windows, Mac & Linux | `445` |
 | **`storage`** | **[Btrfs](https://btrfs.readthedocs.io)** + **smartmontools** | Hardware-safe RAID 1, instant snapshots & S.M.A.R.T. health | Native |
 | **`media`** | **[Jellyfin](https://jellyfin.org)** | Personal streaming server for movies, series & music | `8096` |
+| **`network`** | **[Headscale](https://headscale.net)** + **[Cloudflare Tunnel](https://github.com/cloudflare/cloudflared)** / **[WireGuard](https://www.wireguard.com)** | Sovereign remote access, peer-to-peer mesh & zero open router ports | `8085` (local) |
 | **`watch`** | **Allod Watchdog** + **[WireGuard](https://www.wireguard.com)** | Encrypted peer heartbeat & federation quorum supervisor | Mesh only |
 
 ---
@@ -176,6 +177,9 @@ Allod abandons primitive binary switches in favor of **hardware-aware resource l
 | **`media`** *(Jellyfin)* | **`basic`** | **500 MB** | 4 GB System RAM | 4K/1080p direct streaming of movies, TV shows, and music to Smart TVs, phones, and web browsers. |
 | **`media`** *(Jellyfin)* | **`full`** | **1000 MB** | 8 GB System RAM, GPU | Everything in `basic` + **Hardware Transcoding** via Intel QuickSync / AMD VA-API (`/dev/dri/renderD128`). |
 | **`cloud`** *(Nextcloud)* | **`basic`** | **1.0 GB** | 8 GB System RAM | Files sync, mobile file explorer, WebDAV, notes, and calendar. |
+| **`network`** *(Hybrid Shield)* | **`hybrid`** | **120 MB** | 4 GB System RAM | **Recommended**: Self-hosted Headscale control plane + Cloudflare Tunnel. Zero router ports, CGNAT/Starlink bypass. Video/sync data flows direct P2P outside Cloudflare. |
+| **`network`** *(Pure WireGuard)* | **`wireguard`** | **50 MB** | 4 GB System RAM | 100% sovereign native kernel WireGuard with instant cryptographic QR pairing. Zero third-party cloud, zero accounts. Requires public IP or UDP port forward. |
+| **`network`** *(Zero-Click Cloud)* | **`tailscale`** | **60 MB** | 4 GB System RAM | Tailscale client connected to hosted control plane (`tailscale.com`). 30-second zero-click setup for users without a domain. |
 
 ### 🛡️ What Happens When You Change a Level on an Active Service?
 
@@ -195,6 +199,95 @@ Allod enforces strict boundaries between internal service databases and user-acc
 * **User Media Libraries (`/media`, `shares/`)**: Cleanly linked to Samba LAN shares:
   * Drop video files into `\\allod\shares\media\movies` or `tv` from Windows Explorer for instant Jellyfin streaming.
   * Browse original photos directly in `\\allod\shares\photos` with zero clutter from machine-learning thumbnail caches.
+
+---
+
+## 🌐 Remote Access & Mobile Mesh: 3 Freedom-First Options (Zero Open Ports)
+
+Accessing your home cloud from outside the home usually presents an impossible dilemma:
+1. **The Dangerous Route**: Open ports (80/443/22) on your home router and expose your server to automated port-scanners, brute-force bots, and zero-day exploits.
+2. **The Commercial Subscription Trap**: Pay monthly SaaS fees to proprietary cloud relays that track your traffic, enforce bandwidth caps, and require central corporate accounts.
+
+Allod solves this by offering **three distinct, freedom-first remote access options** built into the `network` module. You maintain complete sovereignty, keep all incoming router ports closed, bypass strict Carrier-Grade NAT (CGNAT), Starlink, and 4G/5G mobile carriers, and connect seamlessly from iOS, Android, macOS, Windows, and Linux.
+
+```text
+               ┌─────────────────────────────────────────────────────────┐
+               │              ALLOD SERVER (At Home / Office)             │
+               │                                                         │
+               │   ┌────────────────────────┐  ┌─────────────────────┐   │
+               │   │ Headscale (v0.25.x)    │  │ cloudflared         │   │
+               │   │ Private Control Plane  │◄─┤ Outbound Tunnel     │   │
+               │   │ (SQLite / No Limits)   │  │ (No Open Ports)     │   │
+               │   └───────────┬────────────┘  └──────────▲──────────┘   │
+               │               │                          │              │
+               │   ┌───────────▼──────────────────────────┴──────────┐   │
+               │   │ Services: Immich, Jellyfin, Nextcloud, Samba    │   │
+               │   └────────────────────────▲────────────────────────┘   │
+               └────────────────────────────┼────────────────────────────┘
+                                            │
+               CONTROL PLANE (Signaling)    │    DATA PLANE (P2P WireGuard)
+               Zero router ports needed     │    Direct encrypted pipe:
+               Bypasses CGNAT & Starlink    │    High-speed 4K streaming & photos
+                                            │    Completely outside Cloudflare!
+                                            │
+                       ┌────────────────────┴───────────────────┐
+                       ▼                                        ▼
+             ┌──────────────────┐                     ┌──────────────────┐
+             │ Cloudflare Edge  │                     │ Remote Client    │
+             │ (Signaling Only) │                     │ (Phone / Laptop) │
+             └─────────▲────────┘                     │ Tailscale / WG   │
+                       │                              └────────▲─────────┘
+                       └───────────────────────────────────────┘
+                              Signaling & Peer Discovery
+```
+
+### The 3 Freedom-First Access Architectures
+
+#### 1. Option 1: Pure Sovereign WireGuard (`wireguard` level — 50 MB RAM)
+* **100% Sovereign & Cloud-Free**: Zero third parties, zero external accounts, zero subscriptions. You depend on nobody.
+* **Native Kernel Performance**: Operates directly in the Linux kernel via WireGuard for minimum CPU overhead and maximum battery life on mobile devices.
+* **Instant QR Code Pairing**: The Allod Web Dashboard generates a cryptographic QR code. Scan it with the official, open-source WireGuard app on iOS or Android to connect in seconds.
+* **Requirements**: Requires a public IPv4/IPv6 address or a single UDP port forwarded on your router (default: `UDP 51820`).
+
+#### 2. Option 2: Hybrid Sovereign Shield (`hybrid` level — 120 MB RAM — ⭐ Recommended)
+* **Private Self-Hosted Control Plane**: Runs [Headscale](https://headscale.net) locally on your Allod node with embedded SQLite. You own the user registry, cryptographic keys, and access lists (ACLs) with **unlimited nodes** and zero commercial tier paywalls.
+* **Zero Open Router Ports**: Uses an outbound Cloudflare Tunnel (`cloudflared`) to securely expose the Headscale coordination endpoint. Works flawlessly behind **CGNAT, Starlink, 4G/5G mobile routers, and campus firewalls**.
+* **Direct P2P Data Plane (Zero Cloudflare ToS Risk)**: Cloudflare is used *only* for lightweight signaling JSON (authentication and peer discovery). Heavy data streams — **4K Jellyfin streaming, bulk Immich photo backups, Nextcloud sync, and Samba transfers** — flow **directly peer-to-peer (P2P)** between your phone and your server over an end-to-end encrypted WireGuard tunnel, completely outside Cloudflare. No bandwidth throttling, no ToS streaming violations!
+* **Zero-Hassle Mobile Pairing**: Connects with the free, official Tailscale apps (iOS, Android, macOS, Windows). In the app, choose *"Change server"*, enter your coordination domain, and paste a 1-hour pre-auth key generated in 1 click from the Allod Dashboard.
+
+#### 3. Option 3: Zero-Click Cloud (`tailscale` level — 60 MB RAM)
+* **30-Second Turnkey Setup**: Connects your node directly to Tailscale's hosted SaaS control plane (`tailscale.com`).
+* **No Domain or Tunnel Required**: Perfect for beginners who do not own a custom domain name or Cloudflare account and want immediate remote access with zero setup friction.
+* **Peer-to-Peer WireGuard**: Traffic remains direct and end-to-end encrypted between your devices.
+
+---
+
+### ⚖️ Architectural & Privacy Comparison
+
+| Feature / Metric | Option 1: `wireguard` (Pure Sovereign) | Option 2: `hybrid` (Headscale Shield — ⭐ Recommended) | Option 3: `tailscale` (Zero-Click Cloud) |
+| :--- | :---: | :---: | :---: |
+| **Control Plane** | Fully Local (Kernel WireGuard) | **Self-Hosted Headscale** (On Allod) | Hosted SaaS (`tailscale.com`) |
+| **Third-Party Dependency** | **0% (Pure Self-Hosted)** | Minimal (Cloudflare Tunnel for signaling) | Third-Party SaaS Account |
+| **Router Ports to Open** | 1 Port (`UDP 51820`) | **Zero (0) Open Ports** | **Zero (0) Open Ports** |
+| **CGNAT / Starlink / 4G** | Requires VPS/Relay if CGNAT | **Native Out-of-the-Box Support** | **Native Out-of-the-Box Support** |
+| **Data Plane (Traffic)** | Direct P2P Encrypted WireGuard | **Direct P2P Encrypted WireGuard** | Direct P2P Encrypted WireGuard |
+| **Bandwidth / Speeds** | Full Gigabit / Uncapped | **Full Gigabit / Uncapped** | Full Gigabit / Uncapped |
+| **Cloudflare ToS Compliant** | N/A | **100% Compliant** (Signaling only) | N/A |
+| **Device / User Limits** | Unlimited | **Unlimited** (Self-hosted SQLite) | Free Tier Restrictions |
+| **Client Application** | Official WireGuard App | **Official Tailscale App** ("Change server") | Official Tailscale App |
+| **Memory Footprint** | ~50 MB RAM | **~120 MB RAM** | ~60 MB RAM |
+| **Target User** | Network purists with public IP wanting 100% independence | **Anyone wanting zero-port setup with complete self-hosted control** | Beginners without a custom domain |
+
+---
+
+### 🚀 Smart Launchpad: Seamless 1-Click LAN ↔ Mesh Switcher
+
+To make remote access effortless in daily life, the Allod Web Dashboard features an integrated **Launchpad** with an intelligent network switcher:
+
+* **`🏠 LAN (Casa)` Mode**: Automatically displays local network URLs (e.g., `http://192.168.1.50:2283` for Immich, `\\192.168.1.50\shares` for Samba).
+* **`🌍 WireGuard Mesh` Mode**: Instantly updates all application cards, direct links, and Samba paths to use the node's encrypted Mesh IP (e.g., `http://100.64.0.1:2283`).
+
+When you leave home, open the Allod Dashboard over WireGuard, toggle the switch to **`🌍 WireGuard Mesh`**, and tap any application icon to launch Immich, Jellyfin, or Nextcloud directly from your mobile browser without memorizing IPs or modifying bookmarks!
 
 ---
 
