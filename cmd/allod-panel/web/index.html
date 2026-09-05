@@ -22,7 +22,10 @@
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-item active" data-tab="overview" id="nav-tab-overview">
+        <button class="nav-item active" data-tab="launchpad" id="nav-tab-launchpad">
+          <span class="icon">🚀</span> <span data-i18n="tab_launchpad">Launchpad</span>
+        </button>
+        <button class="nav-item" data-tab="overview" id="nav-tab-overview">
           <span class="icon">📊</span> <span data-i18n="tab_overview">Overview</span>
         </button>
         <button class="nav-item" data-tab="modules" id="nav-tab-modules">
@@ -87,8 +90,36 @@
       <!-- Setup Flow Banner (Dynamic) -->
       <div id="setup-flow-banner" class="alert-banner alert-success hidden"></div>
 
+      <!-- TAB 0: LAUNCHPAD (App Portal) -->
+      <section id="tab-launchpad" class="tab-pane active">
+        <div class="launchpad-toolbar">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:24px;">🚀</span>
+            <div>
+              <div style="font-size:14px; font-weight:700; color:var(--text-main);" data-i18n="page_launchpad_title">App Launchpad & Hub</div>
+              <div style="font-size:12px; color:var(--text-muted);" data-i18n="page_launchpad_sub">One-click access to all your personal cloud applications, streaming services, and shares</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:11.5px; color:var(--text-muted); font-weight:600;">Modalità Rete:</span>
+            <div style="display:flex; background:rgba(15,23,42,0.8); border:1px solid var(--card-border); border-radius:6px; padding:2px;">
+              <button class="btn btn-sm btn-primary" id="launchpad-toggle-lan" onclick="setLaunchpadMode('lan')" style="padding:4px 10px; font-size:11px; font-weight:600; border-radius:4px;">
+                🏠 LAN (Casa)
+              </button>
+              <button class="btn btn-sm" id="launchpad-toggle-mesh" onclick="setLaunchpadMode('mesh')" style="padding:4px 10px; font-size:11px; font-weight:600; border-radius:4px; background:transparent; color:var(--text-muted);">
+                🌍 WireGuard Mesh
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="launchpad-grid" id="launchpad-grid">
+          <!-- Rendered dynamically by JS -->
+        </div>
+      </section>
+
       <!-- TAB 1: OVERVIEW -->
-      <section id="tab-overview" class="tab-pane active">
+      <section id="tab-overview" class="tab-pane">
         <!-- FIRST SETUP & BOOT PERSISTENCE GUIDE (Auto-hides once all_ready is true) -->
         <div id="first-setup-card" class="card hidden" style="border: 2px solid var(--warning); background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(15, 23, 42, 0.95)); margin-bottom: 24px; box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15);">
           <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
