@@ -361,108 +361,6 @@ systemctl --user enable --now allod-panel</pre>
 
       <!-- TAB 5: ADVANCED SETTINGS & MAINTENANCE -->
       <section id="tab-settings" class="tab-pane">
-        <!-- Card: Aspetto & Tema (Theme & Appearance) -->
-        <div class="card" id="settings-theme-card" style="margin-bottom: 20px;">
-          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
-              <span>🎨</span> <span data-i18n="settings_theme_title">Aspetto & Tema dell'Interfaccia</span>
-            </h3>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:12px; color:var(--text-muted);" data-i18n="settings_theme_active_label">Tema Attivo:</span>
-              <span class="badge badge-info" id="current-theme-badge">Default Slate</span>
-            </div>
-          </div>
-          <p class="text-muted" style="font-size:12.5px; margin-top:6px; margin-bottom:18px; line-height:1.4;" data-i18n="settings_theme_desc">
-            Personalizza l'esperienza visiva di Allod. Il rendering viene gestito interamente nel browser a zero consumo di CPU e RAM sul server, con memorizzazione locale persistente.
-          </p>
-
-          <div class="theme-grid">
-            <!-- Theme 1: Default Slate / Cyber -->
-            <div class="theme-card active" id="theme-card-default" onclick="selectTheme('default')">
-              <div class="theme-preview theme-preview-default">
-                <div class="theme-preview-sidebar"></div>
-                <div class="theme-preview-body">
-                  <div class="theme-preview-topbar"></div>
-                  <div class="theme-preview-cards">
-                    <div class="theme-preview-box"></div>
-                    <div class="theme-preview-box active"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="theme-card-body">
-                <div class="theme-card-title">
-                  <span data-i18n="theme_default">Default Slate</span>
-                  <span class="theme-check">✓</span>
-                </div>
-                <div class="theme-card-desc" data-i18n="theme_default_sub">Cyber dark ardesia e accenti ciano neon</div>
-              </div>
-            </div>
-
-            <!-- Theme 2: Moderno (Creative Tim Material Dashboard) -->
-            <div class="theme-card" id="theme-card-moderno" onclick="selectTheme('moderno')">
-              <div class="theme-preview theme-preview-moderno">
-                <div class="theme-preview-sidebar"></div>
-                <div class="theme-preview-body">
-                  <div class="theme-preview-topbar"></div>
-                  <div class="theme-preview-cards">
-                    <div class="theme-preview-box"></div>
-                    <div class="theme-preview-box active"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="theme-card-body">
-                <div class="theme-card-title">
-                  <span data-i18n="theme_moderno">Moderno</span>
-                  <span class="theme-check">✓</span>
-                </div>
-                <div class="theme-card-desc" data-i18n="theme_moderno_sub">Material Dashboard Creative Tim, card arrotondate e gradiente rosa fucsia</div>
-              </div>
-            </div>
-
-            <!-- Theme 3: CIA (Tom Clancy Jack Ryan / Tactical) -->
-            <div class="theme-card" id="theme-card-cia" onclick="selectTheme('cia')">
-              <div class="theme-preview theme-preview-cia">
-                <div class="theme-preview-sidebar"></div>
-                <div class="theme-preview-body">
-                  <div class="theme-preview-topbar"></div>
-                  <div class="theme-preview-cards">
-                    <div class="theme-preview-box"></div>
-                    <div class="theme-preview-box active"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="theme-card-body">
-                <div class="theme-card-title">
-                  <span data-i18n="theme_cia">CIA // Tactical</span>
-                  <span class="theme-check">✓</span>
-                </div>
-                <div class="theme-card-desc" data-i18n="theme_cia_sub">Jack Ryan Langley, radar stealth e fosforo verde operativo</div>
-              </div>
-            </div>
-
-            <!-- Theme 4: Allod (Medioevo / Allodio Feudale) -->
-            <div class="theme-card" id="theme-card-allod" onclick="selectTheme('allod')">
-              <div class="theme-preview theme-preview-allod">
-                <div class="theme-preview-sidebar"></div>
-                <div class="theme-preview-body">
-                  <div class="theme-preview-topbar"></div>
-                  <div class="theme-preview-cards">
-                    <div class="theme-preview-box"></div>
-                    <div class="theme-preview-box active"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="theme-card-body">
-                <div class="theme-card-title">
-                  <span data-i18n="theme_allod">Allod</span>
-                  <span class="theme-check">✓</span>
-                </div>
-                <div class="theme-card-desc" data-i18n="theme_allod_sub">Terre libere medievali, rovere antico, pergamena e ottone battuto</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div class="grid-2col" style="margin-bottom: 20px;">
           <!-- Card 1: Software Lifecycle & Aggiornamento Allod -->
           <div class="card">
@@ -581,6 +479,114 @@ sudo systemctl enable --now allod-helperd</pre>
           </div>
           <div id="settings-console" style="background:#090d16; border:1px solid var(--card-border); border-radius:8px; padding:14px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; min-height:180px; max-height:380px; overflow-y:auto; white-space:pre-wrap; line-height:1.45;">Welcome to Allod Sovereign Maintenance Console.
 Ready for operations. Click any maintenance action above to see real-time output.</div>
+        </div>
+
+        <!-- Card 4: Aspetto & Tema (Theme & Appearance) - Collapsible -->
+        <div class="card" id="settings-theme-card" style="margin-top:16px;">
+          <div class="card-header theme-collapse-header" onclick="toggleThemeCollapse()" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; cursor:pointer; user-select:none;" title="Clicca per espandere o comprimere">
+            <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+              <span>🎨</span> <span data-i18n="settings_theme_title">Aspetto & Tema dell'Interfaccia</span>
+            </h3>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:12px; color:var(--text-muted);" data-i18n="settings_theme_active_label">Tema Attivo:</span>
+                <span class="badge badge-info" id="current-theme-badge">Default Slate</span>
+              </div>
+              <span id="theme-chevron" class="theme-chevron" title="Espandi / Comprimi">▼</span>
+            </div>
+          </div>
+
+          <div id="settings-theme-body" class="hidden" style="margin-top:14px; border-top:1px solid var(--card-border); padding-top:14px;">
+            <p class="text-muted" style="font-size:12.5px; margin-top:0; margin-bottom:18px; line-height:1.4;" data-i18n="settings_theme_desc">
+              Personalizza l'esperienza visiva di Allod. Il rendering viene gestito interamente nel browser a zero consumo di CPU e RAM sul server, con memorizzazione locale persistente.
+            </p>
+
+            <div class="theme-grid">
+              <!-- Theme 1: Default Slate / Cyber -->
+              <div class="theme-card active" id="theme-card-default" onclick="selectTheme('default')">
+                <div class="theme-preview theme-preview-default">
+                  <div class="theme-preview-sidebar"></div>
+                  <div class="theme-preview-body">
+                    <div class="theme-preview-topbar"></div>
+                    <div class="theme-preview-cards">
+                      <div class="theme-preview-box"></div>
+                      <div class="theme-preview-box active"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="theme-card-body">
+                  <div class="theme-card-title">
+                    <span data-i18n="theme_default">Default Slate</span>
+                    <span class="theme-check">✓</span>
+                  </div>
+                  <div class="theme-card-desc" data-i18n="theme_default_sub">Cyber dark ardesia e accenti ciano neon</div>
+                </div>
+              </div>
+
+              <!-- Theme 2: Moderno (Creative Tim Material Dashboard) -->
+              <div class="theme-card" id="theme-card-moderno" onclick="selectTheme('moderno')">
+                <div class="theme-preview theme-preview-moderno">
+                  <div class="theme-preview-sidebar"></div>
+                  <div class="theme-preview-body">
+                    <div class="theme-preview-topbar"></div>
+                    <div class="theme-preview-cards">
+                      <div class="theme-preview-box"></div>
+                      <div class="theme-preview-box active"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="theme-card-body">
+                  <div class="theme-card-title">
+                    <span data-i18n="theme_moderno">Moderno</span>
+                    <span class="theme-check">✓</span>
+                  </div>
+                  <div class="theme-card-desc" data-i18n="theme_moderno_sub">Material Dashboard Creative Tim, card arrotondate e gradiente rosa fucsia</div>
+                </div>
+              </div>
+
+              <!-- Theme 3: CIA (Tom Clancy Jack Ryan / Tactical) -->
+              <div class="theme-card" id="theme-card-cia" onclick="selectTheme('cia')">
+                <div class="theme-preview theme-preview-cia">
+                  <div class="theme-preview-sidebar"></div>
+                  <div class="theme-preview-body">
+                    <div class="theme-preview-topbar"></div>
+                    <div class="theme-preview-cards">
+                      <div class="theme-preview-box"></div>
+                      <div class="theme-preview-box active"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="theme-card-body">
+                  <div class="theme-card-title">
+                    <span data-i18n="theme_cia">CIA // Tactical</span>
+                    <span class="theme-check">✓</span>
+                  </div>
+                  <div class="theme-card-desc" data-i18n="theme_cia_sub">Jack Ryan Langley, radar stealth e fosforo verde operativo</div>
+                </div>
+              </div>
+
+              <!-- Theme 4: Allod (Medioevo / Allodio Feudale) -->
+              <div class="theme-card" id="theme-card-allod" onclick="selectTheme('allod')">
+                <div class="theme-preview theme-preview-allod">
+                  <div class="theme-preview-sidebar"></div>
+                  <div class="theme-preview-body">
+                    <div class="theme-preview-topbar"></div>
+                    <div class="theme-preview-cards">
+                      <div class="theme-preview-box"></div>
+                      <div class="theme-preview-box active"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="theme-card-body">
+                  <div class="theme-card-title">
+                    <span data-i18n="theme_allod">Allod</span>
+                    <span class="theme-check">✓</span>
+                  </div>
+                  <div class="theme-card-desc" data-i18n="theme_allod_sub">Terre libere medievali, rovere antico, pergamena e ottone battuto</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </main>
