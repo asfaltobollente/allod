@@ -198,21 +198,32 @@ func formatBytes(b int64) string {
 	return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
 }
 
-func getModuleRuntimeStatus(modName string, level string) string {
-	if level == "off" || level == "" {
-		return "off"
-	}
+func getModuleRuntimeStatus(modName string, level string, runningContainers map[string]bool) string {
 	if modName == "storage" {
 		// Storage is active if /mnt/allod-storage is mounted or single/raid1 level is configured
 		if _, err := os.Stat("/mnt/allod-storage"); err == nil {
 			return "running"
 		}
+		if level == "off" || level == "" {
+			return "off"
+		}
+		return "stopped"
 	}
 	if modName == "shares" {
 		if out, err := exec.Command("systemctl", "is-active", "smbd").Output(); err == nil && strings.TrimSpace(string(out)) == "active" {
 			return "running"
 		}
+		if level == "off" || level == "" {
+			return "off"
+		}
+		return "stopped"
 	}
+
+	// Active rootless Podman containers check
+	if quadlet.IsModuleRunning(modName, runningContainers) {
+		return "running"
+	}
+
 	out, err := exec.Command("systemctl", "--user", "is-active", modName).Output()
 	st := strings.TrimSpace(string(out))
 	if err == nil && st == "active" {
@@ -224,8 +235,12 @@ func getModuleRuntimeStatus(modName string, level string) string {
 	if st == "activating" {
 		return "starting"
 	}
+	if level == "off" || level == "" {
+		return "off"
+	}
 	return "stopped"
 }
+
 
 func main() {
 	port := 8080
@@ -307,6 +322,7 @@ func main() {
 			return
 		}
 
+		runningContainers := quadlet.GetRunningContainers()
 		var modules []ModuleInfo
 		for _, e := range entries {
 			if !e.IsDir() {
@@ -324,7 +340,7 @@ func main() {
 				curLevel = modCfg.Level
 			}
 
-			runtimeStatus := getModuleRuntimeStatus(modName, curLevel)
+			runtimeStatus := getModuleRuntimeStatus(modName, curLevel, runningContainers)
 			sPath, sSize, sBytes, isNAS, mounts := getStorageInfo(modName)
 
 			modules = append(modules, ModuleInfo{
@@ -510,17 +526,8 @@ func main() {
 			return
 		}
 
-		cmd := exec.Command("systemctl", "--user", "stop", req.Module)
-		_ = exec.Command("systemctl", "--user", "stop", req.Module+"-postgres").Run()
-		_ = exec.Command("systemctl", "--user", "stop", req.Module+"-valkey").Run()
-		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
-		if err := cmd.Run(); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore arresto %s: %v", req.Module, err)})
-			return
-		}
-
-		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s fermato", req.Module)})
+		_ = quadlet.StopAndRemoveContainers(req.Module, false)
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: fmt.Sprintf("Modulo %s fermato e container rimossi con successo", req.Module)})
 	})
 
 	// 5a. API System Sweep (Podman ghost containers & dangling images sweeper)
@@ -551,13 +558,28 @@ func main() {
 			}
 		}
 
-		// 4. Reset failed systemd units
+		// 4. Terminate any orphan containers for modules configured as 'off'
+		var orphansCleaned []string
+		cfg, _ := config.LoadConfig(getConfigPath())
+		if cfg != nil {
+			for modID, modCfg := range cfg.Modules {
+				if modCfg.Level == "off" || modCfg.Level == "" {
+					if quadlet.IsModuleRunning(modID, nil) {
+						_ = quadlet.StopAndRemoveContainers(modID, true)
+						orphansCleaned = append(orphansCleaned, modID)
+					}
+				}
+			}
+		}
+
+		// 5. Reset failed systemd units
 		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
 
 		data := map[string]interface{}{
 			"containers_pruned": strings.TrimSpace(string(cntPruneOut)),
 			"images_pruned":     strings.TrimSpace(string(imgPruneOut)),
 			"cleaned_cids":      cleanedCids,
+			"orphans_cleaned":   orphansCleaned,
 			"timestamp":         time.Now().Format("2006-01-02 15:04:05"),
 		}
 
@@ -578,6 +600,7 @@ func main() {
 
 		home, _ := os.UserHomeDir()
 		var writtenFiles []string
+		cfg, _ := config.LoadConfig(getConfigPath())
 		if home != "" {
 			quadDir := filepath.Join(home, ".config", "containers", "systemd")
 			systemdUserDir := filepath.Join(home, ".config", "systemd", "user")
@@ -598,17 +621,20 @@ func main() {
 					continue
 				}
 
-				level := "standard"
-				if _, ok := m.Levels[level]; !ok {
-					for l := range m.Levels {
-						if l != "off" {
-							level = l
-							break
-						}
+				curLevel := "off"
+				if cfg != nil && cfg.Modules != nil {
+					if modCfg, exists := cfg.Modules[modID]; exists && modCfg.Level != "" {
+						curLevel = modCfg.Level
 					}
 				}
 
-				if genRes, err := quadlet.Generate(modID, m, level); err == nil {
+				if curLevel == "off" || curLevel == "" {
+					// Clean up any stale unit files or orphan containers for disabled modules
+					_ = quadlet.StopAndRemoveContainers(modID, true)
+					continue
+				}
+
+				if genRes, err := quadlet.Generate(modID, m, curLevel); err == nil {
 					for fname, content := range genRes.Files {
 						if strings.HasSuffix(fname, ".service") {
 							_ = os.WriteFile(filepath.Join(systemdUserDir, fname), []byte(content), 0644)
@@ -1624,14 +1650,7 @@ WantedBy=default.target
 			_ = os.MkdirAll(quadDir, 0755)
 			_ = os.MkdirAll(systemdUserDir, 0755)
 			if req.Level == "off" {
-				_ = exec.Command("systemctl", "--user", "stop", req.Module).Run()
-				_ = exec.Command("systemctl", "--user", "stop", req.Module+"-postgres").Run()
-				_ = exec.Command("systemctl", "--user", "stop", req.Module+"-valkey").Run()
-				_ = os.Remove(filepath.Join(quadDir, req.Module+".container"))
-				_ = os.Remove(filepath.Join(quadDir, req.Module+"-postgres.container"))
-				_ = os.Remove(filepath.Join(quadDir, req.Module+"-valkey.container"))
-				_ = os.Remove(filepath.Join(quadDir, req.Module+".service"))
-				_ = os.Remove(filepath.Join(systemdUserDir, req.Module+".service"))
+				_ = quadlet.StopAndRemoveContainers(req.Module, true)
 			} else {
 				quadlet.EnsureAllodNetwork(quadDir)
 				if genRes, err := quadlet.Generate(req.Module, m, req.Level); err == nil {
@@ -1668,29 +1687,8 @@ WantedBy=default.target
 
 		modID := req.Module
 
-		// 1. Stop systemd services
-		_ = exec.Command("systemctl", "--user", "stop", modID).Run()
-		_ = exec.Command("systemctl", "--user", "stop", modID+"-postgres").Run()
-		_ = exec.Command("systemctl", "--user", "stop", modID+"-valkey").Run()
-
-		// 2. Remove Podman containers
-		_ = exec.Command("podman", "rm", "-f", "systemd-"+modID).Run()
-		_ = exec.Command("podman", "rm", "-f", "systemd-"+modID+"-postgres").Run()
-		_ = exec.Command("podman", "rm", "-f", "systemd-"+modID+"-valkey").Run()
-		_ = exec.Command("podman", "rm", "-f", modID).Run()
-
-		// 3. Reset failed state
-		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
-
-		// 4. Remove generated Quadlet units
-		home, _ := os.UserHomeDir()
-		if home != "" {
-			quadDir := filepath.Join(home, ".config", "containers", "systemd")
-			_ = os.Remove(filepath.Join(quadDir, modID+".container"))
-			_ = os.Remove(filepath.Join(quadDir, modID+"-postgres.container"))
-			_ = os.Remove(filepath.Join(quadDir, modID+"-valkey.container"))
-			_ = os.Remove(filepath.Join(quadDir, modID+".service"))
-		}
+		// 1. Forcibly stop and remove Podman containers and Quadlet units
+		_ = quadlet.StopAndRemoveContainers(modID, true)
 
 		// 5. Clean state.db entry
 		if st, err := state.Open(dbPath); err == nil {
@@ -1699,6 +1697,7 @@ WantedBy=default.target
 		}
 
 		// 6. Clean and re-initialize storage folder
+		home, _ := os.UserHomeDir()
 		baseDir := "/mnt/allod-storage"
 		if _, err := os.Stat(baseDir); err != nil {
 			baseDir = filepath.Join(home, ".local", "share", "allod", "storage")
