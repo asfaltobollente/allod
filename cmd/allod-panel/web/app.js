@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof setLanguage === 'function') {
     setLanguage(currentLang);
   }
+  switchToTab('launchpad');
   refreshData();
 });
 
@@ -61,6 +62,7 @@ async function refreshData() {
       await fetchPhotosSharesIntegration();
     } catch (_) {}
 
+    renderLaunchpad();
     renderOverview();
     renderModules();
     renderRing();
@@ -69,6 +71,243 @@ async function refreshData() {
   } catch (err) {
     showAlert('Errore di comunicazione con il backend Allod: ' + err.message, 'danger');
   }
+}
+
+let launchpadMode = 'lan';
+
+function setLaunchpadMode(mode) {
+  launchpadMode = mode;
+  const lanBtn = document.getElementById('launchpad-toggle-lan');
+  const meshBtn = document.getElementById('launchpad-toggle-mesh');
+  if (lanBtn && meshBtn) {
+    if (mode === 'lan') {
+      lanBtn.className = 'btn btn-sm btn-primary';
+      lanBtn.style.background = '';
+      lanBtn.style.color = '';
+      meshBtn.className = 'btn btn-sm';
+      meshBtn.style.background = 'transparent';
+      meshBtn.style.color = 'var(--text-muted)';
+    } else {
+      meshBtn.className = 'btn btn-sm btn-primary';
+      meshBtn.style.background = '';
+      meshBtn.style.color = '';
+      lanBtn.className = 'btn btn-sm';
+      lanBtn.style.background = 'transparent';
+      lanBtn.style.color = 'var(--text-muted)';
+    }
+  }
+  renderLaunchpad();
+}
+
+function renderLaunchpad() {
+  const container = document.getElementById('launchpad-grid');
+  if (!container || !currentModules) return;
+
+  const lanHost = window.location.hostname || '192.168.0.122';
+  const meshHost = '100.64.0.1';
+  const activeHost = (launchpadMode === 'mesh') ? meshHost : lanHost;
+
+  const apps = [
+    {
+      id: 'photos',
+      name: 'Immich Photos',
+      icon: '📸',
+      color: '#38bdf8',
+      desc: 'Galleria fotografica ad altissime prestazioni con timeline, album e backup automatico continuo da smartphone.',
+      port: 2283,
+      url: `http://${activeHost}:2283`,
+      path: null,
+      primaryActionText: '🌐 Apri Galleria Foto',
+      secondaryActionText: null
+    },
+    {
+      id: 'media',
+      name: 'Jellyfin Media Server',
+      icon: '🍿',
+      color: '#a855f7',
+      desc: 'Cinema personale per film in 4K, serie TV e libreria musicale in streaming diretto senza pubblicità.',
+      port: 8096,
+      url: `http://${activeHost}:8096`,
+      path: `\\\\${activeHost}\\shares\\media`,
+      primaryActionText: '🎬 Apri Streaming Video',
+      secondaryActionText: '📁 Cartella Media'
+    },
+    {
+      id: 'cloud',
+      name: 'Nextcloud Hub',
+      icon: '☁️',
+      color: '#0284c7',
+      desc: 'Cloud personale per documenti, contatti, calendario e sincronizzazione desktop/mobile (Dropbox/Drive privato).',
+      port: 8443,
+      url: `http://${activeHost}:8443`,
+      path: null,
+      primaryActionText: '📂 Apri Cloud Drive',
+      secondaryActionText: null
+    },
+    {
+      id: 'shares',
+      name: 'Samba File Shares',
+      icon: '📁',
+      color: '#10b981',
+      desc: 'Condivisioni di rete locali native per Esplora Risorse di Windows, Mac Finder e app di gestione file mobili.',
+      port: 445,
+      url: null,
+      path: `\\\\${activeHost}\\shares`,
+      primaryActionText: '📋 Copia Percorso Rete',
+      secondaryActionText: '🔑 Password SMB'
+    },
+    {
+      id: 'network',
+      name: 'WireGuard Mesh (Headscale)',
+      icon: '🌐',
+      color: '#f59e0b',
+      desc: 'Rete mesh privata crittografata punto-punto per accedere a tutti i servizi da fuori casa con zero porte aperte sul router.',
+      port: null,
+      url: null,
+      path: null,
+      primaryActionText: '📱 Associa Smartphone',
+      secondaryActionText: '⚙️ Configura Tunnel'
+    },
+    {
+      id: 'storage',
+      name: 'Pannello Allod & Storage RAID 1',
+      icon: '🛡️',
+      color: '#ec4899',
+      desc: 'Gestione del sistema operativo, monitoraggio dei dischi fisici Btrfs RAID 1 con checksum e stato dei moduli.',
+      port: 8080,
+      url: null,
+      path: null,
+      primaryActionText: '📊 Stato Dischi & RAM',
+      secondaryActionText: '📦 Gestione Moduli'
+    }
+  ];
+
+  container.innerHTML = '';
+
+  apps.forEach(app => {
+    const mod = currentModules.find(m => m.id === app.id);
+    const isRunning = mod ? (mod.runtime_status === 'running' || mod.runtime_status === 'active') : (app.id === 'storage');
+    const isInstalled = mod ? (mod.current_level && mod.current_level !== 'off') : true;
+
+    const card = document.createElement('div');
+    card.className = `launchpad-card ${!isRunning && isInstalled ? 'offline' : ''}`;
+
+    let statusBadge = `<span class="badge badge-success">🟢 Online</span>`;
+    if (!isInstalled) {
+      statusBadge = `<span class="badge" style="background:#334155; color:#94a3b8;">⚪ Non Configurato</span>`;
+    } else if (!isRunning) {
+      statusBadge = `<span class="badge" style="background:#ef4444; color:#fff;">⏹ Fermato</span>`;
+    }
+
+    let endpointDisplay = '';
+    if (app.url) {
+      endpointDisplay = `
+        <div class="launchpad-endpoint">
+          <span>${app.url}</span>
+          <span style="font-size:10px; color:var(--text-muted);">Porta ${app.port}</span>
+        </div>
+      `;
+    } else if (app.path) {
+      endpointDisplay = `
+        <div class="launchpad-endpoint">
+          <span>${app.path}</span>
+          <span style="font-size:10px; color:var(--text-muted);">SMB LAN</span>
+        </div>
+      `;
+    } else if (app.id === 'network') {
+      endpointDisplay = `
+        <div class="launchpad-endpoint">
+          <span>IP Mesh: ${meshHost}</span>
+          <span style="font-size:10px; color:var(--text-muted);">Zero-Trust</span>
+        </div>
+      `;
+    }
+
+    let actionButtons = '';
+    if (app.id === 'storage') {
+      actionButtons = `
+        <div class="launchpad-actions">
+          <button class="launchpad-btn-primary" onclick="switchToTab('overview')">
+            📊 ${app.primaryActionText}
+          </button>
+          <button class="launchpad-btn-secondary" onclick="switchToTab('modules')">
+            📦 ${app.secondaryActionText}
+          </button>
+        </div>
+      `;
+    } else if (app.id === 'shares') {
+      actionButtons = `
+        <div class="launchpad-actions">
+          <button class="launchpad-btn-primary" onclick="copyTextToClipboard('${app.path}', this)">
+            ${app.primaryActionText}
+          </button>
+          <button class="launchpad-btn-secondary" onclick="openSmbPasswordModal()">
+            ${app.secondaryActionText}
+          </button>
+        </div>
+      `;
+    } else if (app.id === 'network') {
+      actionButtons = `
+        <div class="launchpad-actions">
+          <button class="launchpad-btn-primary" onclick="openNetworkPairingModal()">
+            ${app.primaryActionText}
+          </button>
+          <button class="launchpad-btn-secondary" onclick="openNetworkConfigModal()">
+            ${app.secondaryActionText}
+          </button>
+        </div>
+      `;
+    } else if (isRunning && app.url) {
+      actionButtons = `
+        <div class="launchpad-actions">
+          <a href="${app.url}" target="_blank" class="launchpad-btn-primary">
+            ${app.primaryActionText} ➔
+          </a>
+          ${app.path ? `
+            <button class="launchpad-btn-secondary" onclick="copyTextToClipboard('${app.path}', this)">
+              ${app.secondaryActionText}
+            </button>
+          ` : ''}
+        </div>
+      `;
+    } else if (isInstalled && !isRunning) {
+      actionButtons = `
+        <div class="launchpad-actions">
+          <button class="launchpad-btn-primary" style="background:#3b82f6; color:#fff;" onclick="startModule('${app.id}')">
+            ▶ Avvia Modulo
+          </button>
+          <button class="launchpad-btn-secondary" onclick="switchToTab('modules')">
+            ⚙️ Impostazioni
+          </button>
+        </div>
+      `;
+    } else {
+      actionButtons = `
+        <div class="launchpad-actions">
+          <button class="launchpad-btn-primary" style="background:#334155; color:#f8fafc;" onclick="switchToTab('modules')">
+            📦 Abilita in Moduli
+          </button>
+        </div>
+      `;
+    }
+
+    card.innerHTML = `
+      <div class="launchpad-card-glow" style="background:${app.color};"></div>
+      <div>
+        <div class="launchpad-header">
+          <div class="launchpad-icon">${app.icon}</div>
+          <div>${statusBadge}</div>
+        </div>
+        <div class="launchpad-title">${app.name}</div>
+        <div class="launchpad-subtitle">${mod && mod.current_level ? `Livello: ${mod.current_level.toUpperCase()}` : ''}</div>
+        <div class="launchpad-desc">${app.desc}</div>
+        ${endpointDisplay}
+      </div>
+      ${actionButtons}
+    `;
+
+    container.appendChild(card);
+  });
 }
 
 function renderOverview() {

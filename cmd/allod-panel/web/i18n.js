@@ -3,6 +3,7 @@
 const i18n = {
   en: {
     app_title: "Allod — Sovereign Personal Cloud & NAS",
+    tab_launchpad: "Launchpad",
     tab_overview: "Overview",
     tab_modules: "Modules & Levels",
     tab_ring: "Ring Federation",
@@ -10,6 +11,8 @@ const i18n = {
     tab_settings: "Settings & Maintenance",
     mesh_subtitle: "Encrypted WireGuard Mesh",
 
+    page_launchpad_title: "App Launchpad & Hub",
+    page_launchpad_sub: "One-click access to all your personal cloud applications, streaming services, and shares",
     page_overview_title: "Node Overview",
     page_overview_sub: "System state, hardware resources, and security boundary",
     page_modules_title: "Module & Resource Management",
@@ -197,6 +200,7 @@ const i18n = {
   },
   it: {
     app_title: "Allod — Cloud Personale in Piena Proprietà",
+    tab_launchpad: "Launchpad",
     tab_overview: "Panoramica",
     tab_modules: "Moduli & Livelli",
     tab_ring: "Federazione (Ring)",
@@ -204,6 +208,8 @@ const i18n = {
     tab_settings: "Impostazioni & Manutenzione",
     mesh_subtitle: "Overlay WireGuard Mesh",
 
+    page_launchpad_title: "Launchpad & Centro Applicazioni",
+    page_launchpad_sub: "Accesso rapido con un click a tutte le tue app cloud, streaming e cartelle condivise",
     page_overview_title: "Panoramica del Nodo",
     page_overview_sub: "Stato del sistema, risorse e sicurezza",
     page_modules_title: "Gestione Moduli & Servizi",
