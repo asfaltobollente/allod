@@ -229,10 +229,10 @@ function renderLaunchpad() {
       actionButtons = `
         <div class="launchpad-actions">
           <button class="launchpad-btn-primary" onclick="switchToTab('overview')">
-            📊 ${app.primaryActionText}
+            ${app.primaryActionText}
           </button>
           <button class="launchpad-btn-secondary" onclick="switchToTab('modules')">
-            📦 ${app.secondaryActionText}
+            ${app.secondaryActionText}
           </button>
         </div>
       `;
@@ -884,7 +884,7 @@ function renderModules() {
       card.className = 'module-card';
       statusBadge = `<span class="badge badge-warning" style="background:#f59e0b; color:#000; font-weight:700;">⚠️ ATTIVO (OFF)</span>`;
       actionButtons = `
-        <button class="btn btn-sm btn-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;" title="Termina forzatamente il container Podman attivo">⏹️ ${t('btn_stop')}</button>
+        <button class="btn btn-sm btn-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;" title="Termina forzatamente il container Podman attivo">⏹ ${t('btn_stop')}</button>
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
       `;
       if (tech.linkPort) {
@@ -908,7 +908,7 @@ function renderModules() {
 
       actionButtons = `
         ${diagBtn}
-        <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">${t('btn_unlock')}</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔓 ${t('btn_unlock')}</button>
       `;
 
       if (tech.linkPort) {
@@ -931,9 +931,9 @@ function renderModules() {
         : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
       actionButtons = `
-        ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">${t('btn_stop')}</button>` : ''}
+        ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>` : ''}
         ${diagBtn}
-        <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">${t('btn_lock')}</button>
+        <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔒 ${t('btn_lock')}</button>
       `;
 
       if (tech.linkPort) {
@@ -951,7 +951,7 @@ function renderModules() {
       if (mod.runtime_status === 'running') {
         statusBadge = `<span class="badge badge-success">${t('status_running')}</span>`;
         actionButtons = `
-          <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">${t('btn_stop')}</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>
           <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
         `;
         
@@ -969,14 +969,14 @@ function renderModules() {
       } else if (mod.runtime_status === 'failed') {
         statusBadge = `<span class="badge badge-danger">${t('status_error')}</span>`;
         actionButtons = `
-          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">${t('btn_restart')}</button>
+          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_restart')}</button>
           <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="openDangerPurgeModal('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">${t('btn_reset')}</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="openDangerPurgeModal('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🗑️ ${t('btn_reset')}</button>
         `;
       } else {
         statusBadge = `<span class="badge badge-warning">${t('status_stopped')}</span>`;
         actionButtons = `
-          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">${t('btn_start')}</button>
+          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_start')}</button>
           <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
         `;
       }
@@ -1096,10 +1096,10 @@ function renderModules() {
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button class="btn btn-sm btn-info" onclick="openNetworkConfigModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
-                ${t('network_config_btn')}
+                ⚙️ ${t('network_config_btn')}
               </button>
               <button class="btn btn-sm btn-success" onclick="openNetworkPairingModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
-                ${t('network_pairing_btn')}
+                📱 ${t('network_pairing_btn')}
               </button>
             </div>
           </div>
@@ -1562,7 +1562,7 @@ async function showStorageDiagnostics() {
       <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 6px 0;">
         <h4 style="font-size:13px; color:var(--primary); margin:0;">📊 Allocazione Btrfs Filesystem Usage (RAID 1 Real-Time):</h4>
         <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-storage-usage', this)" style="padding:2px 8px; font-size:11px;">
-          ${t('btn_copy', '📋 Copia')}
+          📋 ${t('btn_copy', 'Copia')}
         </button>
       </div>
       <div id="diag-storage-usage" class="diag-code-box">${escapeHtml(d.usage)}</div>
@@ -1570,7 +1570,7 @@ async function showStorageDiagnostics() {
       <div style="display:flex; justify-content:space-between; align-items:center; margin:16px 0 6px 0;">
         <h4 style="font-size:13px; color:var(--success); margin:0;">🛡️ Contatori di Errore Hardware Dischi (btrfs device stats):</h4>
         <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-storage-stats', this)" style="padding:2px 8px; font-size:11px;">
-          ${t('btn_copy', '📋 Copia')}
+          📋 ${t('btn_copy', 'Copia')}
         </button>
       </div>
       <div id="diag-storage-stats" class="diag-code-box" style="color:#10b981;">${escapeHtml(d.stats)}</div>
@@ -1607,7 +1607,7 @@ async function showModuleDiagnostics(modId) {
       <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 6px 0;">
         <h4 style="font-size:13px; color:var(--primary); margin:0;">⚙️ Stato Systemd (systemctl status ${d.module}):</h4>
         <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-box-systemd', this)" style="padding:2px 8px; font-size:11px;">
-          ${t('btn_copy', '📋 Copia')}
+          📋 ${t('btn_copy', 'Copia')}
         </button>
       </div>
       <div id="diag-box-systemd" class="diag-code-box">${escapeHtml(d.status_text || 'Nessun output')}</div>
@@ -1615,7 +1615,7 @@ async function showModuleDiagnostics(modId) {
       <div style="display:flex; justify-content:space-between; align-items:center; margin:16px 0 6px 0;">
         <h4 style="font-size:13px; color:var(--primary); margin:0;">📜 Ultimi Log Container Podman (tail -30):</h4>
         <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-box-logs', this)" style="padding:2px 8px; font-size:11px;">
-          ${t('btn_copy', '📋 Copia')}
+          📋 ${t('btn_copy', 'Copia')}
         </button>
       </div>
       <div id="diag-box-logs" class="diag-code-box" style="color:#e2e8f0;">${escapeHtml(d.logs || 'Nessun log recente')}</div>
@@ -1897,7 +1897,7 @@ async function executePodmanSweep() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🧹 Esegui Nuova Scansione';
+      btn.textContent = t('sweeper_btn_rescan', '🧹 Esegui Nuova Scansione');
     }
   }
 }
