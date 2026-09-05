@@ -875,10 +875,29 @@ function renderModules() {
     const criticalDataModules = ['storage', 'cloud', 'photos', 'backup', 'shares', 'media'];
     const isDataCritical = criticalDataModules.includes(mod.id) || (mod.mounts && mod.mounts.length > 0);
     const isRunningOrNAS = (mod.runtime_status === 'running' || (mod.id === 'storage' && mod.is_on_nas_pool));
-    const isLocked = isDataCritical && isRunningOrNAS && !unlockedModules.has(mod.id);
-    const isUnlocked = isDataCritical && isRunningOrNAS && unlockedModules.has(mod.id);
+    const isOrphan = isOff && mod.runtime_status === 'running';
+    const isLocked = isDataCritical && isRunningOrNAS && !isOrphan && !unlockedModules.has(mod.id);
+    const isUnlocked = isDataCritical && isRunningOrNAS && !isOrphan && unlockedModules.has(mod.id);
 
-    if (isLocked) {
+    if (isOrphan) {
+      card.className = 'module-card';
+      statusBadge = `<span class="badge badge-warning" style="background:#f59e0b; color:#000; font-weight:700;">⚠️ ATTIVO (OFF)</span>`;
+      actionButtons = `
+        <button class="btn btn-sm btn-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;" title="Termina forzatamente il container Podman attivo">⏹️ ${t('btn_stop')}</button>
+        <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
+      `;
+      if (tech.linkPort) {
+        const host = window.location.hostname || '127.0.0.1';
+        openLinkHtml = `
+          <div style="margin-top:10px; padding:6px 10px; background:rgba(245,158,11,0.15); border-radius:6px; border:1px solid rgba(245,158,11,0.3);">
+            <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:#f59e0b; font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
+              <span>⚠️ ${t('btn_open_web')} (${tech.product} - Container orfano)</span>
+              <span>Port ${tech.linkPort} ↗</span>
+            </a>
+          </div>
+        `;
+      }
+    } else if (isLocked) {
       card.className = 'module-card module-card-locked';
       statusBadge = `<span class="badge badge-success">${t('status_protected')}</span>`;
       

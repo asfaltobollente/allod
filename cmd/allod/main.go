@@ -391,12 +391,12 @@ var stopCmd = &cobra.Command{
 		if target == "all" {
 			fmt.Println("Arresto di tutti i moduli...")
 			for modName := range cfg.Modules {
-				_ = exec.Command("systemctl", "--user", "stop", modName, modName+"-postgres", modName+"-valkey").Run()
-				fmt.Printf("  ⏹ %-12s Fermato\n", modName)
+				_ = quadlet.StopAndRemoveContainers(modName, false)
+				fmt.Printf("  ⏹ %-12s Fermato e container rimossi\n", modName)
 			}
 		} else {
-			_ = exec.Command("systemctl", "--user", "stop", target, target+"-postgres", target+"-valkey").Run()
-			fmt.Printf("⏹ Modulo '%s' fermato\n", target)
+			_ = quadlet.StopAndRemoveContainers(target, false)
+			fmt.Printf("⏹ Modulo '%s' fermato e container rimossi\n", target)
 		}
 	},
 }
@@ -418,6 +418,7 @@ var statusCmd = &cobra.Command{
 
 		for modName, modCfg := range cfg.Modules {
 			unit := modName + ".service"
+			isRunning := quadlet.IsModuleRunning(modName, nil)
 			out, _ := exec.Command("systemctl", "--user", "is-active", modName).Output()
 			status := strings.TrimSpace(string(out))
 			if status == "" {
@@ -425,8 +426,12 @@ var statusCmd = &cobra.Command{
 			}
 
 			statusIcon := "⏹ inactive"
-			if status == "active" {
-				statusIcon = "🟢 active (running)"
+			if isRunning || status == "active" {
+				if modCfg.Level == "off" {
+					statusIcon = "⚠️ orphan (active but off)"
+				} else {
+					statusIcon = "🟢 active (running)"
+				}
 			} else if status == "failed" {
 				statusIcon = "🔴 failed"
 			} else if modCfg.Level == "off" {
@@ -439,6 +444,7 @@ var statusCmd = &cobra.Command{
 }
 
 func cleanModuleUnits(outDir, modName string) {
+	_ = quadlet.StopAndRemoveContainers(modName, true)
 	entries, err := os.ReadDir(outDir)
 	if err != nil {
 		return

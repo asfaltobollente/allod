@@ -339,3 +339,125 @@ func GenerateContainer(modID string, m *manifest.Manifest, levelName string) (st
 	}
 	return "", nil
 }
+
+// GetRunningContainers returns a set of container names currently running in rootless Podman.
+func GetRunningContainers() map[string]bool {
+	active := make(map[string]bool)
+	out, err := exec.Command("podman", "ps", "--format", "{{.Names}}").Output()
+	if err == nil {
+		lines := strings.Split(string(out), "\n")
+		for _, l := range lines {
+			name := strings.TrimSpace(l)
+			if name != "" {
+				active[name] = true
+			}
+		}
+	}
+	return active
+}
+
+// IsModuleRunning checks if any container or systemd unit belonging to modID is actively running.
+func IsModuleRunning(modID string, runningContainers map[string]bool) bool {
+	if runningContainers == nil {
+		runningContainers = GetRunningContainers()
+	}
+	for cName := range runningContainers {
+		if cName == modID || strings.HasPrefix(cName, modID+"-") ||
+			cName == "systemd-"+modID || strings.HasPrefix(cName, "systemd-"+modID+"-") {
+			return true
+		}
+	}
+	out, err := exec.Command("systemctl", "--user", "is-active", modID).Output()
+	if err == nil && strings.TrimSpace(string(out)) == "active" {
+		return true
+	}
+	return false
+}
+
+// StopAndRemoveContainers forcibly stops and terminates all systemd units and Podman containers
+// associated with a module (including sub-containers like -postgres, -valkey, -headscale, etc.).
+// If removeUnits is true, it also cleans up generated Quadlet .container and .service files.
+func StopAndRemoveContainers(modID string, removeUnits bool) error {
+	// 1. Gather all potential container names from active podman ps -a
+	targets := make(map[string]bool)
+	out, err := exec.Command("podman", "ps", "-a", "--format", "{{.Names}}").Output()
+	if err == nil {
+		lines := strings.Split(string(out), "\n")
+		for _, line := range lines {
+			name := strings.TrimSpace(line)
+			if name == "" {
+				continue
+			}
+			if name == modID || strings.HasPrefix(name, modID+"-") ||
+				name == "systemd-"+modID || strings.HasPrefix(name, "systemd-"+modID+"-") {
+				targets[name] = true
+			}
+		}
+	}
+
+	// Also always include well-known standard names
+	standardNames := []string{
+		modID,
+		"systemd-" + modID,
+		modID + "-postgres",
+		"systemd-" + modID + "-postgres",
+		modID + "-valkey",
+		"systemd-" + modID + "-valkey",
+		modID + "-headscale",
+		"systemd-" + modID + "-headscale",
+		modID + "-cloudflared",
+		"systemd-" + modID + "-cloudflared",
+	}
+	for _, sn := range standardNames {
+		targets[sn] = true
+	}
+
+	// 2. Stop systemd units first
+	for t := range targets {
+		if !strings.HasPrefix(t, "systemd-") {
+			_ = exec.Command("systemctl", "--user", "stop", t).Run()
+		}
+	}
+
+	// 3. Forcibly stop and remove all matching Podman containers
+	for t := range targets {
+		_ = exec.Command("podman", "stop", "-t", "2", t).Run()
+		_ = exec.Command("podman", "rm", "-f", t).Run()
+	}
+
+	// 4. Remove Quadlet and systemd unit files if requested
+	home, _ := os.UserHomeDir()
+	if removeUnits && home != "" {
+		quadDir := filepath.Join(home, ".config", "containers", "systemd")
+		systemdUserDir := filepath.Join(home, ".config", "systemd", "user")
+
+		for _, dir := range []string{quadDir, systemdUserDir} {
+			if entries, err := os.ReadDir(dir); err == nil {
+				for _, e := range entries {
+					name := e.Name()
+					if strings.HasPrefix(name, modID+".") || strings.HasPrefix(name, modID+"-") {
+						_ = os.Remove(filepath.Join(dir, name))
+					}
+				}
+			}
+		}
+	}
+
+	// 5. Remove stale CID files
+	uid := os.Getuid()
+	cidDir := fmt.Sprintf("/run/user/%d", uid)
+	if entries, err := os.ReadDir(cidDir); err == nil {
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), modID) && strings.HasSuffix(e.Name(), ".cid") {
+				_ = os.Remove(filepath.Join(cidDir, e.Name()))
+			}
+		}
+	}
+
+	// 6. Reload systemd daemon & reset failed
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "--user", "reset-failed").Run()
+
+	return nil
+}
+

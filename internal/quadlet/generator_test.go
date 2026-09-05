@@ -66,3 +66,29 @@ func TestGenerateMultiImageModule(t *testing.T) {
 		}
 	}
 }
+
+func TestIsModuleRunning(t *testing.T) {
+	mockContainers := map[string]bool{
+		"cloud":                true,
+		"cloud-postgres":       true,
+		"photos-valkey":        true,
+		"systemd-network-derp": true,
+	}
+
+	if !IsModuleRunning("cloud", mockContainers) {
+		t.Errorf("expected cloud to be detected as running")
+	}
+
+	if !IsModuleRunning("photos", mockContainers) {
+		t.Errorf("expected photos to be detected as running (photos-valkey exists)")
+	}
+
+	if !IsModuleRunning("network", mockContainers) {
+		t.Errorf("expected network to be detected as running (systemd-network-derp exists)")
+	}
+
+	if IsModuleRunning("media", mockContainers) {
+		t.Errorf("expected media to NOT be detected as running")
+	}
+}
+
