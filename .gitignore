@@ -21,6 +21,7 @@ bin/
 out_quadlet/
 restore_target/
 repo/
+%h/
 
 # SQLite databases & WAL
 state.db

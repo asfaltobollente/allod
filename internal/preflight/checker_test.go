@@ -72,3 +72,34 @@ func TestPreflightInvalidLevel(t *testing.T) {
 		t.Errorf("expected preflight to fail on non-existent level")
 	}
 }
+
+func TestPreflightNetworkHybrid(t *testing.T) {
+	cfg := &config.Config{
+		Modules: map[string]config.ModuleConfig{
+			"storage": {Level: "basic"},
+		},
+	}
+	m := &manifest.Manifest{
+		ID: "network",
+		Levels: map[string]manifest.Level{
+			"hybrid": {
+				RAMMB: 120,
+				Requires: manifest.Requires{
+					Modules: []string{"storage"},
+				},
+			},
+		},
+	}
+
+	res := Check(cfg, "network", m, "hybrid")
+	if !res.Pass {
+		t.Errorf("expected network hybrid preflight to pass, got: %s", res.Message)
+	}
+
+	// Missing storage
+	cfgNoStorage := &config.Config{Modules: map[string]config.ModuleConfig{}}
+	resNoStorage := Check(cfgNoStorage, "network", m, "hybrid")
+	if resNoStorage.Pass {
+		t.Errorf("expected network hybrid to fail when storage is missing")
+	}
+}

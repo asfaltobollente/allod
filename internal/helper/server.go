@@ -406,16 +406,32 @@ func (s *Server) processRequest(req Request) Response {
 
 	case "network.headscale_cli":
 		cmdType, _ := req.Args["command"].(string)
+
+		// Rileva dinamicamente il nome del container Headscale (network o network-headscale)
+		targetContainer := "network"
+		if out, err := exec.Command("podman", "ps", "--format", "{{.Names}}").Output(); err == nil {
+			for _, line := range strings.Split(string(out), "\n") {
+				name := strings.TrimSpace(line)
+				if name == "network-headscale" || name == "systemd-network-headscale" {
+					targetContainer = name
+					break
+				}
+				if name == "network" || name == "systemd-network" {
+					targetContainer = name
+				}
+			}
+		}
+
 		var args []string
 		switch cmdType {
 		case "preauthkey_create":
 			// Assicura che l'utente 'default' esista in Headscale
-			_ = exec.Command("podman", "exec", "network-headscale", "headscale", "users", "create", "default").Run()
-			args = []string{"exec", "network-headscale", "headscale", "preauthkeys", "create", "-u", "default", "--reusable=false", "--expiration", "1h"}
+			_ = exec.Command("podman", "exec", targetContainer, "headscale", "users", "create", "default").Run()
+			args = []string{"exec", targetContainer, "headscale", "preauthkeys", "create", "-u", "default", "--reusable=false", "--expiration", "1h"}
 		case "nodes_list":
-			args = []string{"exec", "network-headscale", "headscale", "nodes", "list", "--output", "json"}
+			args = []string{"exec", targetContainer, "headscale", "nodes", "list", "--output", "json"}
 		case "users_list":
-			args = []string{"exec", "network-headscale", "headscale", "users", "list", "--output", "json"}
+			args = []string{"exec", targetContainer, "headscale", "users", "list", "--output", "json"}
 		default:
 			return Response{Ok: false, Error: "Comando Headscale non consentito: " + cmdType}
 		}
