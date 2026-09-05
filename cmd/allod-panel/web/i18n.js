@@ -192,11 +192,24 @@ const i18n = {
     speedtest_ul: "📤 Upload (Client➔Server)",
     speedtest_verdict_title: "🎬 Streaming Suitability & Media Performance:",
     speedtest_verdict_wait: "Waiting for test execution... Click 'Start Speedtest' to begin.",
-    speedtest_iperf_info: "💡 For advanced terminal benchmarking:",
     speedtest_btn_start: "⚡ Start Speedtest",
     speedtest_btn_running: "⏳ Benchmarking...",
     speedtest_btn_repeat: "⚡ Repeat Speedtest",
-    speedtest_close: "Close"
+    speedtest_close: "Close",
+
+    // Themes
+    settings_theme_title: "Appearance & Interface Theme",
+    settings_theme_desc: "Customize the visual appearance of Allod. Fully rendered in your browser with zero server CPU or RAM overhead.",
+    settings_theme_active_label: "Active Theme:",
+    theme_default: "Default Slate",
+    theme_default_sub: "Cyber Dark & Neon Cyan",
+    theme_moderno: "Moderno",
+    theme_moderno_sub: "Material Dashboard Creative Tim, rounded cards & pink glow",
+    theme_cia: "CIA // Tactical",
+    theme_cia_sub: "Jack Ryan Langley, radar stealth & NVG phosphor green",
+    theme_allod: "Allod",
+    theme_allod_sub: "Medieval freehold, aged oak, parchment & forged brass",
+    btn_theme: "Theme"
   },
   it: {
     app_title: "Allod — Cloud Personale in Piena Proprietà",
@@ -393,7 +406,21 @@ const i18n = {
     speedtest_btn_start: "⚡ Avvia Test Velocità",
     speedtest_btn_running: "⏳ Test in corso...",
     speedtest_btn_repeat: "⚡ Ripeti Test Velocità",
-    speedtest_close: "Chiudi"
+    speedtest_close: "Chiudi",
+
+    // Themes
+    settings_theme_title: "Aspetto & Tema dell'Interfaccia",
+    settings_theme_desc: "Personalizza l'esperienza visiva di Allod. Il rendering viene gestito interamente nel browser a zero consumo di CPU e RAM sul server.",
+    settings_theme_active_label: "Tema Attivo:",
+    theme_default: "Default Slate",
+    theme_default_sub: "Cyber dark ardesia e accenti ciano neon",
+    theme_moderno: "Moderno",
+    theme_moderno_sub: "Material Dashboard Creative Tim, card arrotondate e gradiente rosa fucsia",
+    theme_cia: "CIA // Tactical",
+    theme_cia_sub: "Jack Ryan Langley, radar stealth e fosforo verde operativo",
+    theme_allod: "Allod",
+    theme_allod_sub: "Terre libere medievali, rovere antico, pergamena e ottone battuto",
+    btn_theme: "Tema"
   }
 };
 
@@ -415,12 +442,12 @@ function setLanguage(lang) {
   if (btnEn && btnIt) {
     if (lang === 'en') {
       btnEn.style.background = 'var(--primary)';
-      btnEn.style.color = '#0f172a';
+      btnEn.style.color = 'var(--primary-text, #0f172a)';
       btnIt.style.background = 'transparent';
       btnIt.style.color = 'var(--text-muted)';
     } else {
       btnIt.style.background = 'var(--primary)';
-      btnIt.style.color = '#0f172a';
+      btnIt.style.color = 'var(--primary-text, #0f172a)';
       btnEn.style.background = 'transparent';
       btnEn.style.color = 'var(--text-muted)';
     }
@@ -442,4 +469,5 @@ function setLanguage(lang) {
   if (typeof renderModules === 'function') renderModules();
   if (typeof renderRing === 'function') renderRing();
   if (typeof renderResilience === 'function') renderResilience();
+  if (typeof updateThemeBadge === 'function') updateThemeBadge();
 }
