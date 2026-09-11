@@ -874,22 +874,62 @@ func main() {
 		buildHelperOut, _ := exec.Command("go", "build", "-o", "allod-helperd", "./cmd/allod-helperd").CombinedOutput()
 		logReport.WriteString("[go build -o allod-helperd ./cmd/allod-helperd]\n" + string(buildHelperOut) + "\n")
 
-		logReport.WriteString("✓ Binari aggiornati. Riavvio processo in background...\n")
+		// Restart allod-helperd via socket
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		resHelp, errHelp := client.Execute("service.restart", map[string]interface{}{"unit": "allod-helperd"}, false)
+		if errHelp == nil && resHelp.Ok {
+			logReport.WriteString("✓ Demone Root Helper (allod-helperd) aggiornato e riavviato!\n")
+		} else {
+			logReport.WriteString(fmt.Sprintf("ℹ️ Riavvio allod-helperd: %v (%s)\n", errHelp, resHelp.Error))
+		}
+
+		logReport.WriteString("✓ Binari aggiornati. Riavvio pannello web in background...\n")
 
 		// Send success response immediately before terminating
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
-			Message: "Aggiornamento completato! Riavvio del pannello web in corso...",
+			Message: "Aggiornamento completato! Riavvio del pannello web e di allod-helperd in corso...",
 			Data:    map[string]interface{}{"output": logReport.String()},
 		})
 
 		// Asynchronous restart after 800ms
 		go func() {
 			time.Sleep(800 * time.Millisecond)
-			cmd := exec.Command("sh", "-c", "nohup ./allod-panel > panel.log 2>&1 &")
-			_ = cmd.Start()
+			if err := exec.Command("systemctl", "--user", "restart", "allod-panel").Run(); err != nil {
+				cmd := exec.Command("sh", "-c", "nohup ./allod-panel > panel.log 2>&1 &")
+				_ = cmd.Start()
+			}
 			os.Exit(0)
 		}()
+	})
+
+	// 5a-5b. API System Helper Restart
+	mux.HandleFunc("/api/system/helper-restart", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		res, err := client.Execute("service.restart", map[string]interface{}{"unit": "allod-helperd"}, false)
+		if err != nil || !res.Ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := "Errore riavvio helper"
+			if err != nil {
+				errMsg += ": " + err.Error()
+			} else if res.Error != "" {
+				errMsg += ": " + res.Error
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "✓ Demone Root Helper (allod-helperd) riavviato con successo!",
+			Data:    map[string]interface{}{"plan": res.Plan},
+		})
 	})
 
 	// 5a-6. API System Reset Failed

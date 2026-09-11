@@ -439,8 +439,13 @@ systemctl --user enable --now allod-panel</pre>
             <h3 style="margin:0; font-size:15px; display:flex; align-items:center; gap:8px;">
               <span>🛡️</span> <span data-i18n="helper_maintenance_title">Root Helper Daemon (allod-helperd)</span>
             </h3>
-            <div id="settings-helper-status-pill" class="helper-status" onclick="openHelperModal()" style="cursor:pointer;">
-              <span class="status-indicator"></span> <span id="settings-helper-status-text">Root Helper</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button class="btn btn-sm btn-outline-primary" id="btn-restart-helper" onclick="restartRootHelper()" style="padding:3px 10px; font-size:11px;">
+                🔄 <span>Riavvia Helper</span>
+              </button>
+              <div id="settings-helper-status-pill" class="helper-status" onclick="openHelperModal()" style="cursor:pointer;">
+                <span class="status-indicator"></span> <span id="settings-helper-status-text">Root Helper</span>
+              </div>
             </div>
           </div>
           <p class="text-muted" style="font-size:12.5px; margin-top:8px; margin-bottom:14px; line-height:1.4;" data-i18n="helper_maintenance_desc">
