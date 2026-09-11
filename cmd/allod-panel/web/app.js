@@ -2572,7 +2572,7 @@ async function saveSmbPassword() {
 }
 
 // ==========================================
-// TRIAD USER PROVISIONING (Samba + Immich + Jellyfin)
+// FAMILY & TRIAD MEMBERS MANAGEMENT (Samba + Immich + Jellyfin)
 // ==========================================
 
 function escapeHtml(str) {
@@ -2585,163 +2585,405 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-async function openTriadUserModal() {
+let activeFamilyTab = 'list';
+let currentQRLink = '';
+
+function switchFamilyTab(tab) {
+  activeFamilyTab = tab;
+  const btnList = document.getElementById('btn-tab-family-list');
+  const btnCreate = document.getElementById('btn-tab-family-create');
+  const btnGuide = document.getElementById('btn-tab-family-guide');
+  const paneList = document.getElementById('pane-family-list');
+  const paneCreate = document.getElementById('pane-family-create');
+  const paneGuide = document.getElementById('pane-family-guide');
+
+  [btnList, btnCreate, btnGuide].forEach(b => {
+    if (b) {
+      b.style.background = 'transparent';
+      b.style.color = 'var(--text-muted)';
+    }
+  });
+  [paneList, paneCreate, paneGuide].forEach(p => {
+    if (p) p.classList.add('hidden');
+  });
+
+  if (tab === 'list') {
+    if (btnList) { btnList.style.background = 'var(--primary)'; btnList.style.color = '#000'; }
+    if (paneList) paneList.classList.remove('hidden');
+    loadFamilyMembers();
+  } else if (tab === 'create') {
+    if (btnCreate) { btnCreate.style.background = 'var(--primary)'; btnCreate.style.color = '#000'; }
+    if (paneCreate) paneCreate.classList.remove('hidden');
+    checkTriadServiceStatus();
+  } else if (tab === 'guide') {
+    if (btnGuide) { btnGuide.style.background = 'var(--primary)'; btnGuide.style.color = '#000'; }
+    if (paneGuide) paneGuide.classList.remove('hidden');
+  }
+}
+
+function autoSuggestUsername() {
+  const fnInput = document.getElementById('family-first-name');
+  const uInput = document.getElementById('family-username');
+  if (!fnInput || !uInput) return;
+  const clean = fnInput.value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!uInput.dataset.manualEdited || uInput.value === '') {
+    uInput.value = clean;
+  }
+}
+
+function togglePassModeUI() {
+  const isManual = document.getElementById('pass-mode-manual')?.checked;
+  const boxManual = document.getElementById('box-manual-password');
+  if (boxManual) {
+    if (isManual) boxManual.classList.remove('hidden');
+    else boxManual.classList.add('hidden');
+  }
+}
+
+async function openFamilyModal() {
   const modal = document.getElementById('triad-user-modal');
   if (!modal) return;
+  modal.classList.remove('hidden');
+  switchFamilyTab('list');
+  checkTriadServiceStatus();
+}
 
-  const warnBanner = document.getElementById('triad-warning-banner');
-  const warnText = document.getElementById('triad-warning-text');
-  const okBanner = document.getElementById('triad-ok-banner');
-  const submitBtn = document.getElementById('btn-submit-triad-user');
-  const userInput = document.getElementById('triad-user-input');
-  const passInput = document.getElementById('triad-pass-input');
-  const linkPhotosCheckbox = document.getElementById('triad-link-photos-checkbox');
-  const resultBox = document.getElementById('triad-result-box');
+function openTriadUserModal() {
+  openFamilyModal();
+}
 
+function closeFamilyModal() {
+  const modal = document.getElementById('triad-user-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function closeTriadUserModal() {
+  closeFamilyModal();
+}
+
+async function checkTriadServiceStatus() {
+  const warnBanner = document.getElementById('family-warning-banner');
+  const warnText = document.getElementById('family-warning-text');
+  const submitBtn = document.getElementById('btn-submit-family');
   const sharesBadge = document.getElementById('triad-shares-badge');
   const photosBadge = document.getElementById('triad-photos-badge');
   const mediaBadge = document.getElementById('triad-media-badge');
 
-  if (resultBox) {
-    resultBox.classList.add('hidden');
-    resultBox.innerHTML = '';
-  }
-  if (userInput) userInput.value = '';
-  if (passInput) passInput.value = '';
-  if (linkPhotosCheckbox) linkPhotosCheckbox.checked = true;
-
-  // Initial loading state
-  if (sharesBadge) sharesBadge.innerHTML = '⏳ Controllo...';
-  if (photosBadge) photosBadge.innerHTML = '⏳ Controllo...';
-  if (mediaBadge) mediaBadge.innerHTML = '⏳ Controllo...';
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.style.display = '';
-    submitBtn.innerHTML = '🚀 <span>Crea Utente & Predisponi Triade</span>';
-  }
-
-  modal.classList.remove('hidden');
-
-  // Load existing triad users list asynchronously
-  loadTriadUsers();
+  if (sharesBadge) sharesBadge.innerHTML = '⏳ ...';
+  if (photosBadge) photosBadge.innerHTML = '⏳ ...';
+  if (mediaBadge) mediaBadge.innerHTML = '⏳ ...';
 
   try {
     const res = await fetch('/api/triad/status');
     const json = await res.json();
     if (json.status === 'ok' && json.data) {
       const d = json.data;
-
-      if (sharesBadge) {
-        sharesBadge.innerHTML = d.shares_active 
-          ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' 
-          : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
-      }
-      if (photosBadge) {
-        photosBadge.innerHTML = d.photos_active 
-          ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' 
-          : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
-      }
-      if (mediaBadge) {
-        mediaBadge.innerHTML = d.media_active 
-          ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' 
-          : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
-      }
+      if (sharesBadge) sharesBadge.innerHTML = d.shares_active ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
+      if (photosBadge) photosBadge.innerHTML = d.photos_active ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
+      if (mediaBadge) mediaBadge.innerHTML = d.media_active ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
 
       if (d.all_active) {
         if (warnBanner) warnBanner.classList.add('hidden');
-        if (okBanner) okBanner.classList.remove('hidden');
         if (submitBtn) submitBtn.disabled = false;
-        if (userInput) { userInput.disabled = false; userInput.focus(); }
-        if (passInput) passInput.disabled = false;
       } else {
-        if (okBanner) okBanner.classList.add('hidden');
         if (warnBanner) {
           warnBanner.classList.remove('hidden');
-          if (warnText) {
-            warnText.innerHTML = `${d.reason}<br><br>👉 <em>Per abilitare e avviare i servizi mancanti, recati nella scheda <strong>Moduli</strong> e avvia ciascun modulo.</em>`;
-          }
+          if (warnText) warnText.innerHTML = `${d.reason}<br><br>👉 <em>Per abilitare i servizi mancanti, avvia ciascun modulo dalla schermata Moduli.</em>`;
         }
         if (submitBtn) submitBtn.disabled = true;
-        if (userInput) userInput.disabled = true;
-        if (passInput) passInput.disabled = true;
       }
     }
   } catch (err) {
     if (warnBanner) {
       warnBanner.classList.remove('hidden');
-      if (warnText) warnText.textContent = 'Errore durante la verifica dello stato dei servizi: ' + err.message;
+      if (warnText) warnText.textContent = 'Errore verifica stato moduli: ' + err.message;
     }
-    if (submitBtn) submitBtn.disabled = true;
   }
 }
 
-function closeTriadUserModal() {
-  const modal = document.getElementById('triad-user-modal');
-  if (modal) modal.classList.add('hidden');
-}
-
-function toggleTriadPassVisibility() {
-  const passInput = document.getElementById('triad-pass-input');
-  if (!passInput) return;
-  passInput.type = passInput.type === 'password' ? 'text' : 'password';
-}
-
-async function loadTriadUsers() {
-  const container = document.getElementById('triad-users-list');
+async function loadFamilyMembers() {
+  const container = document.getElementById('family-members-container');
+  const countBadge = document.getElementById('family-member-count');
   if (!container) return;
 
-  container.innerHTML = '<span style="color:var(--text-muted); font-size:11.5px;">⏳ Caricamento utenti in corso...</span>';
+  container.innerHTML = '<div style="text-align:center; padding:24px; color:var(--text-muted); font-size:12px;">⏳ Caricamento membri...</div>';
 
   try {
-    const res = await fetch('/api/triad/users');
+    const res = await fetch('/api/family/members');
     const json = await res.json();
     if (json.status !== 'ok' || !Array.isArray(json.data) || json.data.length === 0) {
-      container.innerHTML = '<span style="color:var(--text-muted); font-size:11.5px;">Nessun utente Samba/Triade rilevato sul server. Crea il primo utente nel form sopra!</span>';
+      container.innerHTML = `
+        <div style="text-align:center; padding:30px; background:rgba(255,255,255,0.02); border:1px dashed var(--card-border); border-radius:8px;">
+          <div style="font-size:32px; margin-bottom:8px;">👨‍👩‍👧‍👦</div>
+          <div style="font-size:13px; font-weight:700; color:var(--text-main);">Nessun membro della famiglia configurato</div>
+          <p style="font-size:11.5px; color:var(--text-muted); margin:4px 0 14px 0;">Crea il primo profilo per attivare la cartella privata Samba e l'ecosistema Triade.</p>
+          <button type="button" class="btn btn-sm btn-primary" onclick="switchFamilyTab('create')" style="display:inline-flex; width:auto; padding:6px 14px;">
+            ➕ Aggiungi Membro Adesso
+          </button>
+        </div>
+      `;
+      if (countBadge) countBadge.innerText = '0';
       return;
     }
 
-    let html = '<div style="display:flex; flex-direction:column; gap:8px;">';
-    json.data.forEach(u => {
-      const isLinked = !!u.photos_linked;
-      const badgeColor = isLinked ? '#10b981' : '#94a3b8';
-      const badgeText = isLinked ? '🟢 SMB photos/ collegata' : '⚪ Solo App Immich (Isolata)';
-      const btnLabel = isLinked ? 'Scollega da SMB' : 'Collega a SMB';
-      const btnBorder = isLinked ? '1px solid rgba(239,68,68,0.4)' : '1px solid var(--primary)';
-      const btnColor = isLinked ? '#ef4444' : 'var(--primary)';
+    if (countBadge) countBadge.innerText = json.data.length;
+
+    let html = '';
+    json.data.forEach(m => {
+      const isPhotosLinked = !!m.photos_linked;
+      const initial = m.first_name ? m.first_name.charAt(0).toUpperCase() : (m.username ? m.username.charAt(0).toUpperCase() : '?');
+      const avatarBg = m.avatar_color || '#38bdf8';
+      
+      let roleLabel = 'Membro';
+      let roleBadgeBg = 'rgba(255,255,255,0.06)';
+      let roleColor = 'var(--text-main)';
+      if (m.role === 'admin') {
+        roleLabel = 'Genitore / Admin';
+        roleBadgeBg = 'rgba(245,158,11,0.15)';
+        roleColor = '#f59e0b';
+      } else if (m.role === 'guest') {
+        roleLabel = 'Ospite';
+        roleBadgeBg = 'rgba(148,163,184,0.15)';
+        roleColor = '#94a3b8';
+      }
+
+      const photoPill = isPhotosLinked
+        ? `<span style="font-size:10px; padding:2px 7px; border-radius:10px; background:rgba(16,185,129,0.15); color:#10b981; font-weight:600;">🟢 photos/ attiva</span>`
+        : `<span style="font-size:10px; padding:2px 7px; border-radius:10px; background:rgba(255,255,255,0.06); color:#94a3b8; font-weight:600;">⚪ Solo App Immich (0770)</span>`;
 
       html += `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); padding:8px 10px; border-radius:6px;">
-          <div>
-            <div style="font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:6px;">
-              <span>👤</span> <span>${escapeHtml(u.username)}</span>
-              <span style="font-size:10px; padding:1px 6px; border-radius:10px; background:rgba(255,255,255,0.06); color:${badgeColor}; font-weight:600;">
-                ${badgeText}
-              </span>
+        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--card-border); border-radius:8px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:12px; transition:border-color 0.15s ease;">
+          <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:0;">
+            <div style="width:38px; height:38px; border-radius:50%; background:${avatarBg}; color:#000; font-weight:800; font-size:15px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+              ${escapeHtml(initial)}
             </div>
-            <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">
-              SMB: <code style="color:#38bdf8;">${escapeHtml(u.smb_path)}</code>
+            <div style="min-width:0; flex:1;">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <strong style="font-size:13.5px; color:var(--text-main);">${escapeHtml(m.display_name)}</strong>
+                <span style="font-size:10.5px; padding:1px 6px; border-radius:4px; background:${roleBadgeBg}; color:${roleColor}; font-weight:600;">${roleLabel}</span>
+                <span style="font-size:11px; color:var(--text-muted); font-family:monospace;">@${escapeHtml(m.username)}</span>
+              </div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:3px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span>📁 SMB: <code style="color:#38bdf8;">${escapeHtml(m.smb_path)}</code></span>
+                ${photoPill}
+              </div>
+              ${m.notes ? `<div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">📱 ${escapeHtml(m.notes)}</div>` : ''}
             </div>
           </div>
-          <div>
-            <button type="button" class="btn" onclick="toggleTriadUserPhotos('${escapeHtml(u.username)}', ${!isLinked})" 
-                    style="padding:3px 9px; font-size:11px; background:transparent; border:${btnBorder}; color:${btnColor}; border-radius:4px; cursor:pointer;"
-                    title="${isLinked ? 'Rimuovi il bind mount SMB della libreria foto' : 'Collega la libreria foto su SMB'}">
-              ${btnLabel}
+
+          <!-- Actions -->
+          <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="generateMemberResetLink('${escapeHtml(m.username)}')" 
+                    style="font-size:11px; padding:4px 9px; border-radius:5px; background:rgba(255,255,255,0.05);" title="Mostra QR Code e Link di Invito/Onboarding">
+              📲 Link / QR
+            </button>
+            <button type="button" class="btn btn-sm" onclick="toggleFamilyUserPhotos('${escapeHtml(m.username)}', ${!isPhotosLinked})" 
+                    style="font-size:11px; padding:4px 9px; border-radius:5px; background:transparent; border:1px solid ${isPhotosLinked ? 'rgba(239,68,68,0.3)' : 'var(--primary)'}; color:${isPhotosLinked ? '#ef4444' : 'var(--primary)'};"
+                    title="${isPhotosLinked ? 'Scollega la cartella foto da Samba' : 'Collega la libreria foto su Samba'}">
+              ${isPhotosLinked ? 'Scollega Foto' : 'Collega Foto'}
+            </button>
+            <button type="button" class="btn btn-sm" onclick="deleteFamilyMember('${escapeHtml(m.username)}')" 
+                    style="font-size:11px; padding:4px 7px; border-radius:5px; background:transparent; border:1px solid rgba(239,68,68,0.2); color:#ef4444;"
+                    title="Rimuovi membro dalla famiglia">
+              🗑️
             </button>
           </div>
         </div>
       `;
     });
-    html += '</div>';
+
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = `<span style="color:#ef4444; font-size:11px;">Errore caricamento utenti: ${escapeHtml(err.message)}</span>`;
+    container.innerHTML = `<div style="color:#ef4444; font-size:12px; padding:16px;">Errore caricamento membri: ${escapeHtml(err.message)}</div>`;
   }
 }
 
-async function toggleTriadUserPhotos(username, targetStatus) {
+function loadTriadUsers() {
+  loadFamilyMembers();
+}
+
+async function submitCreateFamilyMember() {
+  const fnInput = document.getElementById('family-first-name');
+  const lnInput = document.getElementById('family-last-name');
+  const uInput = document.getElementById('family-username');
+  const emInput = document.getElementById('family-email');
+  const roleSelect = document.getElementById('family-role');
+  const notesInput = document.getElementById('family-notes');
+  const linkPhotosInput = document.getElementById('family-link-photos');
+  const isManual = document.getElementById('pass-mode-manual')?.checked;
+  const manualPassInput = document.getElementById('family-manual-pass');
+  const submitBtn = document.getElementById('btn-submit-family');
+
+  const firstName = fnInput ? fnInput.value.trim() : '';
+  const lastName = lnInput ? lnInput.value.trim() : '';
+  const username = uInput ? uInput.value.trim().toLowerCase() : '';
+  const email = emInput ? emInput.value.trim() : '';
+  const role = roleSelect ? roleSelect.value : 'member';
+  const notes = notesInput ? notesInput.value.trim() : '';
+  const linkPhotos = linkPhotosInput ? linkPhotosInput.checked : true;
+  const password = isManual && manualPassInput ? manualPassInput.value : '';
+
+  if (!firstName) {
+    showAlert('Inserisci il nome del membro della famiglia', 'warning');
+    if (fnInput) fnInput.focus();
+    return;
+  }
+  if (!username || username.length < 2) {
+    showAlert('Username non valido (almeno 2 caratteri alfanumerici)', 'warning');
+    if (uInput) uInput.focus();
+    return;
+  }
+  if (isManual && (!password || password.length < 4)) {
+    showAlert('La password manuale deve contenere almeno 4 caratteri', 'warning');
+    if (manualPassInput) manualPassInput.focus();
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span>⏳ Creazione & orchestrazione in corso...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/family/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        first_name: firstName,
+        last_name: lastName,
+        username: username,
+        email: email,
+        role: role,
+        notes: notes,
+        password: password,
+        link_photos: linkPhotos,
+        generate_invite: !isManual
+      })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showAlert(data.message || 'Membro creato con successo!', 'success');
+      if (fnInput) fnInput.value = '';
+      if (lnInput) lnInput.value = '';
+      if (uInput) { uInput.value = ''; delete uInput.dataset.manualEdited; }
+      if (emInput) emInput.value = '';
+      if (notesInput) notesInput.value = '';
+      if (manualPassInput) manualPassInput.value = '';
+
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '🚀 <span>Crea Membro & Predisponi Allod</span>';
+      }
+
+      await loadFamilyMembers();
+      await refreshData();
+
+      if (data.data && data.data.invite_url) {
+        showFamilyQRModal(`${firstName} ${lastName}`.trim(), data.data.invite_url);
+      } else {
+        switchFamilyTab('list');
+      }
+    } else {
+      showAlert('Errore: ' + data.message, 'danger');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '🚀 <span>Crea Membro & Predisponi Allod</span>';
+      }
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '🚀 <span>Crea Membro & Predisponi Allod</span>';
+    }
+  }
+}
+
+function executeCreateTriadUser() {
+  return submitCreateFamilyMember();
+}
+
+async function generateMemberResetLink(username) {
+  try {
+    const res = await fetch('/api/family/generate-reset-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username })
+    });
+    const json = await res.json();
+    if (json.status === 'ok' && json.data && json.data.invite_url) {
+      showFamilyQRModal(`@${username}`, json.data.invite_url);
+    } else {
+      showAlert(json.message || 'Errore generazione link', 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+  }
+}
+
+function showFamilyQRModal(name, inviteUrl) {
+  currentQRLink = inviteUrl;
+  const modal = document.getElementById('family-qr-modal');
+  const nameEl = document.getElementById('qr-member-name');
+  const linkEl = document.getElementById('qr-link-text');
+  const svgContainer = document.getElementById('qr-svg-container');
+  const waBtn = document.getElementById('btn-share-whatsapp');
+  const tgBtn = document.getElementById('btn-share-telegram');
+
+  if (nameEl) nameEl.innerText = name;
+  if (linkEl) linkEl.innerText = inviteUrl;
+
+  if (svgContainer && typeof QRCode !== 'undefined' && QRCode.generateSVG) {
+    svgContainer.innerHTML = QRCode.generateSVG(inviteUrl, 190);
+  }
+
+  const shareText = `Ciao! Ecco il tuo link personale di onboarding per Allod Cloud:\n${inviteUrl}`;
+  if (waBtn) waBtn.href = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+  if (tgBtn) tgBtn.href = `https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent('Il tuo link personale di onboarding per Allod Cloud')}`;
+
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeFamilyQRModal() {
+  const modal = document.getElementById('family-qr-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function copyQRLink() {
+  if (!currentQRLink) return;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(currentQRLink).then(() => showAlert('✓ Link di onboarding copiato negli appunti!', 'success'));
+  } else {
+    showAlert('Copia manuale: ' + currentQRLink, 'info');
+  }
+}
+
+async function deleteFamilyMember(username) {
+  if (!confirm(`Sei sicuro di voler rimuovere il membro '${username}' dalla famiglia Allod?\n(I file su disco rimarranno preservati per sicurezza)`)) {
+    return;
+  }
+  try {
+    const res = await fetch('/api/family/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      showAlert(json.message || 'Membro rimosso.', 'success');
+      await loadFamilyMembers();
+      await refreshData();
+    } else {
+      showAlert('Errore: ' + json.message, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore: ' + err.message, 'danger');
+  }
+}
+
+async function toggleFamilyUserPhotos(username, targetStatus) {
   const actionText = targetStatus ? 'collegare la cartella foto Immich' : 'scollegare la cartella foto Immich';
-  if (!confirm(`Sei sicuro di voler ${actionText} per l'utente '${username}' dallo share Samba?`)) {
+  if (!confirm(`Vuoi ${actionText} per l'utente '${username}' dallo share Samba?`)) {
     return;
   }
 
@@ -2753,8 +2995,8 @@ async function toggleTriadUserPhotos(username, targetStatus) {
     });
     const json = await res.json();
     if (json.status === 'ok') {
-      showAlert(json.message || 'Stato collegamento foto aggiornato con successo!', 'success');
-      await loadTriadUsers();
+      showAlert(json.message || 'Stato cartella foto aggiornato con successo!', 'success');
+      await loadFamilyMembers();
     } else {
       showAlert('Errore: ' + json.message, 'danger');
     }
@@ -2763,86 +3005,8 @@ async function toggleTriadUserPhotos(username, targetStatus) {
   }
 }
 
-async function executeCreateTriadUser() {
-  const userInput = document.getElementById('triad-user-input');
-  const passInput = document.getElementById('triad-pass-input');
-  const linkPhotosCheckbox = document.getElementById('triad-link-photos-checkbox');
-  const submitBtn = document.getElementById('btn-submit-triad-user');
-  const resultBox = document.getElementById('triad-result-box');
-
-  const username = userInput ? userInput.value.trim().toLowerCase() : '';
-  const password = passInput ? passInput.value : '';
-  const linkPhotos = linkPhotosCheckbox ? linkPhotosCheckbox.checked : true;
-
-  if (!username || username.length < 2) {
-    showAlert('Inserisci un nome utente valido (almeno 2 caratteri)', 'warning');
-    if (userInput) userInput.focus();
-    return;
-  }
-
-  if (!password || password.length < 4) {
-    showAlert('La password deve contenere almeno 4 caratteri', 'warning');
-    if (passInput) passInput.focus();
-    return;
-  }
-
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span>⏳ Creazione e orchestrazione in corso...</span>';
-  }
-
-  try {
-    const res = await fetch('/api/triad/create-user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        username: username, 
-        password: password,
-        link_photos: linkPhotos
-      })
-    });
-    const data = await res.json();
-
-    if (data.status === 'ok') {
-      showAlert(data.message || 'Utente Triade configurato con successo!', 'success');
-      if (resultBox) {
-        resultBox.classList.remove('hidden');
-        const photoStatusLi = linkPhotos 
-          ? `<li>📷 Bind-mount Immich attivo: <code>/photos/upload/library/${escapeHtml(username)}</code> ➔ <code>\\photos\\</code></li>`
-          : `<li>🔒 Foto isolate sull'app Immich (permessi <code>0770</code>). Nessun montaggio effettuato su Samba (massima riservatezza).</li>`;
-
-        resultBox.innerHTML = `
-          <div style="font-weight:700; color:#10b981; margin-bottom:8px;">🎉 Configurazione Allod completata con successo per '${escapeHtml(username)}':</div>
-          <ul style="margin:0 0 10px 18px; padding:0; color:var(--text-main);">
-            <li>📁 Cartella privata SMB creata: <code>\\\\allod\\${escapeHtml(username)}</code></li>
-            <li>🔒 Sottocartelle isolate: <code>photos\\</code>, <code>media\\</code>, <code>documents\\</code></li>
-            ${photoStatusLi}
-            <li>🎬 Accesso multimediale Jellyfin predisposto su <code>/shares/${escapeHtml(username)}</code></li>
-          </ul>
-          <div style="background:rgba(56,189,248,0.1); border-left:3px solid var(--primary); padding:8px 10px; border-radius:4px; font-size:11px;">
-            <strong>Prossimi 2 passaggi facili:</strong><br>
-            1. Apri <strong>Immich</strong> ➔ Utenti ➔ Crea o modifica '${escapeHtml(username)}' ➔ Imposta <strong>Storage Label = ${escapeHtml(username)}</strong>.<br>
-            2. Apri <strong>Jellyfin</strong> ➔ Crea utente '${escapeHtml(username)}' (avrà accesso immediato a film pubblici e alla sua cartella).
-          </div>
-        `;
-      }
-      if (submitBtn) submitBtn.style.display = 'none';
-      await loadTriadUsers();
-      await refreshData();
-    } else {
-      showAlert('Errore: ' + data.message, 'danger');
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '🚀 <span>Crea Utente & Predisponi Triade</span>';
-      }
-    }
-  } catch (err) {
-    showAlert('Errore di connessione: ' + err.message, 'danger');
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = '🚀 <span>Crea Utente & Predisponi Triade</span>';
-    }
-  }
+function toggleTriadUserPhotos(username, targetStatus) {
+  return toggleFamilyUserPhotos(username, targetStatus);
 }
 
 // ==========================================
