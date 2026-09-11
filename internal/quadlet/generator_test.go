@@ -194,6 +194,9 @@ func TestGenerateMediaJellyfin(t *testing.T) {
 	if !strings.Contains(unit, ":/media:z") {
 		t.Errorf("expected /media:z mount in media unit, got:\n%s", unit)
 	}
+	if !strings.Contains(unit, "shares/public:/shares/public:z") {
+		t.Errorf("expected shares/public:/shares/public:z mount in media unit, got:\n%s", unit)
+	}
 	if !strings.Contains(unit, "MemoryMax=500M") {
 		t.Errorf("expected MemoryMax=500M, got:\n%s", unit)
 	}

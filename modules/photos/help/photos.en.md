@@ -12,13 +12,23 @@ Immich is Allod's high-performance self-hosted photo and video backup solution.
   * Adds facial recognition and semantic AI search.
   * Requires 16 GB of system RAM and AVX2 CPU.
 
-## Samba LAN Sharing (Windows / Mac)
+## Samba LAN Sharing & User Privacy
 
-Allod allows exposing the photo library directly to Windows Explorer or Mac Finder at:
-`\\<SERVER-IP>\shares\photos`
+Allod allows routing photos uploaded via Immich directly into each user's private Samba share, guaranteeing complete isolation:
 
-To organize photos cleanly into `/user/year/photo.ext`:
-1. Open Immich at `http://<SERVER-IP>:2283`.
-2. Navigate to **Administration ➔ Settings ➔ Storage Template**.
-3. Enable the template and set: `{{user.name}}/{{y}}/{{filename}}`.
-4. In **Administration ➔ Jobs**, click **Run** on **Storage Template Migration**.
+* **Public Media (Movies / Music)**: Resides in `\\<SERVER-IP>\public` (open to all LAN clients and indexed by Jellyfin).
+* **Personal Photos**: Resides in `\\<SERVER-IP>\<username>\photos`, strictly accessible only by that authenticated user (and hidden from Jellyfin).
+
+### How to route Immich photos into personal SMB shares:
+
+1. **Configure Storage Label in Immich**:
+   * Open Immich at `http://<SERVER-IP>:2283` with an administrator account.
+   * Go to **Administration ➔ Users**, click the three dots next to the user and select **Edit**.
+   * In the **Storage Label** field, enter their exact SMB username (e.g., `mario`, `chiara`).
+2. **Enable Storage Template**:
+   * Under **Administration ➔ Settings ➔ Storage Template**, check **Enable storage template**.
+   * Configure the template pattern (e.g., `{{y}}/{{MM}}/{{filename}}`).
+   * Under **Administration ➔ Jobs**, click **Run** next to **Storage Template Migration** (to relocate any previously uploaded photos).
+3. **Enable the User in Allod**:
+   * In the Allod Web Panel under **Shares**, set the Samba password for the user.
+   * Allod automatically creates the private share `\\allod\<username>` and bind-mounts their `/library/<username>` folder into `\\allod\<username>\photos`.

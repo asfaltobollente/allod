@@ -1118,7 +1118,8 @@ WantedBy=default.target
 
 		if r.Method == http.MethodPost {
 			var req struct {
-				Enabled bool `json:"enabled"`
+				Enabled  bool   `json:"enabled"`
+				Username string `json:"username"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -1136,9 +1137,13 @@ WantedBy=default.target
 			}
 
 			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-			resp, err := client.Execute("shares.bind_photos", map[string]interface{}{
+			bindArgs := map[string]interface{}{
 				"enabled": req.Enabled,
-			}, false)
+			}
+			if req.Username != "" {
+				bindArgs["username"] = req.Username
+			}
+			resp, err := client.Execute("shares.bind_photos", bindArgs, false)
 
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -1231,9 +1236,20 @@ WantedBy=default.target
 			return
 		}
 
+		// If photos-shares integration is active, bind this user's photo folder automatically
+		if st, err := state.Open("state.db"); err == nil {
+			if val, _ := st.GetMeta("photos_shares_integration"); val == "true" {
+				_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
+					"enabled":  true,
+					"username": req.Username,
+				}, false)
+			}
+			st.Close()
+		}
+
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
-			Message: fmt.Sprintf("Password Samba per l'utente '%s' configurata con successo!", req.Username),
+			Message: fmt.Sprintf("Password Samba per l'utente '%s' configurata con successo (condivisione privata \\\\allod\\%s abilitata)!", req.Username, req.Username),
 			Data: map[string]interface{}{
 				"username": req.Username,
 			},

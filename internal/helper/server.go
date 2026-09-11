@@ -151,14 +151,38 @@ func (s *Server) processRequest(req Request) Response {
 		if !req.Plan {
 			_ = os.MkdirAll(path, 0777)
 			_ = exec.Command("chmod", "-R", "0777", path).Run()
+
+			// Ensure public folder and media subfolders
+			pubPath := filepath.Join(path, "public")
+			if strings.HasSuffix(path, "/public") {
+				pubPath = path
+			}
+			_ = os.MkdirAll(pubPath, 0777)
+			_ = exec.Command("chmod", "-R", "0777", pubPath).Run()
+			for _, sub := range []string{"film", "musica", "serie", "movies", "tv", "music"} {
+				subDir := filepath.Join(pubPath, sub)
+				_ = os.MkdirAll(subDir, 0777)
+				_ = exec.Command("chmod", "0777", subDir).Run()
+			}
+
 			smbConf := "/etc/samba/smb.conf"
 			if content, err := os.ReadFile(smbConf); err == nil {
-				shareTag := fmt.Sprintf("[%s]", name)
+				sContent := string(content)
 				if enabled {
-					if !strings.Contains(string(content), shareTag) {
-						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n", name, path)
-						_ = os.WriteFile(smbConf, []byte(string(content)+shareSnippet), 0644)
+					// Configure [public] share for guest access without password
+					if !strings.Contains(sContent, "[public]") {
+						publicSnippet := fmt.Sprintf("\n[public]\n   comment = Cartella pubblica Allod (Jellyfin Media)\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n", pubPath)
+						sContent += publicSnippet
 					}
+
+					// Configure default share (e.g. [shares])
+					shareTag := fmt.Sprintf("[%s]", name)
+					if !strings.Contains(sContent, shareTag) {
+						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n", name, path)
+						sContent += shareSnippet
+					}
+
+					_ = os.WriteFile(smbConf, []byte(sContent), 0644)
 					_ = exec.Command("systemctl", "restart", "smbd").Run()
 				} else {
 					_ = exec.Command("systemctl", "stop", "smbd").Run()
@@ -176,29 +200,69 @@ func (s *Server) processRequest(req Request) Response {
 			enabled = en
 		}
 
-		source := "/mnt/allod-storage/photos/upload/library"
-		target := "/mnt/allod-storage/shares/photos"
-		plan := []string{
-			fmt.Sprintf("bind mount %s to %s (enabled=%v)", source, target, enabled),
+		targetUser, _ := req.Args["username"].(string)
+		basePhotos := "/mnt/allod-storage/photos/upload/library"
+		baseShares := "/mnt/allod-storage/shares"
+
+		var targets [][2]string // [source, target]
+
+		if targetUser != "" && validNameRegex.MatchString(targetUser) {
+			targets = append(targets, [2]string{
+				filepath.Join(basePhotos, targetUser),
+				filepath.Join(baseShares, targetUser, "photos"),
+			})
+		} else {
+			// Shared / global photos library
+			targets = append(targets, [2]string{
+				basePhotos,
+				filepath.Join(baseShares, "photos"),
+			})
+			// Per-user photo shares for every registered user directory in shares
+			if entries, err := os.ReadDir(baseShares); err == nil {
+				for _, e := range entries {
+					if !e.IsDir() {
+						continue
+					}
+					uName := e.Name()
+					if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
+						continue
+					}
+					targets = append(targets, [2]string{
+						filepath.Join(basePhotos, uName),
+						filepath.Join(baseShares, uName, "photos"),
+					})
+				}
+			}
+		}
+
+		plan := []string{}
+		for _, pair := range targets {
+			plan = append(plan, fmt.Sprintf("bind mount %s to %s (enabled=%v)", pair[0], pair[1], enabled))
 		}
 
 		if !req.Plan {
-			if enabled {
-				_ = os.MkdirAll(source, 0775)
-				_ = os.MkdirAll(target, 0775)
-				mounts, _ := os.ReadFile("/proc/mounts")
-				if strings.Contains(string(mounts), target) {
-					_ = exec.Command("umount", target).Run()
-				}
-				cmd := exec.Command("mount", "--bind", source, target)
-				if out, err := cmd.CombinedOutput(); err != nil {
-					return Response{Ok: false, Error: fmt.Sprintf("mount --bind failed: %v (%s)", err, strings.TrimSpace(string(out)))}
-				}
-				_ = exec.Command("chmod", "-R", "0775", target).Run()
-			} else {
-				mounts, _ := os.ReadFile("/proc/mounts")
-				if strings.Contains(string(mounts), target) {
-					_ = exec.Command("umount", target).Run()
+			mounts, _ := os.ReadFile("/proc/mounts")
+			mountsStr := string(mounts)
+
+			for _, pair := range targets {
+				src := pair[0]
+				tgt := pair[1]
+
+				if enabled {
+					_ = os.MkdirAll(src, 0775)
+					_ = os.MkdirAll(tgt, 0775)
+					if strings.Contains(mountsStr, tgt) {
+						_ = exec.Command("umount", tgt).Run()
+					}
+					cmd := exec.Command("mount", "--bind", src, tgt)
+					if out, err := cmd.CombinedOutput(); err != nil {
+						return Response{Ok: false, Error: fmt.Sprintf("mount --bind %s to %s failed: %v (%s)", src, tgt, err, strings.TrimSpace(string(out)))}
+					}
+					_ = exec.Command("chmod", "-R", "0775", tgt).Run()
+				} else {
+					if strings.Contains(mountsStr, tgt) {
+						_ = exec.Command("umount", tgt).Run()
+					}
 				}
 			}
 		}
@@ -219,6 +283,12 @@ func (s *Server) processRequest(req Request) Response {
 		username, ok := req.Args["username"].(string)
 		if !ok || !validNameRegex.MatchString(username) {
 			return Response{Ok: false, Error: "Invalid or missing 'username'"}
+		}
+		if !req.Plan {
+			_ = exec.Command("useradd", "-m", username).Run()
+			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
+			_ = os.MkdirAll(userSharePath, 0770)
+			_ = exec.Command("chmod", "0770", userSharePath).Run()
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("useradd -m %s", username)}}
 
@@ -246,6 +316,22 @@ func (s *Server) processRequest(req Request) Response {
 				}
 			}
 			_ = exec.Command("smbpasswd", "-e", username).Run()
+
+			// Ensure user directory /mnt/allod-storage/shares/<username> exists
+			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
+			_ = os.MkdirAll(userSharePath, 0770)
+			_ = exec.Command("chmod", "0770", userSharePath).Run()
+
+			// Ensure private share configuration in /etc/samba/smb.conf
+			smbConf := "/etc/samba/smb.conf"
+			if content, err := os.ReadFile(smbConf); err == nil {
+				userTag := fmt.Sprintf("[%s]", username)
+				if !strings.Contains(string(content), userTag) {
+					userSnippet := fmt.Sprintf("\n[%s]\n   comment = Cartella privata di %s\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = no\n   valid users = %s\n   create mask = 0660\n   directory mask = 0770\n", username, username, userSharePath, username)
+					_ = os.WriteFile(smbConf, []byte(string(content)+userSnippet), 0644)
+				}
+			}
+
 			_ = exec.Command("systemctl", "reload", "smbd").Run()
 		}
 
