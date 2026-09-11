@@ -1338,8 +1338,9 @@ WantedBy=default.target
 		}
 
 		var req struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
+			Username   string `json:"username"`
+			Password   string `json:"password"`
+			LinkPhotos *bool  `json:"link_photos"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -1358,6 +1359,11 @@ WantedBy=default.target
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
 			return
+		}
+
+		linkPhotos := true
+		if req.LinkPhotos != nil {
+			linkPhotos = *req.LinkPhotos
 		}
 
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
@@ -1393,25 +1399,150 @@ WantedBy=default.target
 			_ = os.Chmod(subPath, 0770)
 		}
 
-		// 4. Pre-create Immich library folder with proper permissions
+		// 4. Pre-create Immich library folder with proper permissions (0770)
 		immichUserDir := filepath.Join(baseDir, "photos", "upload", "library", req.Username)
-		_ = os.MkdirAll(immichUserDir, 0775)
-		_ = os.Chmod(immichUserDir, 0775)
+		_ = os.MkdirAll(immichUserDir, 0770)
+		_ = os.Chmod(immichUserDir, 0770)
 
-		// 5. Execute bind mount for user photos
-		_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
-			"enabled":  true,
-			"username": req.Username,
-		}, false)
+		// 5. Execute bind mount for user photos if requested
+		if linkPhotos {
+			_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
+				"enabled":  true,
+				"username": req.Username,
+			}, false)
+		}
+
+		host := r.Host
+		if colon := strings.Index(host, ":"); colon != -1 {
+			host = host[:colon]
+		}
+		if host == "" {
+			host = "allod"
+		}
 
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
 			Message: fmt.Sprintf("Utente Triade '%s' creato e predisposto con successo!", req.Username),
 			Data: map[string]interface{}{
 				"username":             req.Username,
-				"smb_path":             fmt.Sprintf("\\\\%s\\%s", r.Host, req.Username),
+				"smb_path":             fmt.Sprintf("\\\\%s\\%s", host, req.Username),
+				"photos_linked":        linkPhotos,
 				"immich_storage_label": req.Username,
 				"jellyfin_user":        req.Username,
+			},
+		})
+	})
+
+	// 5a-14. API Triad List Users
+	mux.HandleFunc("/api/triad/users", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		baseDir := quadlet.ResolvedStorageBaseDir()
+		sharesDir := filepath.Join(baseDir, "shares")
+
+		type TriadUserInfo struct {
+			Username     string `json:"username"`
+			SmbPath      string `json:"smb_path"`
+			PhotosLinked bool   `json:"photos_linked"`
+			HasLibrary   bool   `json:"has_library"`
+		}
+
+		var users []TriadUserInfo
+		mounts, _ := os.ReadFile("/proc/mounts")
+		mountsStr := string(mounts)
+
+		host := r.Host
+		if colon := strings.Index(host, ":"); colon != -1 {
+			host = host[:colon]
+		}
+		if host == "" {
+			host = "allod"
+		}
+
+		if entries, err := os.ReadDir(sharesDir); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				uName := e.Name()
+				if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
+					continue
+				}
+
+				targetMount := filepath.Join(sharesDir, uName, "photos")
+				photosLinked := strings.Contains(mountsStr, targetMount)
+
+				libraryPath := filepath.Join(baseDir, "photos", "upload", "library", uName)
+				_, errLib := os.Stat(libraryPath)
+
+				users = append(users, TriadUserInfo{
+					Username:     uName,
+					SmbPath:      fmt.Sprintf("\\\\%s\\%s", host, uName),
+					PhotosLinked: photosLinked,
+					HasLibrary:   errLib == nil,
+				})
+			}
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data:   users,
+		})
+	})
+
+	// 5a-15. API Triad Toggle Photos Link
+	mux.HandleFunc("/api/triad/toggle-photos-link", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Username string `json:"username"`
+			Enabled  bool   `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
+			return
+		}
+
+		req.Username = strings.ToLower(strings.TrimSpace(req.Username))
+		if req.Username == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome utente richiesto"})
+			return
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		resp, err := client.Execute("shares.bind_photos", map[string]interface{}{
+			"enabled":  req.Enabled,
+			"username": req.Username,
+		}, false)
+
+		if err != nil || !resp.Ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := "Errore esecuzione bind mount"
+			if err != nil {
+				errMsg = err.Error()
+			} else if resp.Error != "" {
+				errMsg = resp.Error
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
+
+		msg := fmt.Sprintf("Cartella foto Immich collegata con successo su \\\\allod\\%s\\photos", req.Username)
+		if !req.Enabled {
+			msg = fmt.Sprintf("Collegamento foto su Samba rimosso per '%s'. Le foto rimangono protette solo nell'app Immich.", req.Username)
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: msg,
+			Data: map[string]interface{}{
+				"username":      req.Username,
+				"photos_linked": req.Enabled,
 			},
 		})
 	})

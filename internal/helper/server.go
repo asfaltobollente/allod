@@ -249,8 +249,8 @@ func (s *Server) processRequest(req Request) Response {
 				tgt := pair[1]
 
 				if enabled {
-					_ = os.MkdirAll(src, 0775)
-					_ = os.MkdirAll(tgt, 0775)
+					_ = os.MkdirAll(src, 0770)
+					_ = os.MkdirAll(tgt, 0770)
 					if strings.Contains(mountsStr, tgt) {
 						_ = exec.Command("umount", tgt).Run()
 					}
@@ -258,11 +258,13 @@ func (s *Server) processRequest(req Request) Response {
 					if out, err := cmd.CombinedOutput(); err != nil {
 						return Response{Ok: false, Error: fmt.Sprintf("mount --bind %s to %s failed: %v (%s)", src, tgt, err, strings.TrimSpace(string(out)))}
 					}
-					_ = exec.Command("chmod", "-R", "0775", tgt).Run()
+					_ = exec.Command("chmod", "-R", "0770", tgt).Run()
+					_ = exec.Command("chmod", "-R", "go-rwx", tgt).Run()
 				} else {
 					if strings.Contains(mountsStr, tgt) {
 						_ = exec.Command("umount", tgt).Run()
 					}
+					_ = exec.Command("chmod", "0770", tgt).Run()
 				}
 			}
 		}
