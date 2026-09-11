@@ -467,7 +467,7 @@ func main() {
 			return
 		}
 
-		baseDir := quadlet.StorageBaseDir()
+		baseDir := quadlet.ResolvedStorageBaseDir()
 		if req.Module == "photos" {
 			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "upload"), 0777)
 			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "postgres"), 0777)
@@ -476,6 +476,23 @@ func main() {
 			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "html"), 0777)
 			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "data"), 0777)
 			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "postgres"), 0777)
+		} else if req.Module == "media" {
+			mediaDirs := []string{
+				filepath.Join(baseDir, "media", "config"),
+				filepath.Join(baseDir, "shares", "media", "movies"),
+				filepath.Join(baseDir, "shares", "media", "tv"),
+				filepath.Join(baseDir, "shares", "media", "music"),
+				filepath.Join(baseDir, "shares", "movies"),
+				filepath.Join(baseDir, "shares", "tv"),
+				filepath.Join(baseDir, "shares", "music"),
+				filepath.Join(baseDir, "shares", "film"),
+				filepath.Join(baseDir, "shares", "musica"),
+			}
+			for _, md := range mediaDirs {
+				_ = os.MkdirAll(md, 0777)
+				_ = os.Chmod(md, 0777)
+			}
+			_ = exec.Command("chmod", "-R", "0777", filepath.Join(baseDir, "shares")).Run()
 		} else {
 			_ = os.MkdirAll(filepath.Join(baseDir, req.Module), 0777)
 		}

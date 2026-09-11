@@ -96,7 +96,17 @@ func EnsureStorageDirectories(modID string) {
 		dirs = []string{
 			filepath.Join(baseDir, "shares", "media", "movies"),
 			filepath.Join(baseDir, "shares", "media", "tv"),
+			filepath.Join(baseDir, "shares", "media", "music"),
+			filepath.Join(baseDir, "shares", "movies"),
+			filepath.Join(baseDir, "shares", "tv"),
+			filepath.Join(baseDir, "shares", "music"),
+			filepath.Join(baseDir, "shares", "film"),
+			filepath.Join(baseDir, "shares", "musica"),
 			filepath.Join(baseDir, "media", "config"),
+		}
+		for _, d := range dirs {
+			_ = os.MkdirAll(d, 0777)
+			_ = os.Chmod(d, 0777)
 		}
 	case "network":
 		hsCfgDir := filepath.Join(baseDir, "network", "headscale", "config")
@@ -290,7 +300,8 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString(fmt.Sprintf("Volume=%s/backup/vault:/data:Z\n", baseDir))
 	case "media":
 		sb.WriteString(fmt.Sprintf("Volume=%s/media/config:/config:Z\n", baseDir))
-		sb.WriteString(fmt.Sprintf("Volume=%s/shares/media:/media:Z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares/media:/media:z\n", baseDir))
 	case "network":
 		if strings.Contains(img.Ref, "headscale") {
 			sb.WriteString(fmt.Sprintf("Volume=%s/network/headscale/config:/etc/headscale:Z\n", baseDir))

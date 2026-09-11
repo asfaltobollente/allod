@@ -158,3 +158,45 @@ func TestGenerateNetworkHybrid(t *testing.T) {
 	}
 }
 
+func TestGenerateMediaJellyfin(t *testing.T) {
+	m := &manifest.Manifest{
+		ID:   "media",
+		Tier: "optional",
+		Levels: map[string]manifest.Level{
+			"basic": {
+				RAMMB: 500,
+				Requires: manifest.Requires{
+					Modules: []string{"storage"},
+				},
+			},
+		},
+		Ports: []manifest.Port{
+			{N: 8096, Scope: "mesh"},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/jellyfin/jellyfin", Tag: "10.10", Channel: "patch"},
+		},
+	}
+
+	res, err := Generate("media", m, "basic")
+	if err != nil {
+		t.Fatalf("unexpected error generating media: %v", err)
+	}
+
+	unit, ok := res.Files["media.container"]
+	if !ok {
+		t.Fatalf("media.container not generated")
+	}
+
+	if !strings.Contains(unit, ":/shares:z") {
+		t.Errorf("expected /shares:z mount in media unit, got:\n%s", unit)
+	}
+	if !strings.Contains(unit, ":/media:z") {
+		t.Errorf("expected /media:z mount in media unit, got:\n%s", unit)
+	}
+	if !strings.Contains(unit, "MemoryMax=500M") {
+		t.Errorf("expected MemoryMax=500M, got:\n%s", unit)
+	}
+}
+
+
