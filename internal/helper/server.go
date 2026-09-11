@@ -71,6 +71,18 @@ func ensureLinuxUser(username string) error {
 		return nil
 	}
 
+	// 3b. Try useradd without creating a group of same name (-N)
+	cmd1b := exec.Command(useraddBin, "-M", "-N", "-s", nologinShell, username)
+	if _, err1b := cmd1b.CombinedOutput(); err1b == nil {
+		return nil
+	}
+
+	// 3c. Try useradd with existing group 'users'
+	cmd1c := exec.Command(useraddBin, "-M", "-g", "users", "-s", nologinShell, username)
+	if _, err1c := cmd1c.CombinedOutput(); err1c == nil {
+		return nil
+	}
+
 	// 4. Try with useradd -m
 	cmd2 := exec.Command(useraddBin, "-m", username)
 	out2, err2 := cmd2.CombinedOutput()
@@ -229,6 +241,12 @@ func (s *Server) processRequest(req Request) Response {
 		if !req.Plan {
 			_ = os.MkdirAll(path, 0777)
 			_ = exec.Command("chmod", "-R", "0777", path).Run()
+
+			// If path is a system binary directory, do not configure it as a Samba share
+			if path == "/usr/local/bin" {
+				_ = os.RemoveAll("/usr/local/bin/public")
+				return Response{Ok: true, Applied: true, Plan: []string{"chmod -R 0777 /usr/local/bin"}}
+			}
 
 			// Ensure public folder and media subfolders
 			pubPath := filepath.Join(path, "public")
