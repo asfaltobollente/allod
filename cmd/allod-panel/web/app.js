@@ -2575,6 +2575,16 @@ async function saveSmbPassword() {
 // TRIAD USER PROVISIONING (Samba + Immich + Jellyfin)
 // ==========================================
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 async function openTriadUserModal() {
   const modal = document.getElementById('triad-user-modal');
   if (!modal) return;
@@ -2585,6 +2595,7 @@ async function openTriadUserModal() {
   const submitBtn = document.getElementById('btn-submit-triad-user');
   const userInput = document.getElementById('triad-user-input');
   const passInput = document.getElementById('triad-pass-input');
+  const linkPhotosCheckbox = document.getElementById('triad-link-photos-checkbox');
   const resultBox = document.getElementById('triad-result-box');
 
   const sharesBadge = document.getElementById('triad-shares-badge');
@@ -2597,6 +2608,7 @@ async function openTriadUserModal() {
   }
   if (userInput) userInput.value = '';
   if (passInput) passInput.value = '';
+  if (linkPhotosCheckbox) linkPhotosCheckbox.checked = true;
 
   // Initial loading state
   if (sharesBadge) sharesBadge.innerHTML = '⏳ Controllo...';
@@ -2609,6 +2621,9 @@ async function openTriadUserModal() {
   }
 
   modal.classList.remove('hidden');
+
+  // Load existing triad users list asynchronously
+  loadTriadUsers();
 
   try {
     const res = await fetch('/api/triad/status');
@@ -2671,14 +2686,93 @@ function toggleTriadPassVisibility() {
   passInput.type = passInput.type === 'password' ? 'text' : 'password';
 }
 
+async function loadTriadUsers() {
+  const container = document.getElementById('triad-users-list');
+  if (!container) return;
+
+  container.innerHTML = '<span style="color:var(--text-muted); font-size:11.5px;">⏳ Caricamento utenti in corso...</span>';
+
+  try {
+    const res = await fetch('/api/triad/users');
+    const json = await res.json();
+    if (json.status !== 'ok' || !Array.isArray(json.data) || json.data.length === 0) {
+      container.innerHTML = '<span style="color:var(--text-muted); font-size:11.5px;">Nessun utente Samba/Triade rilevato sul server. Crea il primo utente nel form sopra!</span>';
+      return;
+    }
+
+    let html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+    json.data.forEach(u => {
+      const isLinked = !!u.photos_linked;
+      const badgeColor = isLinked ? '#10b981' : '#94a3b8';
+      const badgeText = isLinked ? '🟢 SMB photos/ collegata' : '⚪ Solo App Immich (Isolata)';
+      const btnLabel = isLinked ? 'Scollega da SMB' : 'Collega a SMB';
+      const btnBorder = isLinked ? '1px solid rgba(239,68,68,0.4)' : '1px solid var(--primary)';
+      const btnColor = isLinked ? '#ef4444' : 'var(--primary)';
+
+      html += `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); padding:8px 10px; border-radius:6px;">
+          <div>
+            <div style="font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+              <span>👤</span> <span>${escapeHtml(u.username)}</span>
+              <span style="font-size:10px; padding:1px 6px; border-radius:10px; background:rgba(255,255,255,0.06); color:${badgeColor}; font-weight:600;">
+                ${badgeText}
+              </span>
+            </div>
+            <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">
+              SMB: <code style="color:#38bdf8;">${escapeHtml(u.smb_path)}</code>
+            </div>
+          </div>
+          <div>
+            <button type="button" class="btn" onclick="toggleTriadUserPhotos('${escapeHtml(u.username)}', ${!isLinked})" 
+                    style="padding:3px 9px; font-size:11px; background:transparent; border:${btnBorder}; color:${btnColor}; border-radius:4px; cursor:pointer;"
+                    title="${isLinked ? 'Rimuovi il bind mount SMB della libreria foto' : 'Collega la libreria foto su SMB'}">
+              ${btnLabel}
+            </button>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<span style="color:#ef4444; font-size:11px;">Errore caricamento utenti: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+async function toggleTriadUserPhotos(username, targetStatus) {
+  const actionText = targetStatus ? 'collegare la cartella foto Immich' : 'scollegare la cartella foto Immich';
+  if (!confirm(`Sei sicuro di voler ${actionText} per l'utente '${username}' dallo share Samba?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/triad/toggle-photos-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, enabled: targetStatus })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      showAlert(json.message || 'Stato collegamento foto aggiornato con successo!', 'success');
+      await loadTriadUsers();
+    } else {
+      showAlert('Errore: ' + json.message, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+  }
+}
+
 async function executeCreateTriadUser() {
   const userInput = document.getElementById('triad-user-input');
   const passInput = document.getElementById('triad-pass-input');
+  const linkPhotosCheckbox = document.getElementById('triad-link-photos-checkbox');
   const submitBtn = document.getElementById('btn-submit-triad-user');
   const resultBox = document.getElementById('triad-result-box');
 
   const username = userInput ? userInput.value.trim().toLowerCase() : '';
   const password = passInput ? passInput.value : '';
+  const linkPhotos = linkPhotosCheckbox ? linkPhotosCheckbox.checked : true;
 
   if (!username || username.length < 2) {
     showAlert('Inserisci un nome utente valido (almeno 2 caratteri)', 'warning');
@@ -2701,7 +2795,11 @@ async function executeCreateTriadUser() {
     const res = await fetch('/api/triad/create-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username, password: password })
+      body: JSON.stringify({ 
+        username: username, 
+        password: password,
+        link_photos: linkPhotos
+      })
     });
     const data = await res.json();
 
@@ -2709,22 +2807,27 @@ async function executeCreateTriadUser() {
       showAlert(data.message || 'Utente Triade configurato con successo!', 'success');
       if (resultBox) {
         resultBox.classList.remove('hidden');
+        const photoStatusLi = linkPhotos 
+          ? `<li>📷 Bind-mount Immich attivo: <code>/photos/upload/library/${escapeHtml(username)}</code> ➔ <code>\\photos\\</code></li>`
+          : `<li>🔒 Foto isolate sull'app Immich (permessi <code>0770</code>). Nessun montaggio effettuato su Samba (massima riservatezza).</li>`;
+
         resultBox.innerHTML = `
-          <div style="font-weight:700; color:#10b981; margin-bottom:8px;">🎉 Configurazione Allod completata con successo per '${username}':</div>
+          <div style="font-weight:700; color:#10b981; margin-bottom:8px;">🎉 Configurazione Allod completata con successo per '${escapeHtml(username)}':</div>
           <ul style="margin:0 0 10px 18px; padding:0; color:var(--text-main);">
-            <li>📁 Cartella privata SMB creata: <code>\\\\allod\\${username}</code></li>
+            <li>📁 Cartella privata SMB creata: <code>\\\\allod\\${escapeHtml(username)}</code></li>
             <li>🔒 Sottocartelle isolate: <code>photos\\</code>, <code>media\\</code>, <code>documents\\</code></li>
-            <li>📷 Bind-mount Immich attivo: <code>/photos/upload/library/${username}</code> ➔ <code>\\photos\\</code></li>
-            <li>🎬 Accesso multimediale Jellyfin predisposto su <code>/shares/${username}</code></li>
+            ${photoStatusLi}
+            <li>🎬 Accesso multimediale Jellyfin predisposto su <code>/shares/${escapeHtml(username)}</code></li>
           </ul>
           <div style="background:rgba(56,189,248,0.1); border-left:3px solid var(--primary); padding:8px 10px; border-radius:4px; font-size:11px;">
             <strong>Prossimi 2 passaggi facili:</strong><br>
-            1. Apri <strong>Immich</strong> ➔ Utenti ➔ Crea o modifica '${username}' ➔ Imposta <strong>Storage Label = ${username}</strong>.<br>
-            2. Apri <strong>Jellyfin</strong> ➔ Crea utente '${username}' (avrà accesso immediato a film pubblici e alla sua cartella).
+            1. Apri <strong>Immich</strong> ➔ Utenti ➔ Crea o modifica '${escapeHtml(username)}' ➔ Imposta <strong>Storage Label = ${escapeHtml(username)}</strong>.<br>
+            2. Apri <strong>Jellyfin</strong> ➔ Crea utente '${escapeHtml(username)}' (avrà accesso immediato a film pubblici e alla sua cartella).
           </div>
         `;
       }
       if (submitBtn) submitBtn.style.display = 'none';
+      await loadTriadUsers();
       await refreshData();
     } else {
       showAlert('Errore: ' + data.message, 'danger');
