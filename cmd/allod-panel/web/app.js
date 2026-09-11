@@ -2572,6 +2572,177 @@ async function saveSmbPassword() {
 }
 
 // ==========================================
+// TRIAD USER PROVISIONING (Samba + Immich + Jellyfin)
+// ==========================================
+
+async function openTriadUserModal() {
+  const modal = document.getElementById('triad-user-modal');
+  if (!modal) return;
+
+  const warnBanner = document.getElementById('triad-warning-banner');
+  const warnText = document.getElementById('triad-warning-text');
+  const okBanner = document.getElementById('triad-ok-banner');
+  const submitBtn = document.getElementById('btn-submit-triad-user');
+  const userInput = document.getElementById('triad-user-input');
+  const passInput = document.getElementById('triad-pass-input');
+  const resultBox = document.getElementById('triad-result-box');
+
+  const sharesBadge = document.getElementById('triad-shares-badge');
+  const photosBadge = document.getElementById('triad-photos-badge');
+  const mediaBadge = document.getElementById('triad-media-badge');
+
+  if (resultBox) {
+    resultBox.classList.add('hidden');
+    resultBox.innerHTML = '';
+  }
+  if (userInput) userInput.value = '';
+  if (passInput) passInput.value = '';
+
+  // Initial loading state
+  if (sharesBadge) sharesBadge.innerHTML = '⏳ Controllo...';
+  if (photosBadge) photosBadge.innerHTML = '⏳ Controllo...';
+  if (mediaBadge) mediaBadge.innerHTML = '⏳ Controllo...';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.style.display = '';
+    submitBtn.innerHTML = '🚀 <span>Crea Utente & Predisponi Triade</span>';
+  }
+
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/triad/status');
+    const json = await res.json();
+    if (json.status === 'ok' && json.data) {
+      const d = json.data;
+
+      if (sharesBadge) {
+        sharesBadge.innerHTML = d.shares_active 
+          ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' 
+          : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
+      }
+      if (photosBadge) {
+        photosBadge.innerHTML = d.photos_active 
+          ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' 
+          : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
+      }
+      if (mediaBadge) {
+        mediaBadge.innerHTML = d.media_active 
+          ? '<span style="color:#10b981; font-weight:700;">🟢 Attivo</span>' 
+          : '<span style="color:#ef4444; font-weight:700;">🔴 Spento</span>';
+      }
+
+      if (d.all_active) {
+        if (warnBanner) warnBanner.classList.add('hidden');
+        if (okBanner) okBanner.classList.remove('hidden');
+        if (submitBtn) submitBtn.disabled = false;
+        if (userInput) { userInput.disabled = false; userInput.focus(); }
+        if (passInput) passInput.disabled = false;
+      } else {
+        if (okBanner) okBanner.classList.add('hidden');
+        if (warnBanner) {
+          warnBanner.classList.remove('hidden');
+          if (warnText) {
+            warnText.innerHTML = `${d.reason}<br><br>👉 <em>Per abilitare e avviare i servizi mancanti, recati nella scheda <strong>Moduli</strong> e avvia ciascun modulo.</em>`;
+          }
+        }
+        if (submitBtn) submitBtn.disabled = true;
+        if (userInput) userInput.disabled = true;
+        if (passInput) passInput.disabled = true;
+      }
+    }
+  } catch (err) {
+    if (warnBanner) {
+      warnBanner.classList.remove('hidden');
+      if (warnText) warnText.textContent = 'Errore durante la verifica dello stato dei servizi: ' + err.message;
+    }
+    if (submitBtn) submitBtn.disabled = true;
+  }
+}
+
+function closeTriadUserModal() {
+  const modal = document.getElementById('triad-user-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function toggleTriadPassVisibility() {
+  const passInput = document.getElementById('triad-pass-input');
+  if (!passInput) return;
+  passInput.type = passInput.type === 'password' ? 'text' : 'password';
+}
+
+async function executeCreateTriadUser() {
+  const userInput = document.getElementById('triad-user-input');
+  const passInput = document.getElementById('triad-pass-input');
+  const submitBtn = document.getElementById('btn-submit-triad-user');
+  const resultBox = document.getElementById('triad-result-box');
+
+  const username = userInput ? userInput.value.trim().toLowerCase() : '';
+  const password = passInput ? passInput.value : '';
+
+  if (!username || username.length < 2) {
+    showAlert('Inserisci un nome utente valido (almeno 2 caratteri)', 'warning');
+    if (userInput) userInput.focus();
+    return;
+  }
+
+  if (!password || password.length < 4) {
+    showAlert('La password deve contenere almeno 4 caratteri', 'warning');
+    if (passInput) passInput.focus();
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span>⏳ Creazione e orchestrazione in corso...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/triad/create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    });
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      showAlert(data.message || 'Utente Triade configurato con successo!', 'success');
+      if (resultBox) {
+        resultBox.classList.remove('hidden');
+        resultBox.innerHTML = `
+          <div style="font-weight:700; color:#10b981; margin-bottom:8px;">🎉 Configurazione Allod completata con successo per '${username}':</div>
+          <ul style="margin:0 0 10px 18px; padding:0; color:var(--text-main);">
+            <li>📁 Cartella privata SMB creata: <code>\\\\allod\\${username}</code></li>
+            <li>🔒 Sottocartelle isolate: <code>photos\\</code>, <code>media\\</code>, <code>documents\\</code></li>
+            <li>📷 Bind-mount Immich attivo: <code>/photos/upload/library/${username}</code> ➔ <code>\\photos\\</code></li>
+            <li>🎬 Accesso multimediale Jellyfin predisposto su <code>/shares/${username}</code></li>
+          </ul>
+          <div style="background:rgba(56,189,248,0.1); border-left:3px solid var(--primary); padding:8px 10px; border-radius:4px; font-size:11px;">
+            <strong>Prossimi 2 passaggi facili:</strong><br>
+            1. Apri <strong>Immich</strong> ➔ Utenti ➔ Crea o modifica '${username}' ➔ Imposta <strong>Storage Label = ${username}</strong>.<br>
+            2. Apri <strong>Jellyfin</strong> ➔ Crea utente '${username}' (avrà accesso immediato a film pubblici e alla sua cartella).
+          </div>
+        `;
+      }
+      if (submitBtn) submitBtn.style.display = 'none';
+      await refreshData();
+    } else {
+      showAlert('Errore: ' + data.message, 'danger');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '🚀 <span>Crea Utente & Predisponi Triade</span>';
+      }
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '🚀 <span>Crea Utente & Predisponi Triade</span>';
+    }
+  }
+}
+
+// ==========================================
 // NETWORK & MESH ACCESS (Headscale + Cloudflare)
 // ==========================================
 
