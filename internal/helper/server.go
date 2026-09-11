@@ -143,19 +143,20 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		plan := []string{
-			fmt.Sprintf("mkdir -p %s && chmod 0775 %s", path, path),
+			fmt.Sprintf("mkdir -p %s && chmod -R 0777 %s", path, path),
 			fmt.Sprintf("configure share [%s] at %s in /etc/samba/smb.conf", name, path),
 			"systemctl restart smbd",
 		}
 
 		if !req.Plan {
-			_ = os.MkdirAll(path, 0775)
+			_ = os.MkdirAll(path, 0777)
+			_ = exec.Command("chmod", "-R", "0777", path).Run()
 			smbConf := "/etc/samba/smb.conf"
 			if content, err := os.ReadFile(smbConf); err == nil {
 				shareTag := fmt.Sprintf("[%s]", name)
 				if enabled {
 					if !strings.Contains(string(content), shareTag) {
-						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0664\n   directory mask = 0775\n", name, path)
+						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n", name, path)
 						_ = os.WriteFile(smbConf, []byte(string(content)+shareSnippet), 0644)
 					}
 					_ = exec.Command("systemctl", "restart", "smbd").Run()
