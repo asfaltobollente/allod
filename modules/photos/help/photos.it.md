@@ -12,13 +12,23 @@ Immich è il server di backup e visualizzazione di foto e video ad alte prestazi
   * Aggiunge riconoscimento dei volti e ricerca semantica AI.
   * Richiede 16 GB di RAM di sistema e CPU AVX2.
 
-## Integrazione con Shares (Samba LAN)
+## Integrazione con Shares (Samba LAN) e Privacy Utenti
 
-Allod permette di collegare la libreria fotografica direttamente a Windows Explorer / Mac Finder su:
-`\\<SERVER-IP>\shares\photos`
+Allod permette di collegare le foto caricate da Immich direttamente alle cartelle SMB protette di ciascun utente, mantenendo totale separazione e privacy:
 
-Per visualizzare le foto in modo pulito ordinate per `/utente/anno/foto.ext`:
-1. Apri Immich su `http://<SERVER-IP>:2283`.
-2. Vai su **Administration ➔ Settings ➔ Storage Template**.
-3. Abilita il template e imposta: `{{user.name}}/{{y}}/{{filename}}`.
-4. In **Administration ➔ Jobs**, clicca su **Run** su **Storage Template Migration**.
+* **Film e musica pubblica**: risiedono in `\\<SERVER-IP>\public` (accessibili da tutti e indicizzati da Jellyfin).
+* **Foto personali**: risiedono nella cartella privata `\\<SERVER-IP>\<username>\photos`, accessibile unicamente da quell'utente con la propria password Samba (e invisibili a Jellyfin).
+
+### Come associare gli account Immich alle cartelle private SMB:
+
+1. **Configura lo Storage Label in Immich**:
+   * Apri Immich su `http://<SERVER-IP>:2283` con account amministratore.
+   * Vai su **Administration ➔ Users**, clicca sui tre puntini accanto all'utente e seleziona **Edit**.
+   * Nel campo **Storage Label**, inserisci il nome utente esatto dell'account SMB (es. `mario`, `chiara`).
+2. **Attiva lo Storage Template**:
+   * In **Administration ➔ Settings ➔ Storage Template**, spunta **Enable storage template**.
+   * Imposta la struttura desiderata (es. `{{y}}/{{MM}}/{{filename}}`).
+   * In **Administration ➔ Jobs**, clicca su **Run** sulla voce **Storage Template Migration** (per riordinare le foto già caricate).
+3. **Abilita l'utente in Allod**:
+   * Nel pannello di Allod, nella sezione **Shares**, imposta la password Samba per l'utente.
+   * Allod creerà la condivisione privata `\\allod\<username>` e collegherà istantaneamente la cartella `/library/<username>` di Immich dentro `\\allod\<username>\photos`.

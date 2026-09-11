@@ -54,3 +54,58 @@ func TestHelperPathTraversalRejected(t *testing.T) {
 		t.Errorf("expected path traversal to be rejected")
 	}
 }
+
+func TestHelperSharesBindPhotosPlan(t *testing.T) {
+	s := &Server{}
+	// Global bind
+	req := Request{
+		Action: "shares.bind_photos",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"enabled": true,
+		},
+	}
+	res := s.processRequest(req)
+	if !res.Ok {
+		t.Fatalf("expected shares.bind_photos to succeed, got: %s", res.Error)
+	}
+	if len(res.Plan) == 0 {
+		t.Errorf("expected at least 1 plan item for bind_photos, got 0")
+	}
+
+	// Per-user bind
+	reqUser := Request{
+		Action: "shares.bind_photos",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"enabled":  true,
+			"username": "mario",
+		},
+	}
+	resUser := s.processRequest(reqUser)
+	if !resUser.Ok {
+		t.Fatalf("expected per-user bind_photos to succeed, got: %s", resUser.Error)
+	}
+	if len(resUser.Plan) != 1 {
+		t.Errorf("expected exactly 1 plan item for user mario, got %d", len(resUser.Plan))
+	}
+}
+
+func TestHelperSharesSetPasswordPlan(t *testing.T) {
+	s := &Server{}
+	req := Request{
+		Action: "shares.set_password",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"username": "mario",
+			"password": "supersecretpassword",
+		},
+	}
+	res := s.processRequest(req)
+	if !res.Ok {
+		t.Fatalf("expected shares.set_password to succeed, got: %s", res.Error)
+	}
+	if len(res.Plan) == 0 {
+		t.Errorf("expected plan items, got 0")
+	}
+}

@@ -90,10 +90,31 @@ func EnsureStorageDirectories(modID string) {
 		}
 	case "shares":
 		dirs = []string{
+			filepath.Join(baseDir, "shares"),
 			filepath.Join(baseDir, "shares", "public"),
+			filepath.Join(baseDir, "shares", "public", "film"),
+			filepath.Join(baseDir, "shares", "public", "musica"),
+			filepath.Join(baseDir, "shares", "public", "serie"),
+			filepath.Join(baseDir, "shares", "public", "movies"),
+			filepath.Join(baseDir, "shares", "public", "tv"),
+			filepath.Join(baseDir, "shares", "public", "music"),
+		}
+		for _, d := range dirs {
+			_ = os.MkdirAll(d, 0777)
+			_ = os.Chmod(d, 0777)
 		}
 	case "media":
 		dirs = []string{
+			filepath.Join(baseDir, "media", "data"),
+			filepath.Join(baseDir, "media", "cache"),
+			filepath.Join(baseDir, "shares"),
+			filepath.Join(baseDir, "shares", "public"),
+			filepath.Join(baseDir, "shares", "public", "film"),
+			filepath.Join(baseDir, "shares", "public", "musica"),
+			filepath.Join(baseDir, "shares", "public", "serie"),
+			filepath.Join(baseDir, "shares", "public", "movies"),
+			filepath.Join(baseDir, "shares", "public", "tv"),
+			filepath.Join(baseDir, "shares", "public", "music"),
 			filepath.Join(baseDir, "shares", "media", "movies"),
 			filepath.Join(baseDir, "shares", "media", "tv"),
 			filepath.Join(baseDir, "shares", "media", "music"),
@@ -300,8 +321,9 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString(fmt.Sprintf("Volume=%s/backup/vault:/data:Z\n", baseDir))
 	case "media":
 		sb.WriteString(fmt.Sprintf("Volume=%s/media/config:/config:Z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/media:z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/shares/public:z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z\n", baseDir))
-		sb.WriteString(fmt.Sprintf("Volume=%s/shares/media:/media:z\n", baseDir))
 	case "network":
 		if strings.Contains(img.Ref, "headscale") {
 			sb.WriteString(fmt.Sprintf("Volume=%s/network/headscale/config:/etc/headscale:Z\n", baseDir))
