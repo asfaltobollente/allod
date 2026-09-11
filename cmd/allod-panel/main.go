@@ -846,39 +846,49 @@ func main() {
 		}
 
 		if len(helperBytes) > 0 {
-			if err := os.WriteFile("/usr/local/bin/allod-helperd", helperBytes, 0755); err != nil {
-				// Request helper to chmod /usr/local/bin via shares.apply
-				_, _ = client.Execute("shares.apply", map[string]interface{}{"path": "/usr/local/bin"}, false)
-				if err2 := os.WriteFile("/usr/local/bin/allod-helperd", helperBytes, 0755); err2 == nil {
-					if logReport != nil {
-						logReport.WriteString("✓ allod-helperd copiato in /usr/local/bin/\n")
-					}
-				} else if logReport != nil {
-					logReport.WriteString(fmt.Sprintf("ℹ️ Impossibile scrivere in /usr/local/bin: %v\n", err2))
+			// Step 1: Ensure /usr/local/bin is writable via helper shares.apply
+			_, _ = client.Execute("shares.apply", map[string]interface{}{"path": "/usr/local/bin"}, false)
+
+			// Step 2: Unlink the old running file (removes directory entry, preventing ETXTBSY)
+			_ = os.Remove("/usr/local/bin/allod-helperd")
+			_ = exec.Command("sudo", "-n", "rm", "-f", "/usr/local/bin/allod-helperd").Run()
+
+			// Step 3: Copy new binary
+			copied := false
+			if errCp := exec.Command("cp", "-f", "allod-helperd", "/usr/local/bin/allod-helperd").Run(); errCp == nil {
+				copied = true
+			} else if errWrite := os.WriteFile("/usr/local/bin/allod-helperd", helperBytes, 0755); errWrite == nil {
+				copied = true
+			} else if errSudo := exec.Command("sudo", "-n", "cp", "-f", "allod-helperd", "/usr/local/bin/allod-helperd").Run(); errSudo == nil {
+				copied = true
+			}
+
+			// Ensure permissions
+			_ = exec.Command("chmod", "0755", "/usr/local/bin/allod-helperd").Run()
+			_ = exec.Command("sudo", "-n", "chmod", "0755", "/usr/local/bin/allod-helperd").Run()
+
+			// Also copy allod cli
+			_ = os.Remove("/usr/local/bin/allod")
+			_ = exec.Command("cp", "-f", "allod", "/usr/local/bin/allod").Run()
+			_ = exec.Command("sudo", "-n", "cp", "-f", "allod", "/usr/local/bin/allod").Run()
+
+			// Restore /usr/local/bin permissions
+			_ = exec.Command("chmod", "0755", "/usr/local/bin").Run()
+			_ = exec.Command("sudo", "-n", "chmod", "0755", "/usr/local/bin").Run()
+
+			if copied {
+				if logReport != nil {
+					logReport.WriteString("✓ allod-helperd copiato con successo in /usr/local/bin/\n")
 				}
-				_ = exec.Command("chmod", "0755", "/usr/local/bin").Run()
 			} else if logReport != nil {
-				logReport.WriteString("✓ allod-helperd aggiornato in /usr/local/bin/\n")
+				logReport.WriteString("ℹ️ Impossibile scrivere in /usr/local/bin (verifica permessi)\n")
 			}
 		}
 
-		cliLocalPaths := []string{
-			filepath.Join(cwd, "allod"),
-			"allod",
-		}
-		for _, p := range cliLocalPaths {
-			if data, err := os.ReadFile(p); err == nil {
-				_ = os.WriteFile("/usr/local/bin/allod", data, 0755)
-				break
-			}
-		}
-
+		// Step 4: Restart allod-helperd
 		res, err := client.Execute("service.restart", map[string]interface{}{"unit": "allod-helperd"}, false)
-		if err != nil {
-			return err
-		}
-		if !res.Ok {
-			return fmt.Errorf("%s", res.Error)
+		if err != nil || !res.Ok {
+			_ = exec.Command("sudo", "-n", "systemctl", "restart", "allod-helperd").Run()
 		}
 		return nil
 	}
@@ -1716,31 +1726,34 @@ WantedBy=default.target
 			proto = "https"
 		}
 
-		// Auto-import any filesystem Samba users not yet in state.db
-		if entries, err := os.ReadDir(sharesDir); err == nil {
-			for _, e := range entries {
-				if !e.IsDir() {
-					continue
-				}
-				uName := e.Name()
-				if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
-					continue
-				}
-				existing, _ := st.GetFamilyMember(uName)
-				if existing == nil {
-					targetMount := filepath.Join(sharesDir, uName, "photos")
-					isLinked := strings.Contains(mountsStr, targetMount)
-					_ = st.CreateFamilyMember(&state.FamilyMember{
-						Username:     uName,
-						FirstName:    strings.Title(uName),
-						LastName:     "",
-						Role:         "member",
-						AvatarColor:  "#38bdf8",
-						SmbActive:    true,
-						PhotosLinked: isLinked,
-					})
+		// Auto-import any filesystem Samba users not yet in state.db (one-time migration only)
+		if imported, _ := st.GetMeta("family_shares_imported"); imported != "true" {
+			if entries, err := os.ReadDir(sharesDir); err == nil {
+				for _, e := range entries {
+					if !e.IsDir() {
+						continue
+					}
+					uName := e.Name()
+					if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") || strings.Contains(uName, ".deleted") {
+						continue
+					}
+					existing, _ := st.GetFamilyMember(uName)
+					if existing == nil {
+						targetMount := filepath.Join(sharesDir, uName, "photos")
+						isLinked := strings.Contains(mountsStr, targetMount)
+						_ = st.CreateFamilyMember(&state.FamilyMember{
+							Username:     uName,
+							FirstName:    strings.Title(uName),
+							LastName:     "",
+							Role:         "member",
+							AvatarColor:  "#38bdf8",
+							SmbActive:    true,
+							PhotosLinked: isLinked,
+						})
+					}
 				}
 			}
+			_ = st.SetMeta("family_shares_imported", "true")
 		}
 
 		members, err := st.ListFamilyMembers()
@@ -2084,18 +2097,30 @@ WantedBy=default.target
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome utente richiesto"})
 			return
 		}
+		req.Username = strings.ToLower(strings.TrimSpace(req.Username))
 
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		// 1. Unbind photos
 		_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
 			"enabled":  false,
 			"username": req.Username,
 		}, false)
 
+		// 2. Delete member and lock auto-import
 		st, err := state.Open(dbPath)
 		if err == nil {
 			_ = st.DeleteFamilyMember(req.Username)
+			_ = st.SetMeta("family_shares_imported", "true")
 			st.Close()
 		}
+
+		// 3. Rename user shares directory to avoid re-detection
+		baseDir := quadlet.ResolvedStorageBaseDir()
+		userShareDir := filepath.Join(baseDir, "shares", req.Username)
+		_ = os.Rename(userShareDir, userShareDir+".deleted."+time.Now().Format("20060102150405"))
+
+		// 4. Try removing user from Samba
+		_ = exec.Command("sudo", "-n", "smbpasswd", "-x", req.Username).Run()
 
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
@@ -2203,6 +2228,26 @@ WantedBy=default.target
 			"username": targetUser,
 			"password": req.NewPassword,
 		}, false)
+
+		if errSmb != nil || !resp.Ok {
+			// Direct fallback via sudo -n if helper was running older code
+			_ = exec.Command("sudo", "-n", "useradd", "-M", "-s", "/usr/sbin/nologin", targetUser).Run()
+			cmdSmb := exec.Command("sudo", "-n", "smbpasswd", "-a", "-s", targetUser)
+			cmdSmb.Stdin = strings.NewReader(req.NewPassword + "\n" + req.NewPassword + "\n")
+			if _, errSudo := cmdSmb.CombinedOutput(); errSudo == nil {
+				_ = exec.Command("sudo", "-n", "smbpasswd", "-e", targetUser).Run()
+				errSmb = nil
+				resp.Ok = true
+			} else {
+				cmdSmb2 := exec.Command("sudo", "-n", "smbpasswd", "-s", targetUser)
+				cmdSmb2.Stdin = strings.NewReader(req.NewPassword + "\n" + req.NewPassword + "\n")
+				if _, errSudo2 := cmdSmb2.CombinedOutput(); errSudo2 == nil {
+					_ = exec.Command("sudo", "-n", "smbpasswd", "-e", targetUser).Run()
+					errSmb = nil
+					resp.Ok = true
+				}
+			}
+		}
 
 		if errSmb != nil || !resp.Ok {
 			w.WriteHeader(http.StatusInternalServerError)
