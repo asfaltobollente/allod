@@ -1388,7 +1388,18 @@ WantedBy=default.target
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 
 		// 1. Create Linux system user
-		_, _ = client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
+		resUser, errUser := client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
+		if errUser != nil || !resUser.Ok {
+			errMsg := "Errore creazione utente di sistema Linux"
+			if errUser != nil {
+				errMsg += ": " + errUser.Error()
+			} else if resUser.Error != "" {
+				errMsg += ": " + resUser.Error
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
 
 		// 2. Set Samba password and create private share [<username>]
 		resSmb, err := client.Execute("shares.set_password", map[string]interface{}{
@@ -1781,7 +1792,18 @@ WantedBy=default.target
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 
 		// 1. Create Linux system user
-		_, _ = client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
+		resUser, errUser := client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
+		if errUser != nil || !resUser.Ok {
+			errMsg := "Errore creazione utente di sistema Linux"
+			if errUser != nil {
+				errMsg += ": " + errUser.Error()
+			} else if resUser.Error != "" {
+				errMsg += ": " + resUser.Error
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
 
 		// 2. Set Samba password if provided
 		if req.Password != "" {

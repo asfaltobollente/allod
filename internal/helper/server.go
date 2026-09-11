@@ -19,6 +19,75 @@ func validDeviceRegex(dev string) bool {
 	return validNameRegex.MatchString(dev)
 }
 
+func resolveExecutable(preferred string, fallbacks ...string) string {
+	if p, err := exec.LookPath(preferred); err == nil {
+		return p
+	}
+	for _, fb := range fallbacks {
+		if _, err := os.Stat(fb); err == nil {
+			return fb
+		}
+	}
+	return preferred
+}
+
+func ensureLinuxUser(username string) error {
+	if !validNameRegex.MatchString(username) {
+		return fmt.Errorf("invalid username '%s'", username)
+	}
+
+	// 1. Check if user already exists in Linux (/etc/passwd)
+	idBin := resolveExecutable("id", "/usr/bin/id", "/bin/id")
+	if err := exec.Command(idBin, "-u", username).Run(); err == nil {
+		return nil // User already exists in OS!
+	}
+
+	// 2. Resolve nologin shell
+	nologinShell := "/usr/sbin/nologin"
+	if _, err := os.Stat("/usr/sbin/nologin"); err != nil {
+		if _, err := os.Stat("/sbin/nologin"); err == nil {
+			nologinShell = "/sbin/nologin"
+		} else {
+			nologinShell = "/bin/false"
+		}
+	}
+
+	// 3. Resolve useradd binary
+	useraddBin := resolveExecutable("useradd", "/usr/sbin/useradd", "/sbin/useradd", "/bin/useradd")
+
+	// Try standard headless NAS user creation (-M no home, -s nologin)
+	cmd := exec.Command(useraddBin, "-M", "-s", nologinShell, username)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+
+	// 4. Try with useradd -m
+	cmd2 := exec.Command(useraddBin, "-m", username)
+	out2, err2 := cmd2.CombinedOutput()
+	if err2 == nil {
+		return nil
+	}
+
+	// 5. Try adduser (Debian/Ubuntu helper)
+	adduserBin := resolveExecutable("adduser", "/usr/sbin/adduser", "/sbin/adduser")
+	cmd3 := exec.Command(adduserBin, "--disabled-password", "--gecos", "", "--no-create-home", username)
+	out3, err3 := cmd3.CombinedOutput()
+	if err3 == nil {
+		return nil
+	}
+
+	// 6. Check if user exists despite any warnings/non-zero codes
+	if errCheck := exec.Command(idBin, "-u", username).Run(); errCheck == nil {
+		return nil
+	}
+
+	return fmt.Errorf("user creation failed: %v (%s) / %v (%s) / %v (%s)",
+		err, strings.TrimSpace(string(out)),
+		err2, strings.TrimSpace(string(out2)),
+		err3, strings.TrimSpace(string(out3)))
+}
+
 type Request struct {
 	Action string                 `json:"action"`
 	Plan   bool                   `json:"plan"`
@@ -287,12 +356,15 @@ func (s *Server) processRequest(req Request) Response {
 			return Response{Ok: false, Error: "Invalid or missing 'username'"}
 		}
 		if !req.Plan {
-			_ = exec.Command("useradd", "-m", username).Run()
+			if err := ensureLinuxUser(username); err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Failed to create Linux user '%s': %v", username, err)}
+			}
 			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
 			_ = os.MkdirAll(userSharePath, 0770)
-			_ = exec.Command("chmod", "0770", userSharePath).Run()
+			chmodBin := resolveExecutable("chmod", "/bin/chmod", "/usr/bin/chmod")
+			_ = exec.Command(chmodBin, "0770", userSharePath).Run()
 		}
-		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("useradd -m %s", username)}}
+		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("useradd -M -s /usr/sbin/nologin %s", username)}}
 
 	case "users.passwd", "shares.set_password":
 		username, ok := req.Args["username"].(string)
@@ -307,22 +379,30 @@ func (s *Server) processRequest(req Request) Response {
 		plan := []string{fmt.Sprintf("smbpasswd -a -s %s", username)}
 
 		if !req.Plan {
-			cmd := exec.Command("smbpasswd", "-a", "-s", username)
+			// Auto-heal: Ensure Linux user exists in /etc/passwd first so smbpasswd can register them!
+			if err := ensureLinuxUser(username); err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Failed to ensure Linux user '%s': %v", username, err)}
+			}
+
+			smbpasswdBin := resolveExecutable("smbpasswd", "/usr/bin/smbpasswd", "/bin/smbpasswd")
+
+			cmd := exec.Command(smbpasswdBin, "-a", "-s", username)
 			cmd.Stdin = strings.NewReader(password + "\n" + password + "\n")
 			if out, err := cmd.CombinedOutput(); err != nil {
 				// If adding failed, try updating existing entry
-				cmd2 := exec.Command("smbpasswd", "-s", username)
+				cmd2 := exec.Command(smbpasswdBin, "-s", username)
 				cmd2.Stdin = strings.NewReader(password + "\n" + password + "\n")
 				if out2, err2 := cmd2.CombinedOutput(); err2 != nil {
 					return Response{Ok: false, Error: fmt.Sprintf("smbpasswd error: %v (%s)", err, strings.TrimSpace(string(out)+"\n"+string(out2)))}
 				}
 			}
-			_ = exec.Command("smbpasswd", "-e", username).Run()
+			_ = exec.Command(smbpasswdBin, "-e", username).Run()
 
 			// Ensure user directory /mnt/allod-storage/shares/<username> exists
 			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
 			_ = os.MkdirAll(userSharePath, 0770)
-			_ = exec.Command("chmod", "0770", userSharePath).Run()
+			chmodBin := resolveExecutable("chmod", "/bin/chmod", "/usr/bin/chmod")
+			_ = exec.Command(chmodBin, "0770", userSharePath).Run()
 
 			// Ensure private share configuration in /etc/samba/smb.conf
 			smbConf := "/etc/samba/smb.conf"
@@ -334,7 +414,8 @@ func (s *Server) processRequest(req Request) Response {
 				}
 			}
 
-			_ = exec.Command("systemctl", "reload", "smbd").Run()
+			systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
+			_ = exec.Command(systemctlBin, "reload", "smbd").Run()
 		}
 
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
