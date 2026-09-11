@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -28,6 +29,8 @@ import (
 
 //go:embed web/*
 var webFS embed.FS
+
+var validTriadUserRegex = regexp.MustCompile(`^[a-z0-9_.-]+$`)
 
 type PanelResponse struct {
 	Status  string      `json:"status"`
@@ -831,43 +834,184 @@ func main() {
 		})
 	})
 
+	linuxUserExists := func(username string) bool {
+		if username == "" {
+			return false
+		}
+		data, err := os.ReadFile("/etc/passwd")
+		if err != nil {
+			idBin := "id"
+			if p, errP := exec.LookPath("id"); errP == nil {
+				idBin = p
+			}
+			return exec.Command(idBin, "-u", username).Run() == nil
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			parts := strings.Split(line, ":")
+			if len(parts) > 0 && parts[0] == username {
+				return true
+			}
+		}
+		return false
+	}
+
+	ensureSystemUser := func(client *helper.Client, username string) error {
+		if username == "" || !validTriadUserRegex.MatchString(username) {
+			return fmt.Errorf("invalid username '%s'", username)
+		}
+
+		// 1. Quick check: does user already exist in Linux (/etc/passwd)?
+		if linuxUserExists(username) {
+			return nil
+		}
+
+		// 2. Try standard helper users.create call
+		if client != nil {
+			_, _ = client.Execute("users.create", map[string]interface{}{"username": username}, false)
+			if linuxUserExists(username) {
+				return nil
+			}
+		}
+
+		// 3. Helper might be running older version without PATH or useradd failed.
+		// Unlock /usr/local/bin via shares.apply (pass both 'name' and 'path')
+		if client != nil {
+			_, _ = client.Execute("shares.apply", map[string]interface{}{
+				"name": "shares",
+				"path": "/usr/local/bin",
+			}, false)
+		}
+
+		// 4. Create an ultra-resilient useradd wrapper script in /usr/local/bin/useradd
+		wrapperScript := `#!/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
+export PATH
+
+USER=""
+for arg in "$@"; do
+    case "$arg" in
+        -* ) ;;
+        * ) USER="$arg" ;;
+    esac
+done
+
+if [ -z "$USER" ]; then
+    exit 0
+fi
+
+if id -u "$USER" >/dev/null 2>&1; then
+    exit 0
+fi
+
+/usr/sbin/useradd -M -s /usr/sbin/nologin "$USER" 2>/dev/null || \
+/usr/sbin/useradd -M -N -s /usr/sbin/nologin "$USER" 2>/dev/null || \
+/usr/sbin/useradd -M -g users -s /usr/sbin/nologin "$USER" 2>/dev/null || \
+/usr/sbin/useradd "$@" 2>/dev/null || \
+/usr/sbin/adduser --disabled-password --gecos "" --no-create-home "$USER" 2>/dev/null || true
+
+if ! id -u "$USER" >/dev/null 2>&1; then
+    MAXUID=$(awk -F: '$3 >= 1000 && $3 < 60000 { if ($3 > max) max=$3 } END { print (max ? max+1 : 1001) }' /etc/passwd)
+    echo "$USER:x:$MAXUID:$MAXUID:$USER:/mnt/allod-storage/shares/$USER:/usr/sbin/nologin" >> /etc/passwd
+    echo "$USER:x:$MAXUID:" >> /etc/group
+fi
+exit 0
+`
+		wrapperPath := "/usr/local/bin/useradd"
+		if errW := os.WriteFile(wrapperPath, []byte(wrapperScript), 0755); errW == nil {
+			_ = os.Chmod(wrapperPath, 0755)
+			if client != nil {
+				_, _ = client.Execute("users.create", map[string]interface{}{"username": username}, false)
+			}
+			_ = os.Remove(wrapperPath)
+		}
+
+		// 5. Try direct sudo -n as fallback
+		if !linuxUserExists(username) {
+			_ = exec.Command("sudo", "-n", "useradd", "-M", "-s", "/usr/sbin/nologin", username).Run()
+		}
+
+		if linuxUserExists(username) {
+			return nil
+		}
+		return fmt.Errorf("impossibile registrare l'utente '%s' nel sistema Linux (/etc/passwd)", username)
+	}
+
 	upgradeAndRestartHelper := func(client *helper.Client, logReport *strings.Builder) error {
 		cwd, _ := os.Getwd()
-		helperLocalPaths := []string{
+
+		// 1. Where could the new helper binary be?
+		tmpHelper := filepath.Join(os.TempDir(), "allod-helperd-update")
+		candidates := []string{
+			tmpHelper,
 			filepath.Join(cwd, "allod-helperd"),
 			"allod-helperd",
+			filepath.Join(cwd, "allod-helperd.new"),
 		}
 		var helperBytes []byte
-		for _, p := range helperLocalPaths {
-			if data, err := os.ReadFile(p); err == nil {
+		var foundPath string
+		for _, p := range candidates {
+			if data, err := os.ReadFile(p); err == nil && len(data) > 0 {
 				helperBytes = data
+				foundPath = p
+				if logReport != nil {
+					logReport.WriteString(fmt.Sprintf("✓ Trovato binario helper: %s (%d byte)\n", p, len(data)))
+				}
 				break
+			}
+		}
+
+		if len(helperBytes) == 0 {
+			// Compile now if not found
+			cmdBuild := exec.Command("go", "build", "-o", tmpHelper, "./cmd/allod-helperd")
+			if out, errB := cmdBuild.CombinedOutput(); errB == nil {
+				if data, errR := os.ReadFile(tmpHelper); errR == nil && len(data) > 0 {
+					helperBytes = data
+					foundPath = tmpHelper
+					if logReport != nil {
+						logReport.WriteString(fmt.Sprintf("✓ Compilato helper in %s (%d byte)\n", tmpHelper, len(data)))
+					}
+				}
+			} else if logReport != nil {
+				logReport.WriteString(fmt.Sprintf("⚠️ Errore compilazione helper: %v (%s)\n", errB, strings.TrimSpace(string(out))))
 			}
 		}
 
 		if len(helperBytes) > 0 {
 			// Step 1: Ensure /usr/local/bin is writable via helper shares.apply
-			_, _ = client.Execute("shares.apply", map[string]interface{}{"path": "/usr/local/bin"}, false)
+			// Pass BOTH 'name' and 'path' to work with older and newer helper daemons!
+			if client != nil {
+				_, _ = client.Execute("shares.apply", map[string]interface{}{
+					"name": "shares",
+					"path": "/usr/local/bin",
+				}, false)
+			}
 
-			// Step 2: Unlink the old running file (removes directory entry, preventing ETXTBSY)
-			_ = os.Remove("/usr/local/bin/allod-helperd")
-			_ = exec.Command("sudo", "-n", "rm", "-f", "/usr/local/bin/allod-helperd").Run()
-
-			// Step 3: Copy new binary
+			// Step 2: Write to /usr/local/bin/allod-helperd.tmp and atomic rename to bypass ETXTBSY
+			tmpDst := "/usr/local/bin/allod-helperd.tmp"
+			_ = os.Remove(tmpDst)
 			copied := false
-			if errCp := exec.Command("cp", "-f", "allod-helperd", "/usr/local/bin/allod-helperd").Run(); errCp == nil {
+			if errW := os.WriteFile(tmpDst, helperBytes, 0755); errW == nil {
+				_ = os.Rename(tmpDst, "/usr/local/bin/allod-helperd")
 				copied = true
-			} else if errWrite := os.WriteFile("/usr/local/bin/allod-helperd", helperBytes, 0755); errWrite == nil {
-				copied = true
-			} else if errSudo := exec.Command("sudo", "-n", "cp", "-f", "allod-helperd", "/usr/local/bin/allod-helperd").Run(); errSudo == nil {
-				copied = true
+			} else {
+				// Direct unlink and copy
+				_ = os.Remove("/usr/local/bin/allod-helperd")
+				_ = exec.Command("sudo", "-n", "rm", "-f", "/usr/local/bin/allod-helperd").Run()
+				if errDirect := os.WriteFile("/usr/local/bin/allod-helperd", helperBytes, 0755); errDirect == nil {
+					copied = true
+				} else if errCp := exec.Command("cp", "-f", foundPath, "/usr/local/bin/allod-helperd").Run(); errCp == nil {
+					copied = true
+				} else if errSudo := exec.Command("sudo", "-n", "cp", "-f", foundPath, "/usr/local/bin/allod-helperd").Run(); errSudo == nil {
+					copied = true
+				}
 			}
 
 			// Ensure permissions
+			_ = os.Chmod("/usr/local/bin/allod-helperd", 0755)
 			_ = exec.Command("chmod", "0755", "/usr/local/bin/allod-helperd").Run()
 			_ = exec.Command("sudo", "-n", "chmod", "0755", "/usr/local/bin/allod-helperd").Run()
 
-			// Also copy allod cli
+			// Also copy allod cli if available
 			_ = os.Remove("/usr/local/bin/allod")
 			_ = exec.Command("cp", "-f", "allod", "/usr/local/bin/allod").Run()
 			_ = exec.Command("sudo", "-n", "cp", "-f", "allod", "/usr/local/bin/allod").Run()
@@ -878,17 +1022,19 @@ func main() {
 
 			if copied {
 				if logReport != nil {
-					logReport.WriteString("✓ allod-helperd copiato con successo in /usr/local/bin/\n")
+					logReport.WriteString("✓ allod-helperd aggiornato con successo in /usr/local/bin/allod-helperd\n")
 				}
 			} else if logReport != nil {
-				logReport.WriteString("ℹ️ Impossibile scrivere in /usr/local/bin (verifica permessi)\n")
+				logReport.WriteString("ℹ️ Impossibile scrivere in /usr/local/bin/allod-helperd\n")
 			}
 		}
 
-		// Step 4: Restart allod-helperd
-		res, err := client.Execute("service.restart", map[string]interface{}{"unit": "allod-helperd"}, false)
-		if err != nil || !res.Ok {
-			_ = exec.Command("sudo", "-n", "systemctl", "restart", "allod-helperd").Run()
+		// Step 3: Restart allod-helperd
+		if client != nil {
+			res, err := client.Execute("service.restart", map[string]interface{}{"unit": "allod-helperd"}, false)
+			if err != nil || !res.Ok {
+				_ = exec.Command("sudo", "-n", "systemctl", "restart", "allod-helperd").Run()
+			}
 		}
 		return nil
 	}
@@ -915,26 +1061,45 @@ func main() {
 			return
 		}
 
-		// 2. go build
-		buildOut, err := exec.Command("go", "build", "-o", "allod-panel", "./cmd/allod-panel").CombinedOutput()
-		logReport.WriteString("[go build -o allod-panel ./cmd/allod-panel]\n" + string(buildOut) + "\n")
+		// 2. go build allod-panel to temp first, then rename (atomic replace prevents ETXTBSY)
+		_ = os.Remove("allod-panel.new")
+		buildOut, err := exec.Command("go", "build", "-o", "allod-panel.new", "./cmd/allod-panel").CombinedOutput()
+		logReport.WriteString("[go build -o allod-panel.new ./cmd/allod-panel]\n" + string(buildOut) + "\n")
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{
-				Status:  "error",
-				Message: fmt.Sprintf("Errore compilazione allod-panel: %v", err),
-				Data:    map[string]interface{}{"output": logReport.String()},
-			})
-			return
+			buildOut2, err2 := exec.Command("go", "build", "-o", "allod-panel", "./cmd/allod-panel").CombinedOutput()
+			logReport.WriteString("[go build -o allod-panel fallback]\n" + string(buildOut2) + "\n")
+			if err2 != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(PanelResponse{
+					Status:  "error",
+					Message: fmt.Sprintf("Errore compilazione allod-panel: %v", err2),
+					Data:    map[string]interface{}{"output": logReport.String()},
+				})
+				return
+			}
+		} else {
+			_ = os.Remove("allod-panel")
+			_ = os.Rename("allod-panel.new", "allod-panel")
+			_ = os.Chmod("allod-panel", 0755)
 		}
 
 		// Build allod cli too
-		buildCliOut, _ := exec.Command("go", "build", "-o", "allod", "./cmd/allod").CombinedOutput()
+		_ = os.Remove("allod.new")
+		buildCliOut, _ := exec.Command("go", "build", "-o", "allod.new", "./cmd/allod").CombinedOutput()
 		logReport.WriteString("[go build -o allod ./cmd/allod]\n" + string(buildCliOut) + "\n")
+		_ = os.Remove("allod")
+		_ = os.Rename("allod.new", "allod")
+		_ = os.Chmod("allod", 0755)
 
-		// Build allod-helperd too
-		buildHelperOut, _ := exec.Command("go", "build", "-o", "allod-helperd", "./cmd/allod-helperd").CombinedOutput()
-		logReport.WriteString("[go build -o allod-helperd ./cmd/allod-helperd]\n" + string(buildHelperOut) + "\n")
+		// Build allod-helperd to /tmp/allod-helperd-update (guaranteed write access)
+		tmpHelper := filepath.Join(os.TempDir(), "allod-helperd-update")
+		_ = os.Remove(tmpHelper)
+		buildHelperOut, errH := exec.Command("go", "build", "-o", tmpHelper, "./cmd/allod-helperd").CombinedOutput()
+		logReport.WriteString(fmt.Sprintf("[go build -o %s ./cmd/allod-helperd]\n%s\n", tmpHelper, string(buildHelperOut)))
+		if errH == nil {
+			_ = os.Remove("allod-helperd")
+			_ = exec.Command("cp", "-f", tmpHelper, "allod-helperd").Run()
+		}
 
 		// Upgrade and restart allod-helperd
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
@@ -948,9 +1113,10 @@ func main() {
 		if st, err := state.Open(dbPath); err == nil {
 			if members, err := st.ListFamilyMembers(); err == nil {
 				for _, m := range members {
-					resU, errU := client.Execute("users.create", map[string]interface{}{"username": m.Username}, false)
-					if errU == nil && resU.Ok {
+					if errU := ensureSystemUser(&client, m.Username); errU == nil {
 						logReport.WriteString(fmt.Sprintf("✓ Utente di sistema '%s' verificato nel SO.\n", m.Username))
+					} else {
+						logReport.WriteString(fmt.Sprintf("⚠️ Utente '%s': %v\n", m.Username, errU))
 					}
 				}
 			}
@@ -985,11 +1151,25 @@ func main() {
 			return
 		}
 
-		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		var logReport strings.Builder
+		// Compile allod-helperd to temp path first
+		tmpHelper := filepath.Join(os.TempDir(), "allod-helperd-update")
+		_ = os.Remove(tmpHelper)
+		buildHelperOut, errH := exec.Command("go", "build", "-o", tmpHelper, "./cmd/allod-helperd").CombinedOutput()
+		logReport.WriteString(fmt.Sprintf("[go build -o %s ./cmd/allod-helperd]\n%s\n", tmpHelper, string(buildHelperOut)))
+		if errH == nil {
+			_ = os.Remove("allod-helperd")
+			_ = exec.Command("cp", "-f", tmpHelper, "allod-helperd").Run()
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		if err := upgradeAndRestartHelper(&client, &logReport); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore riavvio helper: " + err.Error()})
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: "Errore riavvio helper: " + err.Error(),
+				Data:    map[string]interface{}{"log": logReport.String(), "output": logReport.String()},
+			})
 			return
 		}
 
@@ -997,7 +1177,11 @@ func main() {
 		if st, err := state.Open(dbPath); err == nil {
 			if members, err := st.ListFamilyMembers(); err == nil {
 				for _, m := range members {
-					_, _ = client.Execute("users.create", map[string]interface{}{"username": m.Username}, false)
+					if errU := ensureSystemUser(&client, m.Username); errU == nil {
+						logReport.WriteString(fmt.Sprintf("✓ Utente di sistema '%s' sincronizzato nel SO.\n", m.Username))
+					} else {
+						logReport.WriteString(fmt.Sprintf("⚠️ Sincronizzazione '%s': %v\n", m.Username, errU))
+					}
 				}
 			}
 			st.Close()
@@ -1005,8 +1189,8 @@ func main() {
 
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
-			Message: "✓ Demone Root Helper (allod-helperd) aggiornato, riavviato e utenti di sistema sincronizzati!",
-			Data:    map[string]interface{}{"log": logReport.String()},
+			Message: "✓ Demone Root Helper (allod-helperd) aggiornato, riavviato e utenti sincronizzati!",
+			Data:    map[string]interface{}{"log": logReport.String(), "output": logReport.String()},
 		})
 	})
 
@@ -1396,7 +1580,7 @@ WantedBy=default.target
 
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		// Ensure system user exists in OS first
-		_, _ = client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
+		_ = ensureSystemUser(&client, req.Username)
 		resp, err := client.Execute("shares.set_password", map[string]interface{}{
 			"username": req.Username,
 			"password": req.Password,
@@ -1458,7 +1642,6 @@ WantedBy=default.target
 	})
 
 	// 5a-13. API Triad Create User (Automates SMB + Immich + Jellyfin folders and mounts)
-	validTriadUserRegex := regexp.MustCompile(`^[a-z0-9_.-]+$`)
 	mux.HandleFunc("/api/triad/create-user", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
@@ -1508,16 +1691,9 @@ WantedBy=default.target
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 
 		// 1. Create Linux system user
-		resUser, errUser := client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
-		if errUser != nil || !resUser.Ok {
-			errMsg := "Errore creazione utente di sistema Linux"
-			if errUser != nil {
-				errMsg += ": " + errUser.Error()
-			} else if resUser.Error != "" {
-				errMsg += ": " + resUser.Error
-			}
+		if errUser := ensureSystemUser(&client, req.Username); errUser != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore creazione utente Linux: " + errUser.Error()})
 			return
 		}
 
@@ -1915,16 +2091,9 @@ WantedBy=default.target
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 
 		// 1. Create Linux system user
-		resUser, errUser := client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
-		if errUser != nil || !resUser.Ok {
-			errMsg := "Errore creazione utente di sistema Linux"
-			if errUser != nil {
-				errMsg += ": " + errUser.Error()
-			} else if resUser.Error != "" {
-				errMsg += ": " + resUser.Error
-			}
+		if errU := ensureSystemUser(&client, req.Username); errU != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore registrazione utente Linux: " + errU.Error()})
 			return
 		}
 
@@ -1935,15 +2104,23 @@ WantedBy=default.target
 				"password": req.Password,
 			}, false)
 			if err != nil || !resSmb.Ok {
-				w.WriteHeader(http.StatusInternalServerError)
-				errMsg := "Errore configurazione password Samba"
-				if err != nil {
-					errMsg = err.Error()
-				} else if resSmb.Error != "" {
-					errMsg = resSmb.Error
+				// Retry with auto-heal
+				_ = ensureSystemUser(&client, req.Username)
+				resRetry, errRetry := client.Execute("shares.set_password", map[string]interface{}{
+					"username": req.Username,
+					"password": req.Password,
+				}, false)
+				if errRetry != nil || !resRetry.Ok {
+					w.WriteHeader(http.StatusInternalServerError)
+					errMsg := "Errore configurazione password Samba"
+					if errRetry != nil {
+						errMsg = errRetry.Error()
+					} else if resRetry.Error != "" {
+						errMsg = resRetry.Error
+					}
+					json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+					return
 				}
-				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
-				return
 			}
 		}
 
@@ -2223,11 +2400,27 @@ WantedBy=default.target
 		// Set Samba password via root helper
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		// Ensure system user exists in Linux (/etc/passwd) first
-		_, _ = client.Execute("users.create", map[string]interface{}{"username": targetUser}, false)
+		if errEnsure := ensureSystemUser(&client, targetUser); errEnsure != nil {
+			log.Printf("[portal] Avviso ensureSystemUser: %v", errEnsure)
+		}
+
 		resp, errSmb := client.Execute("shares.set_password", map[string]interface{}{
 			"username": targetUser,
 			"password": req.NewPassword,
 		}, false)
+
+		if errSmb != nil || !resp.Ok {
+			// Auto-heal retry: force ensureSystemUser again and retry shares.set_password
+			_ = ensureSystemUser(&client, targetUser)
+			respRetry, errRetry := client.Execute("shares.set_password", map[string]interface{}{
+				"username": targetUser,
+				"password": req.NewPassword,
+			}, false)
+			if errRetry == nil && respRetry.Ok {
+				resp = respRetry
+				errSmb = nil
+			}
+		}
 
 		if errSmb != nil || !resp.Ok {
 			// Direct fallback via sudo -n if helper was running older code
@@ -2937,7 +3130,7 @@ WantedBy=default.target
 			if members, err := st.ListFamilyMembers(); err == nil {
 				c := helper.Client{SocketPath: "/run/allod/helper.sock"}
 				for _, m := range members {
-					_, _ = c.Execute("users.create", map[string]interface{}{"username": m.Username}, false)
+					_ = ensureSystemUser(&c, m.Username)
 				}
 			}
 		}
