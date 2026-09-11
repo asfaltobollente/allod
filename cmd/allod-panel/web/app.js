@@ -1649,6 +1649,7 @@ function copyTextToClipboard(text, btn) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
       showCopyFeedback(btn);
+      showAlert('✓ Copiato negli appunti!', 'success');
     }).catch(() => {
       fallbackCopyText(text, btn);
     });
@@ -1658,19 +1659,37 @@ function copyTextToClipboard(text, btn) {
 }
 
 function fallbackCopyText(text, btn) {
+  let copied = false;
   const ta = document.createElement('textarea');
   ta.value = text;
+  ta.setAttribute('readonly', '');
   ta.style.position = 'fixed';
-  ta.style.opacity = '0';
+  ta.style.left = '0';
+  ta.style.top = '0';
+  ta.style.width = '2em';
+  ta.style.height = '2em';
+  ta.style.padding = '0';
+  ta.style.border = 'none';
+  ta.style.outline = 'none';
+  ta.style.background = 'transparent';
+  ta.style.fontSize = '16px';
   document.body.appendChild(ta);
+  ta.focus();
   ta.select();
+  ta.setSelectionRange(0, text.length);
   try {
-    document.execCommand('copy');
-    showCopyFeedback(btn);
+    copied = document.execCommand('copy');
   } catch (err) {
-    console.error('Fallback copy failed:', err);
+    console.error('execCommand copy failed:', err);
   }
   document.body.removeChild(ta);
+
+  if (copied) {
+    showCopyFeedback(btn);
+    showAlert('✓ Copiato negli appunti!', 'success');
+  } else {
+    window.prompt('Copia il link:', text);
+  }
 }
 
 function showCopyFeedback(btn) {
@@ -2953,12 +2972,14 @@ function showFamilyQRModal(name, inviteUrl) {
   const modal = document.getElementById('family-qr-modal');
   const nameEl = document.getElementById('qr-member-name');
   const linkEl = document.getElementById('qr-link-text');
+  const linkInput = document.getElementById('qr-link-input');
   const svgContainer = document.getElementById('qr-svg-container');
   const waBtn = document.getElementById('btn-share-whatsapp');
   const tgBtn = document.getElementById('btn-share-telegram');
 
   if (nameEl) nameEl.innerText = name;
   if (linkEl) linkEl.innerText = inviteUrl;
+  if (linkInput) linkInput.value = inviteUrl;
 
   if (svgContainer && typeof QRCode !== 'undefined' && QRCode.generateSVG) {
     svgContainer.innerHTML = QRCode.generateSVG(inviteUrl, 190);
@@ -2976,13 +2997,26 @@ function closeFamilyQRModal() {
   if (modal) modal.classList.add('hidden');
 }
 
-function copyQRLink() {
-  if (!currentQRLink) return;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(currentQRLink).then(() => showAlert('✓ Link di onboarding copiato negli appunti!', 'success'));
+function openQRLink() {
+  if (currentQRLink) {
+    window.open(currentQRLink, '_blank');
   } else {
-    showAlert('Copia manuale: ' + currentQRLink, 'info');
+    showAlert('Nessun link disponibile da aprire', 'warning');
   }
+}
+
+function copyQRLink(btn) {
+  if (!currentQRLink) {
+    showAlert('Nessun link disponibile da copiare', 'warning');
+    return;
+  }
+  const linkInput = document.getElementById('qr-link-input');
+  if (linkInput) {
+    linkInput.focus();
+    linkInput.select();
+    linkInput.setSelectionRange(0, linkInput.value.length);
+  }
+  copyTextToClipboard(currentQRLink, btn);
 }
 
 async function deleteFamilyMember(username) {
