@@ -127,3 +127,29 @@ func TestHelperUsersCreatePlan(t *testing.T) {
 		t.Errorf("expected plan items for users.create, got 0")
 	}
 }
+
+func TestEnsureLinuxUserValidation(t *testing.T) {
+	if err := ensureLinuxUser("invalid;rm -rf /"); err == nil {
+		t.Errorf("expected error on command injection in username, got nil")
+	}
+	if err := ensureLinuxUser(""); err == nil {
+		t.Errorf("expected error on empty username, got nil")
+	}
+}
+
+func TestHelperSharesApplySystemBinProtection(t *testing.T) {
+	s := &Server{}
+	req := Request{
+		Action: "shares.apply",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"name": "shares",
+			"path": "/usr/local/bin",
+		},
+	}
+	res := s.processRequest(req)
+	if !res.Ok {
+		t.Fatalf("expected shares.apply to succeed, got error: %s", res.Error)
+	}
+}
+

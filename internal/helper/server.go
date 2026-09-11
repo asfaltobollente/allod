@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -101,6 +102,41 @@ func ensureLinuxUser(username string) error {
 	// 6. Check if user exists despite any warnings/non-zero codes
 	if errCheck := exec.Command(idBin, "-u", username).Run(); errCheck == nil {
 		return nil
+	}
+
+	// 7. Last-resort fallback when running as root: direct /etc/passwd and /etc/group entry
+	if os.Geteuid() == 0 {
+		if passwdData, errP := os.ReadFile("/etc/passwd"); errP == nil {
+			sPasswd := string(passwdData)
+			maxUID := 1000
+			for _, line := range strings.Split(sPasswd, "\n") {
+				fields := strings.Split(line, ":")
+				if len(fields) >= 3 {
+					if uid, errU := strconv.Atoi(fields[2]); errU == nil && uid >= 1000 && uid < 60000 {
+						if uid > maxUID {
+							maxUID = uid
+						}
+					}
+				}
+			}
+			newUID := maxUID + 1
+			homeDir := filepath.Join("/mnt/allod-storage/shares", username)
+			entry := fmt.Sprintf("%s:x:%d:%d:%s:%s:%s\n", username, newUID, newUID, username, homeDir, nologinShell)
+			if f, errA := os.OpenFile("/etc/passwd", os.O_APPEND|os.O_WRONLY, 0644); errA == nil {
+				_, _ = f.WriteString(entry)
+				f.Close()
+			}
+			groupEntry := fmt.Sprintf("%s:x:%d:\n", username, newUID)
+			if fg, errG := os.OpenFile("/etc/group", os.O_APPEND|os.O_WRONLY, 0644); errG == nil {
+				_, _ = fg.WriteString(groupEntry)
+				fg.Close()
+			}
+			if shadow, errS := os.OpenFile("/etc/shadow", os.O_APPEND|os.O_WRONLY, 0640); errS == nil {
+				_, _ = shadow.WriteString(fmt.Sprintf("%s:*:19000:0:99999:7:::\n", username))
+				shadow.Close()
+			}
+			return nil
+		}
 	}
 
 	return fmt.Errorf("user creation failed: %v (%s) / %v (%s) / %v (%s)",
@@ -243,9 +279,10 @@ func (s *Server) processRequest(req Request) Response {
 			_ = exec.Command("chmod", "-R", "0777", path).Run()
 
 			// If path is a system binary directory, do not configure it as a Samba share
-			if path == "/usr/local/bin" {
-				_ = os.RemoveAll("/usr/local/bin/public")
-				return Response{Ok: true, Applied: true, Plan: []string{"chmod -R 0777 /usr/local/bin"}}
+			cleanPath := filepath.Clean(path)
+			if cleanPath == "/usr/local/bin" || cleanPath == "/bin" || cleanPath == "/usr/bin" || cleanPath == "/sbin" || cleanPath == "/usr/sbin" {
+				_ = os.RemoveAll(filepath.Join(cleanPath, "public"))
+				return Response{Ok: true, Applied: true, Plan: []string{fmt.Sprintf("chmod -R 0777 %s", cleanPath)}}
 			}
 
 			// Ensure public folder and media subfolders
@@ -430,6 +467,8 @@ func (s *Server) processRequest(req Request) Response {
 			_ = os.MkdirAll(userSharePath, 0770)
 			chmodBin := resolveExecutable("chmod", "/bin/chmod", "/usr/bin/chmod")
 			_ = exec.Command(chmodBin, "0770", userSharePath).Run()
+			chownBin := resolveExecutable("chown", "/bin/chown", "/usr/bin/chown")
+			_ = exec.Command(chownBin, "-R", fmt.Sprintf("%s:%s", username, username), userSharePath).Run()
 
 			// Ensure private share configuration in /etc/samba/smb.conf
 			smbConf := "/etc/samba/smb.conf"
@@ -479,11 +518,19 @@ func (s *Server) processRequest(req Request) Response {
 				if entries, err := filepath.Glob("/home/*/*/*/allod-helperd"); err == nil {
 					candidates = append(candidates, entries...)
 				}
-				candidates = append(candidates, "/tmp/allod-helperd")
+				candidates = append(candidates, "/tmp/allod-helperd-update", "/tmp/allod-helperd")
 				for _, cand := range candidates {
 					if info, err := os.Stat(cand); err == nil && !info.IsDir() {
-						if data, err := os.ReadFile(cand); err == nil {
-							_ = os.WriteFile("/usr/local/bin/allod-helperd", data, 0755)
+						if data, err := os.ReadFile(cand); err == nil && len(data) > 0 {
+							tmpDst := "/usr/local/bin/allod-helperd.tmp"
+							_ = os.Remove(tmpDst)
+							if errW := os.WriteFile(tmpDst, data, 0755); errW == nil {
+								_ = os.Rename(tmpDst, "/usr/local/bin/allod-helperd")
+							} else {
+								_ = os.Remove("/usr/local/bin/allod-helperd")
+								_ = os.WriteFile("/usr/local/bin/allod-helperd", data, 0755)
+							}
+							_ = os.Chmod("/usr/local/bin/allod-helperd", 0755)
 						}
 						break
 					}

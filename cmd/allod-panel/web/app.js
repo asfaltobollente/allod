@@ -2238,17 +2238,18 @@ async function restartRootHelper() {
   const btn = document.getElementById('btn-restart-helper');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '⏳ Riavvio...';
+    btn.innerHTML = '⏳ Aggiornamento...';
   }
   try {
     const res = await fetch('/api/system/helper-restart', { method: 'POST' });
     const json = await res.json();
+    const out = (json.data && (json.data.log || json.data.output)) || json.message;
     if (json.status === 'ok') {
-      appendSettingsConsole('HELPER RESTART', json.message, false);
-      showAlert(json.message || '✓ Root Helper riavviato!', 'success');
+      appendSettingsConsole('HELPER UPGRADE & RESTART', (out ? out + '\n' : '') + (json.message || ''), false);
+      showAlert(json.message || '✓ Root Helper aggiornato e riavviato!', 'success');
       setTimeout(refreshData, 1500);
     } else {
-      appendSettingsConsole('HELPER RESTART ERROR', json.message, true);
+      appendSettingsConsole('HELPER UPGRADE & RESTART ERROR', (out ? out + '\n' : '') + (json.message || ''), true);
       showAlert('Errore riavvio helper: ' + json.message, 'danger');
     }
   } catch (err) {
@@ -2256,7 +2257,7 @@ async function restartRootHelper() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '🔄 <span>Riavvia Helper</span>';
+      btn.innerHTML = '🔄 <span>Aggiorna & Riavvia Helper</span>';
     }
   }
 }
