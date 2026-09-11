@@ -113,8 +113,8 @@
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <button class="btn btn-sm btn-outline-primary" onclick="openTriadUserModal()" id="btn-open-triad-modal" style="padding:4px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-color:var(--primary); color:var(--primary);">
-              <span>🛡️</span> <span data-i18n="btn_triad_user">Crea Utente Triade</span>
+            <button class="btn btn-sm btn-outline-primary" onclick="openFamilyModal()" id="btn-open-family-modal" style="padding:4px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-color:var(--primary); color:var(--primary);">
+              <span>👥</span> <span data-i18n="btn_family_hub">Membri Famiglia & Triade</span>
             </button>
             <span style="font-size:11.5px; color:var(--text-muted); font-weight:600;">Modalità Rete:</span>
             <div style="display:flex; background:rgba(15,23,42,0.8); border:1px solid var(--card-border); border-radius:6px; padding:2px;">
@@ -724,124 +724,251 @@ sudo systemctl enable --now allod-helperd</pre>
     </div>
   </div>
 
-  <!-- TRIAD USER CREATION MODAL (Samba + Immich + Jellyfin) -->
+  <!-- FAMILY & TRIAD MEMBERS MANAGEMENT MODAL -->
   <div id="triad-user-modal" class="modal-overlay hidden">
-    <div class="modal-card" style="max-width:620px; max-height:90vh; display:flex; flex-direction:column;">
-      <div class="modal-header">
-        <h3 style="display:flex; align-items:center; gap:8px;">
-          <span>🛡️</span> <span data-i18n="triad_modal_title">Crea Utente Triade (Samba + Immich + Jellyfin)</span>
-        </h3>
-        <button class="modal-close-btn" onclick="closeTriadUserModal()">&times;</button>
+    <div class="modal-card" style="max-width:700px; max-height:92vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:22px;">👥</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:700;" data-i18n="family_modal_title">Membri della Famiglia & Triade Sovereign</h3>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);" data-i18n="family_modal_sub">Gestisci account personali, cartelle private SMB, librerie Immich e onboarding trasparente</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeFamilyModal()">&times;</button>
       </div>
-      <div class="modal-body" style="overflow-y:auto; max-height:calc(90vh - 130px); padding-right:8px;">
-        <p style="font-size:12px; color:var(--text-muted); line-height:1.45; margin-bottom:14px;" data-i18n="triad_modal_desc">
-          Predispone automaticamente l'intero ecosistema per un nuovo utente: cartella privata SMB (<code>\\allod\&lt;utente&gt;</code>), bind-mount per Immich Photos e predisposizione streaming Jellyfin.
-        </p>
 
-        <!-- Triad Services Status Checklist -->
-        <div style="background:#0f172a; border-radius:8px; padding:12px; border:1px solid var(--card-border); margin-bottom:14px;">
-          <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;" data-i18n="triad_status_title">Verifica Stato Servizi della Triade:</div>
-          <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
-            <div id="triad-status-shares" style="font-size:11.5px; padding:8px 6px; border-radius:6px; background:rgba(255,255,255,0.04); text-align:center; border:1px solid rgba(255,255,255,0.08);">
-              📁 <strong>Samba</strong><br><span id="triad-shares-badge" style="font-size:10.5px;">⏳ Verifica...</span>
+      <!-- Navigation Tabs -->
+      <div style="display:flex; gap:6px; padding:10px 16px; background:rgba(0,0,0,0.25); border-bottom:1px solid var(--card-border);">
+        <button type="button" class="btn btn-sm" id="btn-tab-family-list" onclick="switchFamilyTab('list')" style="padding:5px 12px; font-size:11.5px; font-weight:600; background:var(--primary); color:#000; border-radius:6px;">
+          👥 <span data-i18n="tab_family_members">Membri Famiglia</span> (<span id="family-member-count">0</span>)
+        </button>
+        <button type="button" class="btn btn-sm" id="btn-tab-family-create" onclick="switchFamilyTab('create')" style="padding:5px 12px; font-size:11.5px; font-weight:600; background:transparent; color:var(--text-muted); border-radius:6px;">
+          ➕ <span data-i18n="tab_family_new">Nuovo Membro</span>
+        </button>
+        <button type="button" class="btn btn-sm" id="btn-tab-family-guide" onclick="switchFamilyTab('guide')" style="padding:5px 12px; font-size:11.5px; font-weight:600; background:transparent; color:var(--text-muted); border-radius:6px;">
+          📘 <span data-i18n="tab_family_guide">Guida Moduli & Immich</span>
+        </button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto; flex:1; padding:16px; min-height:360px;">
+        <!-- PANE 1: MEMBERS LIST -->
+        <div id="pane-family-list">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="font-size:12px; color:var(--text-muted);" data-i18n="family_list_desc">
+              Ciascun membro ha uno share SMB privato protetto (<code>0770</code>) e può gestire la propria password in piena autonomia.
             </div>
-            <div id="triad-status-photos" style="font-size:11.5px; padding:8px 6px; border-radius:6px; background:rgba(255,255,255,0.04); text-align:center; border:1px solid rgba(255,255,255,0.08);">
-              📸 <strong>Immich</strong><br><span id="triad-photos-badge" style="font-size:10.5px;">⏳ Verifica...</span>
-            </div>
-            <div id="triad-status-media" style="font-size:11.5px; padding:8px 6px; border-radius:6px; background:rgba(255,255,255,0.04); text-align:center; border:1px solid rgba(255,255,255,0.08);">
-              🍿 <strong>Jellyfin</strong><br><span id="triad-media-badge" style="font-size:10.5px;">⏳ Verifica...</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- WARNING BANNER (Shown if any of the 3 is inactive) -->
-        <div id="triad-warning-banner" class="alert-banner alert-warning hidden" style="margin-bottom:14px; font-size:12px; line-height:1.45;">
-          <strong>⚠️ Funzionalità Bloccata:</strong> <span id="triad-warning-text"></span>
-        </div>
-
-        <!-- SUCCESS STATUS BANNER (Shown if all 3 are active) -->
-        <div id="triad-ok-banner" class="alert-banner alert-success hidden" style="margin-bottom:14px; font-size:12px;">
-          ✅ <strong>Tutti i 3 servizi sono operativi!</strong> Puoi procedere con la creazione guidata.
-        </div>
-
-        <form id="triad-user-form" onsubmit="event.preventDefault(); executeCreateTriadUser();">
-          <div class="form-group" style="margin-bottom:12px;">
-            <label style="font-size:12px; font-weight:600; color:var(--text-main); display:block; margin-bottom:4px;" data-i18n="label_triad_username">Nome Utente Triade:</label>
-            <input type="text" id="triad-user-input" class="form-control" placeholder="es. mario" style="font-family:'JetBrains Mono',monospace; width:100%; box-sizing:border-box;">
-            <span style="font-size:10.5px; color:var(--text-muted);">Usa lettere minuscole e numeri senza spazi (es. mario, chiara, davide).</span>
-          </div>
-
-          <div class="form-group" style="margin-bottom:12px;">
-            <label style="font-size:12px; font-weight:600; color:var(--text-main); display:block; margin-bottom:4px;" data-i18n="label_triad_password">Password Utente (Samba & Consigliata per Immich/Jellyfin):</label>
-            <div style="position:relative; width:100%;">
-              <input type="password" id="triad-pass-input" class="form-control" placeholder="Minimo 4 caratteri" style="width:100%; box-sizing:border-box; padding-right:40px;">
-              <button type="button" onclick="toggleTriadPassVisibility()" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:14px;">👁️</button>
-            </div>
-          </div>
-
-          <!-- PHOTO BIND MOUNT CHECKBOX -->
-          <div style="margin-bottom:14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:10px 12px;">
-            <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:12px; font-weight:600; color:var(--text-main); margin-bottom:0;">
-              <input type="checkbox" id="triad-link-photos-checkbox" checked style="margin-top:2px; cursor:pointer;">
-              <div>
-                <span data-i18n="triad_link_photos_label">Collega libreria foto Immich allo share privato Samba (<code>photos/</code>)</span>
-                <div style="font-size:11px; font-weight:normal; color:var(--text-muted); margin-top:3px; line-height:1.4;" data-i18n="triad_link_photos_sub">
-                  Se disattivato, le foto rimarranno protette e visibili unicamente dall'app Immich con autenticazione/2FA, isolate sul filesystem del server (permessi <code>0770</code> con accesso riservato a root e al container).
-                </div>
-              </div>
-            </label>
-          </div>
-
-          <div id="triad-result-box" class="hidden" style="background:#0b1120; border-radius:6px; padding:12px; border:1px solid rgba(16,185,129,0.3); margin-top:12px; font-size:11.5px; line-height:1.5;">
-          </div>
-        </form>
-
-        <!-- CONFIGURED TRIAD USERS LIST -->
-        <div style="margin-top:20px; border-top:1px solid var(--card-border); padding-top:14px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <div style="font-size:12px; font-weight:700; color:var(--text-main);" data-i18n="triad_users_title">
-              👥 Utenti Triade Rilevati sul Server
-            </div>
-            <button type="button" class="btn btn-secondary" onclick="loadTriadUsers()" style="font-size:11px; padding:3px 8px; border-radius:4px;" title="Ricarica elenco utenti">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="loadFamilyMembers()" style="font-size:11px; padding:3px 10px; border-radius:4px;">
               🔄 <span data-i18n="btn_refresh">Aggiorna</span>
             </button>
           </div>
-          <div id="triad-users-list" style="font-size:11.5px; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:8px 10px; min-height:40px;">
-            <span style="color:var(--text-muted);">Caricamento utenti...</span>
+
+          <div id="family-members-container" style="display:flex; flex-direction:column; gap:10px;">
+            <div style="text-align:center; padding:30px; color:var(--text-muted); font-size:12px;">⏳ Caricamento membri della famiglia...</div>
           </div>
         </div>
 
-        <!-- IMMICH STORAGE LABEL & TEMPLATE GUIDE -->
-        <details style="margin-top:16px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:10px 12px; font-size:11.5px; line-height:1.5;">
-          <summary style="font-weight:600; cursor:pointer; color:var(--primary); display:flex; align-items:center; gap:6px;">
-            <span>📘</span> <span data-i18n="triad_guide_summary">Guida: Come impostare lo Storage Label & Template su Immich</span>
-          </summary>
-          <div style="margin-top:10px; color:var(--text-main); font-size:11.5px; line-height:1.5;">
-            <p style="margin-bottom:8px;">
-              Di default, Immich archivia le foto usando UUID casuali. Impostando lo <strong>Storage Label</strong> e lo <strong>Storage Template</strong>, le foto di ciascun utente vengono smistate in modo ordinato nella cartella <code>/photos/upload/library/&lt;utente&gt;/</code>.
-            </p>
-            <ol style="margin:0 0 10px 18px; padding:0; color:var(--text-main);">
-              <li style="margin-bottom:6px;">
-                <strong>Imposta lo Storage Label:</strong> Accedi a Immich (porta 2283 o Launchpad) come Admin ➔ <em>Administration ➔ Users</em> ➔ Clicca sull'icona Modifica dell'utente desiderato ➔ Nel campo <strong>Storage Label</strong> inserisci esattamente lo stesso username (es. <code>mario</code>) ➔ Salva.
-              </li>
-              <li style="margin-bottom:6px;">
-                <strong>Abilita lo Storage Template:</strong> Vai su <em>Administration ➔ Settings ➔ Storage Template</em> ➔ Spunta <strong>Enable storage template</strong> ➔ Imposta il template consigliato: <code>{{y}}/{{MM}}/{{filename}}</code> ➔ Salva modifiche.
-              </li>
-              <li style="margin-bottom:6px;">
-                <strong>Esegui la Migrazione:</strong> Vai su <em>Administration ➔ Jobs</em> ➔ Fai clic su <strong>Run</strong> accanto a <strong>Storage Template Migration</strong> per ordinare istantaneamente tutti i file pregressi.
-              </li>
-            </ol>
-            <div style="background:rgba(16,185,129,0.08); border-left:3px solid var(--success); padding:6px 8px; border-radius:4px; font-size:11px; color:var(--text-muted);">
-              🔒 <strong>Sicurezza e Isolamento Disco:</strong> Le foto sono memorizzate con permessi restrittivi <code>0770</code> (<code>chmod -R go-rwx</code>), inaccessibili ad altri utenti Linux o di rete. Solo l'utente proprietario autorizzato (tramite SMB) e l'applicazione Immich possono leggerle.
+        <!-- PANE 2: CREATE NEW MEMBER FORM -->
+        <div id="pane-family-create" class="hidden">
+          <!-- Triad Services Status Checklist -->
+          <div style="background:#0f172a; border-radius:8px; padding:10px 12px; border:1px solid var(--card-border); margin-bottom:14px;">
+            <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;" data-i18n="triad_status_title">Verifica Stato Servizi della Triade:</div>
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
+              <div id="triad-status-shares" style="font-size:11px; padding:6px; border-radius:6px; background:rgba(255,255,255,0.03); text-align:center; border:1px solid rgba(255,255,255,0.06);">
+                📁 <strong>Samba</strong><br><span id="triad-shares-badge" style="font-size:10px;">⏳ ...</span>
+              </div>
+              <div id="triad-status-photos" style="font-size:11px; padding:6px; border-radius:6px; background:rgba(255,255,255,0.03); text-align:center; border:1px solid rgba(255,255,255,0.06);">
+                📸 <strong>Immich</strong><br><span id="triad-photos-badge" style="font-size:10px;">⏳ ...</span>
+              </div>
+              <div id="triad-status-media" style="font-size:11px; padding:6px; border-radius:6px; background:rgba(255,255,255,0.03); text-align:center; border:1px solid rgba(255,255,255,0.06);">
+                🍿 <strong>Jellyfin</strong><br><span id="triad-media-badge" style="font-size:10px;">⏳ ...</span>
+              </div>
             </div>
           </div>
-        </details>
+
+          <!-- Warning banner if any service is down -->
+          <div id="family-warning-banner" class="alert-banner alert-warning hidden" style="margin-bottom:14px; font-size:12px; line-height:1.45;">
+            <strong>⚠️ Funzionalità Bloccata:</strong> <span id="family-warning-text"></span>
+          </div>
+
+          <form id="family-create-form" onsubmit="event.preventDefault(); submitCreateFamilyMember();">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+              <div class="form-group">
+                <label style="font-size:12px; font-weight:600;" data-i18n="label_first_name">Nome *</label>
+                <input type="text" id="family-first-name" class="form-control" placeholder="es. Mario" required oninput="autoSuggestUsername()">
+              </div>
+              <div class="form-group">
+                <label style="font-size:12px; font-weight:600;" data-i18n="label_last_name">Cognome</label>
+                <input type="text" id="family-last-name" class="form-control" placeholder="es. Rossi" oninput="autoSuggestUsername()">
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:12px; margin-bottom:12px;">
+              <div class="form-group">
+                <label style="font-size:12px; font-weight:600;" data-i18n="label_username">Username (cartelle SMB & storage label) *</label>
+                <input type="text" id="family-username" class="form-control" placeholder="es. mario" style="font-family:'JetBrains Mono',monospace;" required>
+                <span style="font-size:10.5px; color:var(--text-muted);">Solo lettere minuscole e numeri (es. mario, chiara, davide).</span>
+              </div>
+              <div class="form-group">
+                <label style="font-size:12px; font-weight:600;" data-i18n="label_role">Ruolo nella Famiglia</label>
+                <select id="family-role" class="form-control">
+                  <option value="member">Figlio / Membro</option>
+                  <option value="admin">Genitore / Admin</option>
+                  <option value="guest">Ospite</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:12px; margin-bottom:12px;">
+              <div class="form-group">
+                <label style="font-size:12px; font-weight:600;" data-i18n="label_email">Email (opzionale)</label>
+                <input type="email" id="family-email" class="form-control" placeholder="mario@famiglia.it">
+              </div>
+              <div class="form-group">
+                <label style="font-size:12px; font-weight:600;" data-i18n="label_notes">Dispositivi / Note</label>
+                <input type="text" id="family-notes" class="form-control" placeholder="es. iPhone 15, PC Windows">
+              </div>
+            </div>
+
+            <!-- Password / Onboarding Options -->
+            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px; margin-bottom:14px;">
+              <div style="font-size:12px; font-weight:700; color:var(--text-main); margin-bottom:8px;">🔐 Modalità Password & Onboarding:</div>
+              <div style="display:flex; flex-direction:column; gap:8px;">
+                <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-size:12px; margin-bottom:0;">
+                  <input type="radio" name="pass-mode" id="pass-mode-invite" value="invite" checked onchange="togglePassModeUI()" style="margin-top:2px;">
+                  <div>
+                    <strong style="color:var(--primary);">📲 Onboarding Autonomo via QR Code / Link (Consigliato)</strong>
+                    <div style="font-size:11px; color:var(--text-muted); line-height:1.4; margin-top:2px;">
+                      L'admin non sceglie la password. Allod genererà un QR Code e un link monouso valido 72 ore: l'utente lo inquadra dallo smartphone e sceglie la propria password in autonomia e totale riservatezza.
+                    </div>
+                  </div>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-size:12px; margin-bottom:0; margin-top:4px;">
+                  <input type="radio" name="pass-mode" id="pass-mode-manual" value="manual" onchange="togglePassModeUI()" style="margin-top:2px;">
+                  <div>
+                    <strong>🔑 Imposta una password iniziale adesso</strong>
+                    <div style="font-size:11px; color:var(--text-muted); line-height:1.4; margin-top:2px;">
+                      Assegna subito una password (utile per bambini o familiari che non utilizzano uno smartphone personale).
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              <div id="box-manual-password" class="hidden" style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06);">
+                <label style="font-size:11.5px; font-weight:600;" data-i18n="label_initial_password">Password iniziale (min. 4 caratteri):</label>
+                <input type="password" id="family-manual-pass" class="form-control" placeholder="Inserisci password iniziale">
+              </div>
+            </div>
+
+            <!-- Photos Link Checkbox -->
+            <div style="margin-bottom:14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:10px 12px;">
+              <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:12px; font-weight:600; color:var(--text-main); margin-bottom:0;">
+                <input type="checkbox" id="family-link-photos" checked style="margin-top:2px; cursor:pointer;">
+                <div>
+                  <span>Collega libreria foto Immich allo share privato Samba (<code>photos/</code>)</span>
+                  <div style="font-size:11px; font-weight:normal; color:var(--text-muted); margin-top:3px; line-height:1.4;">
+                    Se disattivato, le foto rimarranno protette e visibili unicamente dall'app Immich con 2FA, isolate sul filesystem con permessi <code>0770</code> (esclusivi per root e container).
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div id="family-create-result" class="hidden" style="background:#0b1120; border-radius:6px; padding:12px; border:1px solid rgba(16,185,129,0.3); margin-top:12px; font-size:11.5px; line-height:1.5;">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+              <button type="submit" id="btn-submit-family" class="btn btn-primary" style="padding:8px 18px;">
+                🚀 <span>Crea Membro & Predisponi Allod</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- PANE 3: GUIDA MODULI -->
+        <div id="pane-family-guide" class="hidden">
+          <div style="font-size:12px; line-height:1.6; color:var(--text-main);">
+            <div style="background:rgba(56,189,248,0.08); border-left:3px solid var(--primary); padding:10px 12px; border-radius:6px; margin-bottom:14px;">
+              <strong>Architettura Sovereign a Triade:</strong><br>
+              Allod automatizza la creazione dell'account Linux e la cartella Samba con permessi restrittivi <code>0770</code>.
+              Per i moduli multimediali (Immich e Jellyfin), ecco i passaggi per associare il membro:
+            </div>
+
+            <h4 style="color:var(--primary); font-size:13px; margin-bottom:8px;">📸 Immich Photos: Storage Label & Template</h4>
+            <p style="color:var(--text-muted); margin-bottom:8px;">
+              Immich di default archivia i file con UUID casuali. Impostando lo <strong>Storage Label</strong>, le foto caricate dallo smartphone finiranno ordinate direttamente nella cartella <code>/library/&lt;username&gt;/</code>.
+            </p>
+            <ol style="margin:0 0 14px 20px; padding:0; color:var(--text-main);">
+              <li style="margin-bottom:6px;">
+                Apri Immich su <code>http://allod:2283</code> con account Admin ➔ <em>Administration ➔ Users</em>.
+              </li>
+              <li style="margin-bottom:6px;">
+                Crea o modifica l'utente: inserisci Nome, Cognome, Email e nel campo <strong>Storage Label</strong> inserisci esattamente il nome utente (es. <code>mario</code>).
+              </li>
+              <li style="margin-bottom:6px;">
+                In <em>Administration ➔ Settings ➔ Storage Template</em>, abilita il template consigliato: <code>{{y}}/{{MM}}/{{filename}}</code>.
+              </li>
+            </ol>
+
+            <h4 style="color:var(--primary); font-size:13px; margin-bottom:8px;">🍿 Jellyfin: Streaming Cinema & Musica</h4>
+            <p style="color:var(--text-muted); margin-bottom:8px;">
+              Jellyfin indicizza automaticamente film e musica pubblici da <code>\\allod\public</code>. Per creare l'utente su Jellyfin:
+            </p>
+            <ol style="margin:0 0 14px 20px; padding:0; color:var(--text-main);">
+              <li style="margin-bottom:6px;">
+                Apri Jellyfin su <code>http://allod:8096</code> con account Admin ➔ <em>Cruscotto ➔ Utenti ➔ Aggiungi Utente</em>.
+              </li>
+              <li style="margin-bottom:6px;">
+                Usa lo stesso nome utente (es. <code>mario</code>). L'utente potrà accedere a film e musica condivisi della famiglia su Smart TV o app mobile.
+              </li>
+            </ol>
+
+            <div style="background:rgba(16,185,129,0.08); border-left:3px solid var(--success); padding:8px 10px; border-radius:4px; font-size:11px; color:var(--text-muted);">
+              🔒 <strong>Sicurezza Disco:</strong> Le cartelle personali sono protette da permessi <code>0770</code> (<code>chmod -R go-rwx</code>): nessun altro utente Linux o di rete può curiosare nei file privati. Solo l'utente proprietario e il servizio Podman hanno accesso.
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
-        <button class="btn btn-secondary" onclick="closeTriadUserModal()" data-i18n="btn_cancel">Chiudi</button>
-        <button class="btn btn-primary" id="btn-submit-triad-user" onclick="executeCreateTriadUser()" disabled>
-          🚀 <span data-i18n="btn_create_triad">Crea Utente & Predisponi Triade</span>
-        </button>
+
+      <div class="modal-footer" style="display:flex; justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="closeFamilyModal()" data-i18n="btn_close">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR CODE / ONBOARDING LINK MODAL -->
+  <div id="family-qr-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:440px; text-align:center;">
+      <div class="modal-header">
+        <h3 style="margin:0; font-size:15px; font-weight:700;">📲 Invito & Onboarding Personale</h3>
+        <button class="modal-close-btn" onclick="closeFamilyQRModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:20px;">
+        <div id="qr-member-name" style="font-size:16px; font-weight:700; color:var(--text-main); margin-bottom:4px;"></div>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px; line-height:1.4;">
+          Inquadra questo QR Code con la fotocamera dello smartphone per impostare la password personale in totale autonomia e visualizzare i parametri di connessione.
+        </p>
+
+        <!-- QR Code SVG Container -->
+        <div id="qr-svg-container" style="background:#fff; border-radius:12px; padding:14px; display:inline-block; margin-bottom:14px; box-shadow:0 4px 15px rgba(0,0,0,0.3);">
+        </div>
+
+        <!-- Link Copy Box -->
+        <div style="background:#090d16; border:1px solid var(--card-border); border-radius:8px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; font-size:11px; font-family:'JetBrains Mono',monospace; color:#38bdf8;">
+          <span id="qr-link-text" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:280px; text-align:left;"></span>
+          <button type="button" class="btn btn-sm btn-primary" onclick="copyQRLink()" style="padding:4px 10px; font-size:11px; margin-left:8px;">Copia</button>
+        </div>
+
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <a id="btn-share-whatsapp" href="#" target="_blank" class="btn btn-sm" style="background:#25D366; color:#000; text-decoration:none; font-weight:600; padding:6px 12px; border-radius:6px; font-size:11.5px;">
+            💬 WhatsApp
+          </a>
+          <a id="btn-share-telegram" href="#" target="_blank" class="btn btn-sm" style="background:#0088cc; color:#fff; text-decoration:none; font-weight:600; padding:6px 12px; border-radius:6px; font-size:11.5px;">
+            ✈️ Telegram
+          </a>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeFamilyQRModal()" style="width:100%;">Chiudi</button>
       </div>
     </div>
   </div>
@@ -1060,6 +1187,7 @@ sudo systemctl enable --now allod-helperd</pre>
     </div>
   </div>
 
+  <script src="qrcode.js"></script>
   <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>

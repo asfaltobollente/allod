@@ -303,6 +303,25 @@ func main() {
 	fileServer := http.FileServer(http.FS(subFS))
 	mux.Handle("/", fileServer)
 
+	// Portal and Welcome Routes for Family Members
+	mux.HandleFunc("/portal", func(w http.ResponseWriter, r *http.Request) {
+		f, err := subFS.Open("portal.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.Copy(w, f)
+	})
+	mux.HandleFunc("/welcome", func(w http.ResponseWriter, r *http.Request) {
+		target := "/portal"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+	})
+
 	// 2. API Status
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1543,6 +1562,536 @@ WantedBy=default.target
 			Data: map[string]interface{}{
 				"username":      req.Username,
 				"photos_linked": req.Enabled,
+			},
+		})
+	})
+
+	// 5a-16. API Family Members List
+	mux.HandleFunc("/api/family/members", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore apertura database: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		baseDir := quadlet.ResolvedStorageBaseDir()
+		sharesDir := filepath.Join(baseDir, "shares")
+		mounts, _ := os.ReadFile("/proc/mounts")
+		mountsStr := string(mounts)
+
+		host := r.Host
+		if colon := strings.Index(host, ":"); colon != -1 {
+			host = host[:colon]
+		}
+		if host == "" {
+			host = "allod"
+		}
+
+		proto := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			proto = "https"
+		}
+
+		// Auto-import any filesystem Samba users not yet in state.db
+		if entries, err := os.ReadDir(sharesDir); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				uName := e.Name()
+				if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
+					continue
+				}
+				existing, _ := st.GetFamilyMember(uName)
+				if existing == nil {
+					targetMount := filepath.Join(sharesDir, uName, "photos")
+					isLinked := strings.Contains(mountsStr, targetMount)
+					_ = st.CreateFamilyMember(&state.FamilyMember{
+						Username:     uName,
+						FirstName:    strings.Title(uName),
+						LastName:     "",
+						Role:         "member",
+						AvatarColor:  "#38bdf8",
+						SmbActive:    true,
+						PhotosLinked: isLinked,
+					})
+				}
+			}
+		}
+
+		members, err := st.ListFamilyMembers()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore lettura membri: " + err.Error()})
+			return
+		}
+
+		type FamilyMemberDTO struct {
+			ID           int64  `json:"id"`
+			Username     string `json:"username"`
+			FirstName    string `json:"first_name"`
+			LastName     string `json:"last_name"`
+			DisplayName  string `json:"display_name"`
+			Email        string `json:"email"`
+			Role         string `json:"role"`
+			AvatarColor  string `json:"avatar_color"`
+			Notes        string `json:"notes"`
+			SmbPath      string `json:"smb_path"`
+			SmbActive    bool   `json:"smb_active"`
+			PhotosLinked bool   `json:"photos_linked"`
+			HasLibrary   bool   `json:"has_library"`
+			HasInvite    bool   `json:"has_invite"`
+			InviteURL    string `json:"invite_url,omitempty"`
+			CreatedAt    string `json:"created_at"`
+		}
+
+		var dtos []FamilyMemberDTO
+		for _, m := range members {
+			targetMount := filepath.Join(sharesDir, m.Username, "photos")
+			photosLinked := strings.Contains(mountsStr, targetMount)
+
+			libraryPath := filepath.Join(baseDir, "photos", "upload", "library", m.Username)
+			_, errLib := os.Stat(libraryPath)
+
+			disp := m.FirstName
+			if m.LastName != "" {
+				disp += " " + m.LastName
+			}
+
+			var inviteURL string
+			hasInvite := false
+			if m.OnboardingToken != "" && m.OnboardingExpires != nil && time.Now().Before(*m.OnboardingExpires) {
+				hasInvite = true
+				inviteURL = fmt.Sprintf("%s://%s/portal?invite=%s", proto, r.Host, m.OnboardingToken)
+			}
+
+			dtos = append(dtos, FamilyMemberDTO{
+				ID:           m.ID,
+				Username:     m.Username,
+				FirstName:    m.FirstName,
+				LastName:     m.LastName,
+				DisplayName:  disp,
+				Email:        m.Email,
+				Role:         m.Role,
+				AvatarColor:  m.AvatarColor,
+				Notes:        m.Notes,
+				SmbPath:      fmt.Sprintf("\\\\%s\\%s", host, m.Username),
+				SmbActive:    m.SmbActive,
+				PhotosLinked: photosLinked,
+				HasLibrary:   errLib == nil,
+				HasInvite:    hasInvite,
+				InviteURL:    inviteURL,
+				CreatedAt:    m.CreatedAt.Format("02/01/2006"),
+			})
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data:   dtos,
+		})
+	})
+
+	// 5a-17. API Family Member Create
+	mux.HandleFunc("/api/family/create", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		allActive, _, _, _, _, reason := getTriadStatus()
+		if !allActive {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Impossibile creare il membro: i 3 moduli della Triade devono essere tutti operativi. %s", reason),
+			})
+			return
+		}
+
+		var req struct {
+			Username       string `json:"username"`
+			FirstName      string `json:"first_name"`
+			LastName       string `json:"last_name"`
+			Email          string `json:"email"`
+			Role           string `json:"role"`
+			AvatarColor    string `json:"avatar_color"`
+			Notes          string `json:"notes"`
+			Password       string `json:"password"`
+			LinkPhotos     *bool  `json:"link_photos"`
+			GenerateInvite bool   `json:"generate_invite"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
+			return
+		}
+
+		req.Username = strings.ToLower(strings.TrimSpace(req.Username))
+		req.FirstName = strings.TrimSpace(req.FirstName)
+		req.LastName = strings.TrimSpace(req.LastName)
+		req.Email = strings.TrimSpace(req.Email)
+
+		if req.Username == "" || !validTriadUserRegex.MatchString(req.Username) || len(req.Username) < 2 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome utente non valido (solo lettere minuscole, numeri e trattini, min 2 caratteri)"})
+			return
+		}
+
+		if req.FirstName == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Il nome è obbligatorio"})
+			return
+		}
+
+		if req.Password != "" && len(req.Password) < 4 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
+			return
+		}
+
+		// If no password provided, always generate an invite link for autonomous onboarding
+		if req.Password == "" {
+			req.GenerateInvite = true
+		}
+
+		linkPhotos := true
+		if req.LinkPhotos != nil {
+			linkPhotos = *req.LinkPhotos
+		}
+
+		if req.Role == "" {
+			req.Role = "member"
+		}
+		if req.AvatarColor == "" {
+			req.AvatarColor = "#38bdf8"
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore database: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+
+		// 1. Create Linux system user
+		_, _ = client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
+
+		// 2. Set Samba password if provided
+		if req.Password != "" {
+			resSmb, err := client.Execute("shares.set_password", map[string]interface{}{
+				"username": req.Username,
+				"password": req.Password,
+			}, false)
+			if err != nil || !resSmb.Ok {
+				w.WriteHeader(http.StatusInternalServerError)
+				errMsg := "Errore configurazione password Samba"
+				if err != nil {
+					errMsg = err.Error()
+				} else if resSmb.Error != "" {
+					errMsg = resSmb.Error
+				}
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+				return
+			}
+		}
+
+		// 3. Pre-create subdirectories: photos, media, documents with strict permissions (0770)
+		baseDir := quadlet.ResolvedStorageBaseDir()
+		userShareDir := filepath.Join(baseDir, "shares", req.Username)
+		_ = os.MkdirAll(userShareDir, 0770)
+		_ = os.Chmod(userShareDir, 0770)
+		for _, sub := range []string{"photos", "media", "documents"} {
+			subPath := filepath.Join(userShareDir, sub)
+			_ = os.MkdirAll(subPath, 0770)
+			_ = os.Chmod(subPath, 0770)
+		}
+
+		// 4. Pre-create Immich library folder with proper permissions (0770)
+		immichUserDir := filepath.Join(baseDir, "photos", "upload", "library", req.Username)
+		_ = os.MkdirAll(immichUserDir, 0770)
+		_ = os.Chmod(immichUserDir, 0770)
+
+		// 5. Execute bind mount for user photos if requested
+		if linkPhotos {
+			_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
+				"enabled":  true,
+				"username": req.Username,
+			}, false)
+		}
+
+		// 6. Save member in state.db
+		member := &state.FamilyMember{
+			Username:     req.Username,
+			FirstName:    req.FirstName,
+			LastName:     req.LastName,
+			Email:        req.Email,
+			Role:         req.Role,
+			AvatarColor:  req.AvatarColor,
+			Notes:        req.Notes,
+			SmbActive:    true,
+			PhotosLinked: linkPhotos,
+		}
+
+		if err := st.CreateFamilyMember(member); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore salvataggio membro: " + err.Error()})
+			return
+		}
+
+		var inviteToken string
+		var inviteURL string
+		proto := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			proto = "https"
+		}
+		host := r.Host
+		if colon := strings.Index(host, ":"); colon != -1 {
+			host = host[:colon]
+		}
+		if host == "" {
+			host = "allod"
+		}
+
+		if req.GenerateInvite {
+			token, errTok := st.CreateResetToken(req.Username, 72*time.Hour)
+			if errTok == nil {
+				inviteToken = token
+				inviteURL = fmt.Sprintf("%s://%s/portal?invite=%s", proto, r.Host, token)
+			}
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Membro della famiglia '%s %s' (%s) creato con successo!", req.FirstName, req.LastName, req.Username),
+			Data: map[string]interface{}{
+				"username":             req.Username,
+				"first_name":           req.FirstName,
+				"last_name":            req.LastName,
+				"role":                 req.Role,
+				"smb_path":             fmt.Sprintf("\\\\%s\\%s", host, req.Username),
+				"photos_linked":        linkPhotos,
+				"has_invite":           req.GenerateInvite,
+				"invite_token":         inviteToken,
+				"invite_url":           inviteURL,
+				"immich_storage_label": req.Username,
+				"jellyfin_user":        req.Username,
+			},
+		})
+	})
+
+	// 5a-18. API Family Generate Reset Link
+	mux.HandleFunc("/api/family/generate-reset-link", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Username string `json:"username"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome utente richiesto"})
+			return
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore database: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		token, err := st.CreateResetToken(req.Username, 48*time.Hour)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
+
+		proto := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			proto = "https"
+		}
+		inviteURL := fmt.Sprintf("%s://%s/portal?invite=%s", proto, r.Host, token)
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Link di invito/ripristino generato con successo!",
+			Data: map[string]interface{}{
+				"username":   req.Username,
+				"token":      token,
+				"invite_url": inviteURL,
+				"expires_in": "48 ore",
+			},
+		})
+	})
+
+	// 5a-19. API Family Member Delete
+	mux.HandleFunc("/api/family/delete", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Username string `json:"username"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome utente richiesto"})
+			return
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
+			"enabled":  false,
+			"username": req.Username,
+		}, false)
+
+		st, err := state.Open(dbPath)
+		if err == nil {
+			_ = st.DeleteFamilyMember(req.Username)
+			st.Close()
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Membro della famiglia '%s' rimosso con successo.", req.Username),
+		})
+	})
+
+	// 5a-20. API Portal Verify Token
+	mux.HandleFunc("/api/portal/verify-token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Token mancante"})
+			return
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore database: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		member, err := st.ValidateResetToken(token)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data: map[string]interface{}{
+				"username":   member.Username,
+				"first_name": member.FirstName,
+				"last_name":  member.LastName,
+				"role":       member.Role,
+			},
+		})
+	})
+
+	// 5a-21. API Portal Set Password
+	mux.HandleFunc("/api/portal/set-password", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Token       string `json:"token"`
+			Username    string `json:"username"`
+			NewPassword string `json:"new_password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
+			return
+		}
+
+		if len(req.NewPassword) < 4 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La nuova password deve contenere almeno 4 caratteri"})
+			return
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore database: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		targetUser := ""
+		if req.Token != "" {
+			member, errVal := st.ValidateResetToken(req.Token)
+			if errVal != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errVal.Error()})
+				return
+			}
+			targetUser = member.Username
+		} else if req.Username != "" {
+			targetUser = strings.ToLower(strings.TrimSpace(req.Username))
+			m, errMem := st.GetFamilyMember(targetUser)
+			if errMem != nil || m == nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Utente non trovato"})
+				return
+			}
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Token o nome utente richiesto"})
+			return
+		}
+
+		// Set Samba password via root helper
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		resp, errSmb := client.Execute("shares.set_password", map[string]interface{}{
+			"username": targetUser,
+			"password": req.NewPassword,
+		}, false)
+
+		if errSmb != nil || !resp.Ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := "Errore aggiornamento password Samba"
+			if errSmb != nil {
+				errMsg = errSmb.Error()
+			} else if resp.Error != "" {
+				errMsg = resp.Error
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
+
+		// Consume token if one was used
+		if req.Token != "" {
+			_ = st.ConsumeResetToken(req.Token)
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Password personale per '%s' impostata con successo!", targetUser),
+			Data: map[string]interface{}{
+				"username": targetUser,
 			},
 		})
 	})
