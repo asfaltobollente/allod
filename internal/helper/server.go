@@ -38,6 +38,14 @@ func ensureLinuxUser(username string) error {
 	}
 
 	// 1. Check if user already exists in Linux (/etc/passwd)
+	if passwdData, err := os.ReadFile("/etc/passwd"); err == nil {
+		for _, line := range strings.Split(string(passwdData), "\n") {
+			parts := strings.Split(line, ":")
+			if len(parts) > 0 && parts[0] == username {
+				return nil // User already exists in OS!
+			}
+		}
+	}
 	idBin := resolveExecutable("id", "/usr/bin/id", "/bin/id")
 	if err := exec.Command(idBin, "-u", username).Run(); err == nil {
 		return nil // User already exists in OS!
@@ -447,6 +455,13 @@ func (s *Server) processRequest(req Request) Response {
 				if entries, err := filepath.Glob("/home/*/allod/allod-helperd"); err == nil {
 					candidates = append(candidates, entries...)
 				}
+				if entries, err := filepath.Glob("/home/*/*/allod-helperd"); err == nil {
+					candidates = append(candidates, entries...)
+				}
+				if entries, err := filepath.Glob("/home/*/*/*/allod-helperd"); err == nil {
+					candidates = append(candidates, entries...)
+				}
+				candidates = append(candidates, "/tmp/allod-helperd")
 				for _, cand := range candidates {
 					if info, err := os.Stat(cand); err == nil && !info.IsDir() {
 						if data, err := os.ReadFile(cand); err == nil {

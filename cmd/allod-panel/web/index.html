@@ -957,10 +957,11 @@ sudo systemctl enable --now allod-helperd</pre>
         <div id="qr-svg-container" style="background:#fff; border-radius:12px; padding:14px; display:inline-block; margin-bottom:14px; box-shadow:0 4px 15px rgba(0,0,0,0.3);">
         </div>
 
-        <!-- Link Copy Box -->
-        <div style="background:#090d16; border:1px solid var(--card-border); border-radius:8px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; font-size:11px; font-family:'JetBrains Mono',monospace; color:#38bdf8;">
-          <span id="qr-link-text" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:280px; text-align:left;"></span>
-          <button type="button" class="btn btn-sm btn-primary" onclick="copyQRLink()" style="padding:4px 10px; font-size:11px; margin-left:8px;">Copia</button>
+        <!-- Link Copy & Open Box -->
+        <div style="background:#090d16; border:1px solid var(--card-border); border-radius:8px; padding:6px 10px; display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+          <input type="text" id="qr-link-input" readonly onclick="this.select();" style="flex:1; background:transparent; border:none; color:#38bdf8; font-size:11px; font-family:'JetBrains Mono',monospace; outline:none; text-overflow:ellipsis; min-width:0; cursor:pointer;" title="Tocca per selezionare tutto" />
+          <button type="button" class="btn btn-sm btn-primary" id="btn-copy-qr-link" onclick="copyQRLink(this)" style="padding:5px 12px; font-size:11px; white-space:nowrap;">📋 Copia</button>
+          <button type="button" class="btn btn-sm btn-outline-info" id="btn-open-qr-link" onclick="openQRLink()" style="padding:5px 10px; font-size:11px; white-space:nowrap;" title="Apri link direttamente nel browser">↗️ Apri</button>
         </div>
 
         <div style="display:flex; gap:8px; justify-content:center;">
@@ -1192,8 +1193,8 @@ sudo systemctl enable --now allod-helperd</pre>
     </div>
   </div>
 
-  <script src="qrcode.js"></script>
-  <script src="i18n.js"></script>
-  <script src="app.js"></script>
+  <script src="qrcode.js?v=2.5"></script>
+  <script src="i18n.js?v=2.5"></script>
+  <script src="app.js?v=2.5"></script>
 </body>
 </html>
