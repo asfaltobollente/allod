@@ -109,3 +109,21 @@ func TestHelperSharesSetPasswordPlan(t *testing.T) {
 		t.Errorf("expected plan items, got 0")
 	}
 }
+
+func TestHelperUsersCreatePlan(t *testing.T) {
+	s := &Server{}
+	req := Request{
+		Action: "users.create",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"username": "mario",
+		},
+	}
+	res := s.processRequest(req)
+	if !res.Ok {
+		t.Fatalf("expected users.create to succeed, got: %s", res.Error)
+	}
+	if len(res.Plan) == 0 {
+		t.Errorf("expected plan items for users.create, got 0")
+	}
+}
