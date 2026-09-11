@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -241,6 +242,50 @@ func getModuleRuntimeStatus(modName string, level string, runningContainers map[
 	return "stopped"
 }
 
+func getTriadStatus() (allActive bool, sharesOk bool, photosOk bool, mediaOk bool, missing []string, reason string) {
+	runningContainers := quadlet.GetRunningContainers()
+	cfg, _ := config.LoadConfig(getConfigPath())
+
+	lvlShares := "standard"
+	lvlPhotos := "standard"
+	lvlMedia := "basic"
+	if cfg != nil && cfg.Modules != nil {
+		if m, ok := cfg.Modules["shares"]; ok && m.Level != "" {
+			lvlShares = m.Level
+		}
+		if m, ok := cfg.Modules["photos"]; ok && m.Level != "" {
+			lvlPhotos = m.Level
+		}
+		if m, ok := cfg.Modules["media"]; ok && m.Level != "" {
+			lvlMedia = m.Level
+		}
+	}
+
+	stShares := getModuleRuntimeStatus("shares", lvlShares, runningContainers)
+	stPhotos := getModuleRuntimeStatus("photos", lvlPhotos, runningContainers)
+	stMedia := getModuleRuntimeStatus("media", lvlMedia, runningContainers)
+
+	sharesOk = (stShares == "running")
+	photosOk = (stPhotos == "running")
+	mediaOk = (stMedia == "running")
+
+	allActive = sharesOk && photosOk && mediaOk
+
+	if !sharesOk {
+		missing = append(missing, "Condivisione LAN (Samba)")
+	}
+	if !photosOk {
+		missing = append(missing, "Foto & Backup (Immich)")
+	}
+	if !mediaOk {
+		missing = append(missing, "Streaming Media (Jellyfin)")
+	}
+
+	if !allActive {
+		reason = fmt.Sprintf("I seguenti servizi della Triade non sono attualmente attivi: %s. La Triade richiede che tutti e tre i servizi siano avviati per poter orchestrare automaticamente le cartelle personali, i permessi isolati e il bind-mount delle foto.", strings.Join(missing, ", "))
+	}
+	return
+}
 
 func main() {
 	port := 8080
@@ -1252,6 +1297,121 @@ WantedBy=default.target
 			Message: fmt.Sprintf("Password Samba per l'utente '%s' configurata con successo (condivisione privata \\\\allod\\%s abilitata)!", req.Username, req.Username),
 			Data: map[string]interface{}{
 				"username": req.Username,
+			},
+		})
+	})
+
+	// 5a-12. API Triad Status (Samba + Immich + Jellyfin)
+	mux.HandleFunc("/api/triad/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		allActive, sharesOk, photosOk, mediaOk, missing, reason := getTriadStatus()
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data: map[string]interface{}{
+				"all_active":    allActive,
+				"shares_active": sharesOk,
+				"photos_active": photosOk,
+				"media_active":  mediaOk,
+				"missing":       missing,
+				"reason":        reason,
+			},
+		})
+	})
+
+	// 5a-13. API Triad Create User (Automates SMB + Immich + Jellyfin folders and mounts)
+	validTriadUserRegex := regexp.MustCompile(`^[a-z0-9_.-]+$`)
+	mux.HandleFunc("/api/triad/create-user", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		allActive, _, _, _, missing, _ := getTriadStatus()
+		if !allActive {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Impossibile procedere: i seguenti servizi della Triade non sono attivi: %s. Tutti e 3 i servizi devono essere attivi per garantire la corretta impostazione di cartelle, permessi e bind-mount.", strings.Join(missing, ", ")),
+			})
+			return
+		}
+
+		var req struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
+			return
+		}
+
+		req.Username = strings.ToLower(strings.TrimSpace(req.Username))
+		if !validTriadUserRegex.MatchString(req.Username) || len(req.Username) < 2 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome utente non valido (solo lettere minuscole, numeri e trattini, min 2 caratteri)"})
+			return
+		}
+
+		if len(req.Password) < 4 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
+			return
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+
+		// 1. Create Linux system user
+		_, _ = client.Execute("users.create", map[string]interface{}{"username": req.Username}, false)
+
+		// 2. Set Samba password and create private share [<username>]
+		resSmb, err := client.Execute("shares.set_password", map[string]interface{}{
+			"username": req.Username,
+			"password": req.Password,
+		}, false)
+		if err != nil || !resSmb.Ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := "Errore configurazione password Samba"
+			if err != nil {
+				errMsg = err.Error()
+			} else if resSmb.Error != "" {
+				errMsg = resSmb.Error
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
+
+		// 3. Pre-create subdirectories: photos, media, documents with strict permissions (0770)
+		baseDir := quadlet.ResolvedStorageBaseDir()
+		userShareDir := filepath.Join(baseDir, "shares", req.Username)
+		_ = os.MkdirAll(userShareDir, 0770)
+		_ = os.Chmod(userShareDir, 0770)
+		for _, sub := range []string{"photos", "media", "documents"} {
+			subPath := filepath.Join(userShareDir, sub)
+			_ = os.MkdirAll(subPath, 0770)
+			_ = os.Chmod(subPath, 0770)
+		}
+
+		// 4. Pre-create Immich library folder with proper permissions
+		immichUserDir := filepath.Join(baseDir, "photos", "upload", "library", req.Username)
+		_ = os.MkdirAll(immichUserDir, 0775)
+		_ = os.Chmod(immichUserDir, 0775)
+
+		// 5. Execute bind mount for user photos
+		_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
+			"enabled":  true,
+			"username": req.Username,
+		}, false)
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Utente Triade '%s' creato e predisposto con successo!", req.Username),
+			Data: map[string]interface{}{
+				"username":             req.Username,
+				"smb_path":             fmt.Sprintf("\\\\%s\\%s", r.Host, req.Username),
+				"immich_storage_label": req.Username,
+				"jellyfin_user":        req.Username,
 			},
 		})
 	})
