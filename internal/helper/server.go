@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var validNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
@@ -436,7 +437,46 @@ func (s *Server) processRequest(req Request) Response {
 			return Response{Ok: false, Error: "Invalid or missing 'unit' name"}
 		}
 		if !req.Plan {
-			_ = exec.Command("systemctl", "restart", unit).Run()
+			if unit == "allod-helperd" {
+				// 1. Copy newly built binary to /usr/local/bin/allod-helperd if available
+				cwd, _ := os.Getwd()
+				candidates := []string{
+					filepath.Join(cwd, "allod-helperd"),
+					"allod-helperd",
+				}
+				if entries, err := filepath.Glob("/home/*/allod/allod-helperd"); err == nil {
+					candidates = append(candidates, entries...)
+				}
+				for _, cand := range candidates {
+					if info, err := os.Stat(cand); err == nil && !info.IsDir() {
+						if data, err := os.ReadFile(cand); err == nil {
+							_ = os.WriteFile("/usr/local/bin/allod-helperd", data, 0755)
+						}
+						break
+					}
+				}
+
+				// 2. Try restarting systemd service
+				systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
+				if err := exec.Command(systemctlBin, "restart", "allod-helperd").Run(); err == nil {
+					return Response{Ok: true, Applied: true, Plan: []string{"systemctl restart allod-helperd"}}
+				}
+
+				// 3. Fallback for manual run: spawn self in background and exit
+				binaryPath, errExe := os.Executable()
+				if errExe == nil {
+					go func() {
+						time.Sleep(500 * time.Millisecond)
+						cmd := exec.Command(binaryPath)
+						_ = cmd.Start()
+						os.Exit(0)
+					}()
+					return Response{Ok: true, Applied: true, Plan: []string{"re-spawn allod-helperd binary"}}
+				}
+			}
+
+			systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
+			_ = exec.Command(systemctlBin, "restart", unit).Run()
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("systemctl restart %s", unit)}}
 

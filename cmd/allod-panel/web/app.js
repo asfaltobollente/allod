@@ -2215,6 +2215,33 @@ async function runSelfUpdate() {
   }, 1000);
 }
 
+async function restartRootHelper() {
+  const btn = document.getElementById('btn-restart-helper');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Riavvio...';
+  }
+  try {
+    const res = await fetch('/api/system/helper-restart', { method: 'POST' });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      appendSettingsConsole('HELPER RESTART', json.message, false);
+      showAlert(json.message || '✓ Root Helper riavviato!', 'success');
+      setTimeout(refreshData, 1500);
+    } else {
+      appendSettingsConsole('HELPER RESTART ERROR', json.message, true);
+      showAlert('Errore riavvio helper: ' + json.message, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🔄 <span>Riavvia Helper</span>';
+    }
+  }
+}
+
 async function runResetFailed() {
   try {
     const res = await fetch('/api/system/reset-failed', { method: 'POST' });
