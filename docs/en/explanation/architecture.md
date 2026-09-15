@@ -10,7 +10,7 @@ Traditional NAS appliances run entire web applications (PHP, Node.js, Python) as
 
 Allod solves this with a strict boundary:
 * **The Web Panel (`allod-panel`)**: An unprivileged rootless process. It cannot delete partitions, execute arbitrary shell commands, or access raw disks.
-* **The Helper Daemon (`allod-helperd`)**: A tiny root service that exposes a closed list of 9 validated actions over a local UNIX socket.
+* **The Helper Daemon (`allod-helperd`)**: A tiny root service that exposes validated actions over a local UNIX domain socket (`/run/allod/helper.sock`, mode `0660`, owned by `root:allod`) with kernel-level caller verification via `SO_PEERCRED`.
 * **The Container Units**: Generated as rootless systemd Quadlets managed by Podman.
 
 ---
