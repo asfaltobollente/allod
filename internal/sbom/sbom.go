@@ -21,12 +21,12 @@ type Component struct {
 }
 
 type SBOMDocument struct {
-	BOMFormat   string      `json:"bomFormat"`
-	SpecVersion string      `json:"specVersion"`
-	SerialNumber string     `json:"serialNumber"`
-	Version     int         `json:"version"`
-	Metadata    Metadata    `json:"metadata"`
-	Components  []Component `json:"components"`
+	BOMFormat    string      `json:"bomFormat"`
+	SpecVersion  string      `json:"specVersion"`
+	SerialNumber string      `json:"serialNumber"`
+	Version      int         `json:"version"`
+	Metadata     Metadata    `json:"metadata"`
+	Components   []Component `json:"components"`
 }
 
 type Metadata struct {

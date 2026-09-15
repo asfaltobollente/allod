@@ -201,5 +201,3 @@ func TestGenerateMediaJellyfin(t *testing.T) {
 		t.Errorf("expected MemoryMax=500M, got:\n%s", unit)
 	}
 }
-
-

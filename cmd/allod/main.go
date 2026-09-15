@@ -27,11 +27,11 @@ import (
 )
 
 var (
-	cfgFile        string
-	stateDB        string
-	ringFile       string
-	removeMember   string
-	acceptRisk     bool
+	cfgFile          string
+	stateDB          string
+	ringFile         string
+	removeMember     string
+	acceptRisk       bool
 	useSystemd       bool
 	outDirOverride   string
 	storageInitMode  string

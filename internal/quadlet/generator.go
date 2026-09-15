@@ -526,4 +526,3 @@ func StopAndRemoveContainers(modID string, removeUnits bool) error {
 
 	return nil
 }
-
