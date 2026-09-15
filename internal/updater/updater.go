@@ -31,13 +31,13 @@ type UpdateStepLog struct {
 }
 
 type UpdateReport struct {
-	ModuleName    string          `json:"module_name"`
-	PreviousTag   string          `json:"previous_tag"`
-	TargetTag     string          `json:"target_tag"`
-	FinalState    UpdateState     `json:"final_state"`
-	Success       bool            `json:"success"`
-	ErrorMessage  string          `json:"error_message,omitempty"`
-	Steps         []UpdateStepLog `json:"steps"`
+	ModuleName   string          `json:"module_name"`
+	PreviousTag  string          `json:"previous_tag"`
+	TargetTag    string          `json:"target_tag"`
+	FinalState   UpdateState     `json:"final_state"`
+	Success      bool            `json:"success"`
+	ErrorMessage string          `json:"error_message,omitempty"`
+	Steps        []UpdateStepLog `json:"steps"`
 }
 
 type Updater struct {
@@ -53,10 +53,10 @@ func NewUpdater(outDir string) *Updater {
 
 func (u *Updater) SimulateUpdate(modName string, targetTag string, failHealthCheck bool, cfg *config.Config, st *state.Store) (*UpdateReport, error) {
 	report := &UpdateReport{
-		ModuleName:  modName,
-		TargetTag:   targetTag,
-		FinalState:  StateIdle,
-		Steps:       make([]UpdateStepLog, 0),
+		ModuleName: modName,
+		TargetTag:  targetTag,
+		FinalState: StateIdle,
+		Steps:      make([]UpdateStepLog, 0),
 	}
 
 	logStep := func(s UpdateState, msg string) {
@@ -105,7 +105,7 @@ func (u *Updater) SimulateUpdate(modName string, targetTag string, failHealthChe
 
 	// 3. State Staging
 	logStep(StateStaging, fmt.Sprintf("Generazione e staging delle unità Quadlet aggiornate per '%s'...", modName))
-	
+
 	// Create simulated manifest with new tag
 	updatedManifest := *m
 	if len(updatedManifest.Images) > 0 {
@@ -145,7 +145,7 @@ func (u *Updater) SimulateUpdate(modName string, targetTag string, failHealthChe
 
 	// Healthcheck passed! Commit the update
 	logStep(StateCommitted, fmt.Sprintf("✅ Healthcheck superato: Il modulo '%s' risponde correttamente. Aggiornamento confermato.", modName))
-	
+
 	// Record new content hash in state.db
 	_ = genRes
 	report.Success = true

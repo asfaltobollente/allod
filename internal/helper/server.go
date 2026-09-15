@@ -3,11 +3,13 @@ package helper
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -159,8 +161,14 @@ type Response struct {
 	Error   string   `json:"error,omitempty"`
 }
 
+// PeerCredChecker determines if the caller of a connection is authorized.
+type PeerCredChecker interface {
+	CheckPeer(conn net.Conn) (uid uint32, allowed bool, err error)
+}
+
 type Server struct {
-	SocketPath string
+	SocketPath  string
+	CredChecker PeerCredChecker
 }
 
 type Client struct {
@@ -177,10 +185,7 @@ func (c *Client) Execute(action string, args map[string]interface{}, plan bool) 
 	if err != nil {
 		conn, err = net.Dial("unix", "allod-helper.sock")
 		if err != nil {
-			conn, err = net.Dial("tcp", "127.0.0.1:40000")
-			if err != nil {
-				return Response{Ok: false, Error: "cannot connect to helper"}, err
-			}
+			return Response{Ok: false, Error: fmt.Sprintf("cannot connect to helper socket %s: %v", sock, err)}, err
 		}
 	}
 	defer conn.Close()
@@ -205,23 +210,33 @@ func (c *Client) Execute(action string, args map[string]interface{}, plan bool) 
 
 func (s *Server) Start() error {
 	os.Remove(s.SocketPath) // Pulizia vecchio socket
+
+	// Ensure group 'allod' exists if running as root on Linux
+	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
+		_ = exec.Command("groupadd", "-f", "allod").Run()
+	}
+
 	if dir := filepath.Dir(s.SocketPath); dir != "." && dir != "" {
-		_ = os.MkdirAll(dir, 0755)
+		_ = os.MkdirAll(dir, 0750)
+		if runtime.GOOS == "linux" && os.Geteuid() == 0 {
+			_ = exec.Command("chown", "root:allod", dir).Run()
+			_ = os.Chmod(dir, 0750)
+		}
 	}
 
 	l, err := net.Listen("unix", s.SocketPath)
 	if err != nil {
-		// Fallback locale per test se unix socket fallisce su win
-		l, err = net.Listen("tcp", "127.0.0.1:40000")
-		if err != nil {
-			return err
-		}
-		fmt.Println("Ascolto su TCP 127.0.0.1:40000 (Fallback)")
-	} else {
-		_ = os.Chmod(s.SocketPath, 0666)
-		fmt.Println("Ascolto su UNIX Socket:", s.SocketPath)
+		return fmt.Errorf("failed to listen on unix socket %s: %w", s.SocketPath, err)
 	}
 	defer l.Close()
+
+	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
+		_ = exec.Command("chown", "root:allod", s.SocketPath).Run()
+	}
+	if err := os.Chmod(s.SocketPath, 0660); err != nil {
+		log.Printf("Warning: failed to chmod 0660 on %s: %v", s.SocketPath, err)
+	}
+	fmt.Println("Ascolto su UNIX Socket:", s.SocketPath)
 
 	for {
 		conn, err := l.Accept()
@@ -234,12 +249,26 @@ func (s *Server) Start() error {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
+
+	checker := s.CredChecker
+	if checker == nil {
+		checker = defaultPeerCredCheckerInstance()
+	}
+
+	uid, allowed, credErr := checker.CheckPeer(conn)
+
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
 
 	var req Request
 	if err := decoder.Decode(&req); err != nil {
 		encoder.Encode(Response{Ok: false, Error: "Invalid JSON format"})
+		return
+	}
+
+	if credErr != nil || !allowed {
+		log.Printf("[SECURITY] Rejected helper request: caller UID %d is not in group allod (action: %s, error: %v)", uid, req.Action, credErr)
+		encoder.Encode(Response{Ok: false, Error: "caller not in group allod"})
 		return
 	}
 
@@ -644,7 +673,7 @@ func (s *Server) processRequest(req Request) Response {
 				firstDisk = "/dev/" + firstDisk
 			}
 			_ = exec.Command("mount", firstDisk, mountPoint).Run()
-			
+
 			subdirs := []string{
 				"cloud", "cloud/html", "cloud/data", "cloud/postgres",
 				"photos", "photos/upload", "photos/postgres", "photos/valkey",
