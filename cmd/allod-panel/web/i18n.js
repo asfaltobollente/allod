@@ -37,6 +37,10 @@ const i18n = {
     msg_systemd_reloaded: "✓ Quadlet units regenerated and systemctl daemon-reload executed!",
     helper_connected: "Root Helper: Connected",
     helper_offline: "Root Helper: Offline / Not Started",
+    helper_eacces_pill: "Root Helper: Permission Denied",
+    helper_status_eacces_title: "⚠️ Root Helper Permission Denied (EACCES)",
+    helper_status_eacces_desc: "The web panel user does not belong to the 'allod' group. Add the user to the group and restart the session:",
+    helper_eacces_session_note: "Note: Group membership requires a session reload to take effect (with linger active: loginctl terminate-user $USER or reboot).",
 
     // Metrics
     metric_ram: "RAM Memory",
@@ -276,6 +280,10 @@ const i18n = {
     msg_systemd_reloaded: "✓ Unità Quadlet rigenerate e systemctl daemon-reload eseguito con successo!",
     helper_connected: "Helper Root: Connesso",
     helper_offline: "Helper Root: Non Avviato / Offline",
+    helper_eacces_pill: "Helper Root: Permesso Negato",
+    helper_status_eacces_title: "⚠️ Permesso Helper Negato (EACCES)",
+    helper_status_eacces_desc: "L'utente del pannello web non appartiene al gruppo 'allod'. Aggiungi l'utente al gruppo ed esegui un nuovo login:",
+    helper_eacces_session_note: "Nota: L'appartenenza al gruppo diventa effettiva solo dopo un nuovo login della sessione (con linger attivo: loginctl terminate-user $USER oppure riavvio).",
 
     // Metrics
     metric_ram: "Memoria RAM",

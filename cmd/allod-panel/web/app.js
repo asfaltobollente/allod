@@ -314,12 +314,25 @@ function renderLaunchpad() {
 function renderOverview() {
   if (!currentStatus) return;
 
+  // Helper Permission Denied banner (EACCES migration)
+  const eaccesBanner = document.getElementById('helper-eacces-banner');
+  if (eaccesBanner) {
+    if (currentStatus.helper_permission_denied) {
+      eaccesBanner.classList.remove('hidden');
+    } else {
+      eaccesBanner.classList.add('hidden');
+    }
+  }
+
   // Helper Root connection pill
   const helperPill = document.getElementById('helper-status-pill');
   if (helperPill) {
     if (currentStatus.helper_connected) {
       helperPill.className = 'helper-status';
       helperPill.innerHTML = `<span class="status-indicator"></span> ${t('helper_connected')}`;
+    } else if (currentStatus.helper_permission_denied) {
+      helperPill.className = 'helper-status offline';
+      helperPill.innerHTML = `<span class="status-indicator offline"></span> ${t('helper_eacces_pill', 'Helper: Permesso Negato')}`;
     } else {
       helperPill.className = 'helper-status offline';
       helperPill.innerHTML = `<span class="status-indicator offline"></span> ${t('helper_offline')}`;
@@ -333,6 +346,9 @@ function renderOverview() {
     if (currentStatus.helper_connected) {
       settingsHelperPill.className = 'helper-status';
       settingsHelperText.textContent = t('helper_connected');
+    } else if (currentStatus.helper_permission_denied) {
+      settingsHelperPill.className = 'helper-status offline';
+      settingsHelperText.textContent = t('helper_eacces_pill', 'Helper: Permesso Negato');
     } else {
       settingsHelperPill.className = 'helper-status offline';
       settingsHelperText.textContent = t('helper_offline');
@@ -2441,6 +2457,9 @@ function openHelperModal() {
   if (currentStatus && currentStatus.helper_connected) {
     if (banner) banner.className = 'alert-banner alert-success';
     if (text) text.innerHTML = '🟢 <strong>Stato: Connesso & Operativo</strong> (/run/allod/helper.sock)';
+  } else if (currentStatus && currentStatus.helper_permission_denied) {
+    if (banner) banner.className = 'alert-banner alert-danger';
+    if (text) text.innerHTML = '🔴 <strong>Stato: Permesso Negato (EACCES)</strong> — L\'utente non appartiene al gruppo <code>allod</code>.<br><small style="margin-top:4px; display:inline-block;">Esegui: <code>sudo groupadd -f allod && sudo usermod -aG allod $USER</code> e ricarica la sessione (<code>loginctl terminate-user $USER</code> o riavvio).</small>';
   } else {
     if (banner) banner.className = 'alert-banner alert-danger';
     if (text) text.innerHTML = '🔴 <strong>Stato: Offline / Non Avviato</strong> (/run/allod/helper.sock non risponde)';
@@ -2465,6 +2484,10 @@ async function recheckHelperConnection(btn) {
     if (banner) banner.className = 'alert-banner alert-success';
     if (text) text.innerHTML = '🟢 <strong>Stato: Connesso & Operativo!</strong>';
     showAlert(t('helper_connected', 'Root Helper: Connesso'), 'success');
+  } else if (currentStatus && currentStatus.helper_permission_denied) {
+    if (banner) banner.className = 'alert-banner alert-danger';
+    if (text) text.innerHTML = '🔴 <strong>Stato: Permesso Negato (EACCES)</strong> — esegui groupadd/usermod e ricarica la sessione.';
+    showAlert(t('helper_eacces_pill', 'Root Helper: Permesso Negato (EACCES)'), 'warning');
   } else {
     if (banner) banner.className = 'alert-banner alert-danger';
     if (text) text.innerHTML = '🔴 <strong>Stato: Ancora Offline</strong> — esegui i comandi per avviarlo.';
@@ -2478,6 +2501,7 @@ async function recheckHelperConnection(btn) {
 
 function copyHelperInstallCli(btn) {
   const code = `sudo cp ~/allod/allod-helperd /usr/local/bin/
+sudo groupadd -f allod && sudo usermod -aG allod $USER
 sudo cp ~/allod/configs/allod-helperd.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now allod-helperd`;
