@@ -338,7 +338,7 @@ func main() {
 		realRAM := preflight.GetRealRAMStats()
 		committed, _ := preflight.CommittedRAMInfo(cfg, "")
 
-		helperConnected := checkHelperConnectivity()
+		helperConnected, helperPermDenied := checkHelperConnectivity()
 		topo, isStandalone := getRingTopology(cfg)
 		storageTopo := preflight.DetectStorageTopology()
 
@@ -350,22 +350,23 @@ func main() {
 		isRootless := uid != 0
 
 		data := map[string]interface{}{
-			"node_name":        cfg.Node.Name,
-			"channel":          cfg.Node.Channel,
-			"ram_total_mb":     realRAM.TotalMB,
-			"ram_used_mb":      realRAM.UsedMB,
-			"ram_available_mb": realRAM.AvailableMB,
-			"ram_free_mb":      realRAM.FreeMB,
-			"core_reserved_mb": preflight.CoreReservedMB,
-			"ram_committed_mb": committed,
-			"helper_connected": helperConnected,
-			"group_repo":       cfg.Node.Group,
-			"is_standalone":    isStandalone,
-			"ring_members":     len(topo.Members),
-			"is_rootless":      isRootless,
-			"uid":              uid,
-			"current_user":     currentUser,
-			"storage":          storageTopo,
+			"node_name":                cfg.Node.Name,
+			"channel":                  cfg.Node.Channel,
+			"ram_total_mb":             realRAM.TotalMB,
+			"ram_used_mb":              realRAM.UsedMB,
+			"ram_available_mb":         realRAM.AvailableMB,
+			"ram_free_mb":              realRAM.FreeMB,
+			"core_reserved_mb":         preflight.CoreReservedMB,
+			"ram_committed_mb":         committed,
+			"helper_connected":         helperConnected,
+			"helper_permission_denied": helperPermDenied,
+			"group_repo":               cfg.Node.Group,
+			"is_standalone":            isStandalone,
+			"ring_members":             len(topo.Members),
+			"is_rootless":              isRootless,
+			"uid":                      uid,
+			"current_user":             currentUser,
+			"storage":                  storageTopo,
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
@@ -3090,12 +3091,16 @@ WantedBy=default.target
 	// 10. API Test Helper
 	mux.HandleFunc("/api/test-helper", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		conn, err := net.Dial("tcp", "127.0.0.1:40000")
+		conn, err := net.Dial("unix", "/run/allod/helper.sock")
 		if err != nil {
 			conn, err = net.Dial("unix", "allod-helper.sock")
 			if err != nil {
 				w.WriteHeader(500)
-				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Impossibile contattare allod-helperd (è avviato?)"})
+				msg := "Impossibile contattare allod-helperd (è avviato?)"
+				if os.IsPermission(err) || strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+					msg = "Permesso negato (EACCES): l'utente del pannello non appartiene al gruppo 'allod'. Esegui: sudo usermod -aG allod $USER"
+				}
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: msg})
 				return
 			}
 		}
@@ -3142,21 +3147,29 @@ WantedBy=default.target
 	}
 }
 
-func checkHelperConnectivity() bool {
+func checkHelperConnectivity() (connected bool, permissionDenied bool) {
 	conn, err := net.DialTimeout("unix", "/run/allod/helper.sock", 200*time.Millisecond)
 	if err == nil {
 		conn.Close()
-		return true
+		return true, false
 	}
+	if os.IsPermission(err) || strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+		return false, true
+	}
+	if _, statErr := os.Stat("/run/allod/helper.sock"); statErr != nil {
+		if os.IsPermission(statErr) || strings.Contains(strings.ToLower(statErr.Error()), "permission denied") {
+			return false, true
+		}
+	}
+
 	conn, err = net.DialTimeout("unix", "allod-helper.sock", 200*time.Millisecond)
 	if err == nil {
 		conn.Close()
-		return true
+		return true, false
 	}
-	conn, err = net.DialTimeout("tcp", "127.0.0.1:40000", 200*time.Millisecond)
-	if err == nil {
-		conn.Close()
-		return true
+	if os.IsPermission(err) || strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+		return false, true
 	}
-	return false
+
+	return false, false
 }
