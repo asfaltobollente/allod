@@ -342,7 +342,7 @@ go build -o allod-panel ./cmd/allod-panel
 
 Allod operates with a **two-daemon security model**:
 
-1. **Root Helper Daemon (`allod-helperd`)**: Runs with root privileges (via `sudo` or systemd) to handle low-level disk management, btrfs snapshots, and SMART health checks over a secured local UNIX socket (`/run/allod/helper.sock`).
+1. **Root Helper Daemon (`allod-helperd`)**: Runs with root privileges (via `sudo` or systemd) to handle low-level disk management, btrfs snapshots, and SMART health checks over a secured local UNIX socket (`/run/allod/helper.sock`, mode `0660`, owned by `root:allod`, with kernel-level `SO_PEERCRED` verification).
 2. **Web Dashboard (`allod-panel`)**: Runs as an unprivileged user (rootless) to manage containers and serve the web UI.
 
 **Quick Launch (Background):**
