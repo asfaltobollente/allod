@@ -35,7 +35,7 @@ privileges:
 
 images:
   - ref: ghcr.io/immich-app/immich-server
-    tag: release
+    tag: "v3.2.2"
     channel: pinned
   - ref: ghcr.io/immich-app/postgres
     tag: 14-vectorchord0.4.3-pgvectors0.2.0
