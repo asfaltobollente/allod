@@ -41,6 +41,7 @@ const i18n = {
     helper_status_eacces_title: "⚠️ Root Helper Permission Denied (EACCES)",
     helper_status_eacces_desc: "The web panel user does not belong to the 'allod' group. Add the user to the group and restart the session:",
     helper_eacces_session_note: "Note: Group membership requires a session reload to take effect (with linger active: loginctl terminate-user $USER or reboot).",
+    hint_username_rules: "Lowercase letters and numbers only (e.g. mario, anna, luca).",
 
     // Metrics
     metric_ram: "RAM Memory",
@@ -284,6 +285,7 @@ const i18n = {
     helper_status_eacces_title: "⚠️ Permesso Helper Negato (EACCES)",
     helper_status_eacces_desc: "L'utente del pannello web non appartiene al gruppo 'allod'. Aggiungi l'utente al gruppo ed esegui un nuovo login:",
     helper_eacces_session_note: "Nota: L'appartenenza al gruppo diventa effettiva solo dopo un nuovo login della sessione (con linger attivo: loginctl terminate-user $USER oppure riavvio).",
+    hint_username_rules: "Solo lettere minuscole e numeri (es. mario, anna, luca).",
 
     // Metrics
     metric_ram: "Memoria RAM",

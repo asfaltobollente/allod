@@ -1110,7 +1110,7 @@ exit 0
 			logReport.WriteString(fmt.Sprintf("ℹ️ Riavvio allod-helperd: %v\n", err))
 		}
 
-		// Sync existing family members into Linux OS so accounts like 'davide' exist in /etc/passwd
+		// Sync existing family members into Linux OS so accounts like 'mario' exist in /etc/passwd
 		if st, err := state.Open(dbPath); err == nil {
 			if members, err := st.ListFamilyMembers(); err == nil {
 				for _, m := range members {
