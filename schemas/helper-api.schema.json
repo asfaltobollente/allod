@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://allod.dev/schemas/helper-api.schema.json",
+  "$id": "https://github.com/asfaltobollente/allod/schemas/helper-api.schema.json",
   "title": "Allod Helper API",
   "description": "Schema per l'API dell'helper root di Allod",
   "type": "object",
@@ -16,6 +16,8 @@
           "type": "string",
           "enum": [
             "shares.apply",
+            "shares.bind_photos",
+            "shares.set_password",
             "users.create",
             "users.passwd",
             "firewall.apply",
@@ -25,9 +27,10 @@
             "service.restart",
             "storage.init",
             "storage.diagnostics",
-            "shares.bind_photos",
-            "shares.set_password",
-            "network.headscale_cli"
+            "network.headscale_cli",
+            "network.preauthkey_create",
+            "network.nodes_list",
+            "network.users_list"
           ]
         },
         "plan": {

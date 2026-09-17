@@ -13,7 +13,7 @@ Security and data ownership are the primary design principles of Allod. We welco
 
 Allod is designed with strict privilege separation:
 1. **Unprivileged Web Panel (`allod-panel`)**: Runs entirely as a rootless systemd user service with zero direct block-device access.
-2. **Root Helper Daemon (`allod-helperd`)**: Accepts only a closed, strictly validated list of 9 actions over a local UNIX socket (`/run/allod/helper.sock`).
+2. **Root Helper Daemon (`allod-helperd`)**: Accepts only a closed action whitelist (see [Root Helper Socket API](docs/en/reference/helper-api.md)) over a local UNIX socket (`/run/allod/helper.sock`).
 3. **Immutable Federated Backups**: Remotely accepted backups run in append-only mode (`rest-server --append-only`), ensuring a compromised node cannot delete existing historical backups from peer nodes.
 
 ## Reporting a Vulnerability
