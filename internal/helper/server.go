@@ -1,6 +1,8 @@
 package helper
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,11 +17,104 @@ import (
 	"time"
 )
 
+// AllowedActions is the single source of truth for the 16 actions supported by the root helper.
+var AllowedActions = []string{
+	"shares.apply",
+	"shares.bind_photos",
+	"shares.set_password",
+	"users.create",
+	"users.passwd",
+	"firewall.apply",
+	"snapshots.create",
+	"snapshots.prune",
+	"smart.read",
+	"service.restart",
+	"storage.init",
+	"storage.diagnostics",
+	"network.headscale_cli",
+	"network.preauthkey_create",
+	"network.nodes_list",
+	"network.users_list",
+}
+
+// AllowedServiceUnits defines systemd service units allowed to be restarted via service.restart.
+var AllowedServiceUnits = []string{
+	"allod-helperd",
+	"allod-panel",
+	"smbd",
+	"smb",
+	"network",
+	"network-headscale",
+	"network-cloudflared",
+	"cloud",
+	"cloud-postgres",
+	"photos",
+	"photos-postgres",
+	"photos-valkey",
+	"media",
+	"backup",
+	"storage",
+	"nftables",
+}
+
+func isAllowedAction(action string) bool {
+	for _, a := range AllowedActions {
+		if a == action {
+			return true
+		}
+	}
+	return false
+}
+
+func isAllowedServiceUnit(unit string) bool {
+	clean := strings.TrimSuffix(unit, ".service")
+	for _, u := range AllowedServiceUnits {
+		if u == unit || u == clean {
+			return true
+		}
+	}
+	return false
+}
+
+func isAllowedPath(p string) bool {
+	if p == "" {
+		return true
+	}
+	if strings.Contains(p, "..") {
+		return false
+	}
+	clean := filepath.ToSlash(filepath.Clean(p))
+	if strings.HasPrefix(clean, "/mnt/allod-storage") ||
+		strings.HasPrefix(clean, "/mnt") ||
+		strings.HasPrefix(clean, "/data") ||
+		clean == "/usr/local/bin" {
+		return true
+	}
+	if envStorage := os.Getenv("ALLOD_STORAGE_DIR"); envStorage != "" && strings.HasPrefix(clean, filepath.ToSlash(filepath.Clean(envStorage))) {
+		return true
+	}
+	return false
+}
+
+func hashArgs(args map[string]interface{}) string {
+	if len(args) == 0 {
+		return "none"
+	}
+	data, err := json.Marshal(args)
+	if err != nil {
+		return "err"
+	}
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:8])
+}
+
 var validNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+var validUnitRegex = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,64}$`)
 
 func validDeviceRegex(dev string) bool {
 	dev = strings.TrimSpace(dev)
 	dev = strings.TrimPrefix(dev, "/dev/")
+	dev = strings.TrimPrefix(dev, "disk/by-id/")
 	return validNameRegex.MatchString(dev)
 }
 
@@ -273,23 +368,31 @@ func (s *Server) handle(conn net.Conn) {
 	}
 
 	res := s.processRequest(req)
+	argsHash := hashArgs(req.Args)
+	log.Printf("[AUDIT] time=%s uid=%d action=%s args_hash=%s ok=%v applied=%v",
+		time.Now().UTC().Format(time.RFC3339), uid, req.Action, argsHash, res.Ok, res.Applied)
 	encoder.Encode(res)
 }
 
 func (s *Server) processRequest(req Request) Response {
-	// Lista chiusa di 9 azioni come da helper-api.schema.json
+	if !isAllowedAction(req.Action) {
+		return Response{Ok: false, Error: "Action not allowed: " + req.Action}
+	}
+
 	switch req.Action {
 	case "shares.apply":
-		name, ok := req.Args["name"].(string)
-		if !ok || !validNameRegex.MatchString(name) {
+		name, _ := req.Args["name"].(string)
+		if name == "" {
 			name = "shares"
+		} else if !validNameRegex.MatchString(name) {
+			return Response{Ok: false, Error: "Invalid share 'name'"}
 		}
 		path, _ := req.Args["path"].(string)
 		if path == "" {
 			path = "/mnt/allod-storage/shares"
 		}
-		if path != "" && (strings.Contains(path, "..") || (!strings.HasPrefix(path, "/") && !filepath.IsAbs(path))) {
-			return Response{Ok: false, Error: "Invalid 'path' (must be absolute without traversal)"}
+		if !isAllowedPath(path) {
+			return Response{Ok: false, Error: "Invalid 'path' (must be under /mnt/allod-storage without traversal)"}
 		}
 
 		enabled := true
@@ -363,6 +466,9 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		targetUser, _ := req.Args["username"].(string)
+		if targetUser != "" && !validNameRegex.MatchString(targetUser) {
+			return Response{Ok: false, Error: "Invalid 'username' for bind_photos"}
+		}
 		basePhotos := "/mnt/allod-storage/photos/upload/library"
 		baseShares := "/mnt/allod-storage/shares"
 
@@ -435,7 +541,9 @@ func (s *Server) processRequest(req Request) Response {
 
 	case "snapshots.create":
 		subvol, _ := req.Args["subvolume"].(string)
-		if subvol != "" && !validNameRegex.MatchString(subvol) {
+		if subvol == "" {
+			subvol = "data"
+		} else if !validNameRegex.MatchString(subvol) {
 			return Response{Ok: false, Error: "Invalid 'subvolume' name"}
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("btrfs subvolume snapshot /data/%s /data/.snapshots/%s", subvol, subvol)}}
@@ -520,15 +628,15 @@ func (s *Server) processRequest(req Request) Response {
 
 	case "smart.read":
 		disk, ok := req.Args["disk"].(string)
-		if !ok || !validNameRegex.MatchString(disk) {
+		if !ok || disk == "" || !validDeviceRegex(disk) {
 			return Response{Ok: false, Error: "Invalid or missing 'disk' identifier"}
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("smartctl -H /dev/disk/by-id/%s", disk)}}
 
 	case "service.restart":
 		unit, ok := req.Args["unit"].(string)
-		if !ok || !validNameRegex.MatchString(unit) {
-			return Response{Ok: false, Error: "Invalid or missing 'unit' name"}
+		if !ok || !validUnitRegex.MatchString(unit) || !isAllowedServiceUnit(unit) {
+			return Response{Ok: false, Error: "Service unit not allowed or invalid: " + unit}
 		}
 		if !req.Plan {
 			if unit == "allod-helperd" {
@@ -593,15 +701,23 @@ func (s *Server) processRequest(req Request) Response {
 		var disks []string
 		if dList, ok := req.Args["disks"].([]interface{}); ok {
 			for _, d := range dList {
-				if s, ok := d.(string); ok && validDeviceRegex(s) {
+				s, ok := d.(string)
+				if ok && validDeviceRegex(s) {
 					disks = append(disks, s)
+				} else {
+					return Response{Ok: false, Error: fmt.Sprintf("Invalid disk identifier: %v", d)}
 				}
 			}
 		} else if dStr, ok := req.Args["disks"].(string); ok {
 			for _, s := range strings.Split(dStr, ",") {
 				s = strings.TrimSpace(s)
+				if s == "" {
+					continue
+				}
 				if validDeviceRegex(s) {
 					disks = append(disks, s)
+				} else {
+					return Response{Ok: false, Error: "Invalid disk identifier: " + s}
 				}
 			}
 		}
@@ -611,16 +727,23 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		mode, _ := req.Args["mode"].(string)
-		if mode != "single" {
+		if mode == "" {
 			mode = "raid1"
+		} else if mode != "single" && mode != "raid1" {
+			return Response{Ok: false, Error: "Invalid storage mode (must be 'single' or 'raid1')"}
 		}
 
 		mountPoint, _ := req.Args["mount"].(string)
 		if mountPoint == "" {
 			mountPoint = "/mnt/allod-storage"
+		} else if !isAllowedPath(mountPoint) {
+			return Response{Ok: false, Error: "Invalid mount path: " + mountPoint}
 		}
 
 		username, _ := req.Args["user"].(string)
+		if username != "" && !validNameRegex.MatchString(username) {
+			return Response{Ok: false, Error: "Invalid username: " + username}
+		}
 		if username == "" || username == "root" {
 			if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && sudoUser != "root" {
 				username = sudoUser
@@ -696,6 +819,8 @@ func (s *Server) processRequest(req Request) Response {
 		mountPoint, _ := req.Args["mount"].(string)
 		if mountPoint == "" {
 			mountPoint = "/mnt/allod-storage"
+		} else if !isAllowedPath(mountPoint) {
+			return Response{Ok: false, Error: "Invalid mount path: " + mountPoint}
 		}
 
 		usageOut, _ := exec.Command("btrfs", "filesystem", "usage", mountPoint).CombinedOutput()
@@ -723,8 +848,15 @@ func (s *Server) processRequest(req Request) Response {
 			},
 		}
 
-	case "network.headscale_cli":
+	case "network.headscale_cli", "network.preauthkey_create", "network.nodes_list", "network.users_list":
 		cmdType, _ := req.Args["command"].(string)
+		if req.Action == "network.preauthkey_create" {
+			cmdType = "preauthkey_create"
+		} else if req.Action == "network.nodes_list" {
+			cmdType = "nodes_list"
+		} else if req.Action == "network.users_list" {
+			cmdType = "users_list"
+		}
 
 		// Rileva dinamicamente il nome del container Headscale (network o network-headscale)
 		targetContainer := "network"

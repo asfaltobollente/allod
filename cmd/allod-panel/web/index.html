@@ -468,7 +468,7 @@ systemctl --user enable --now allod-panel</pre>
             </div>
           </div>
           <p class="text-muted" style="font-size:12.5px; margin-top:8px; margin-bottom:14px; line-height:1.4;" data-i18n="helper_maintenance_desc">
-            Micro-demone con privilegi root (whitelist a 9 azioni) per la formattazione Btrfs RAID 1, controlli SMART e configurazione Samba.
+            Micro-demone con privilegi root (whitelist chiusa di azioni) per la formattazione Btrfs RAID 1, controlli SMART e configurazione Samba.
           </p>
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:12px;">
             <div style="background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:6px; padding:10px 12px;">
@@ -649,7 +649,7 @@ Ready for operations. Click any maintenance action above to see real-time output
         </div>
 
         <p style="font-size:12.5px; line-height:1.5; color:var(--text-muted); margin-bottom:16px;" data-i18n="helper_modal_desc">
-          <code>allod-helperd</code> è il micro-demone privileged di Allod (eseguito come root con whitelist chiusa a 9 azioni). Permette al pannello (100% rootless) di gestire in sicurezza dischi fisici, formattazione Btrfs RAID 1, snapshot e reload Samba.
+          <code>allod-helperd</code> è il micro-demone privileged di Allod (eseguito come root con whitelist chiusa di azioni). Permette al pannello (100% rootless) di gestire in sicurezza dischi fisici, formattazione Btrfs RAID 1, snapshot e reload Samba.
         </p>
 
         <div style="margin-bottom:16px;">

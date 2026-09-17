@@ -20,7 +20,7 @@
 1. **Full Data Ownership**: You own the hardware, the encryption keys, and the storage. No third-party SaaS accounts required.
 2. **Immutable Append-Only Backups**: Peer backups operate in strict append-only mode (`rest-server --append-only`). If your local server suffers a ransomware attack, the attacker cannot delete or tamper with historical backups stored on your peers' servers.
 3. **Decentralized 2-Replica Ring**: In a federation group of 3+ nodes, every critical dataset automatically maintains 2 distinct remote replicas with anti-affinity placement.
-4. **Strict Privilege Boundary**: The web dashboard is 100% rootless; administrative tasks are delegated over a local UNIX socket to a minimal root helper with a closed 9-action whitelist.
+4. **Strict Privilege Boundary**: The web dashboard is 100% rootless; administrative tasks are delegated over a local UNIX socket to a minimal root helper with a closed action whitelist (see [Root Helper Socket API](docs/en/reference/helper-api.md)).
 5. **No Open Firewall Ports**: Natively integrates with WireGuard overlay meshes (Headscale / Tailscale) with fine-grained per-port access control lists (ACLs).
 
 ---
@@ -40,7 +40,7 @@
   │                 │                            │              │
   │                 │    UNIX Domain Socket      │              │
   │                 │    /run/allod/helper.sock  │              │
-  │                 │    (Closed 9-Action Whitelist)            │
+  │                 │    (Closed Action Whitelist)              │
   └─────────────────┼────────────────────────────┼──────────────┘
                     ▼                            ▼
   ┌─────────────────────────────────────────────────────────────┐
