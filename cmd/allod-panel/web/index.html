@@ -25,7 +25,7 @@
         <div class="logo-icon">🛡️</div>
         <div>
           <h2>Allod</h2>
-          <span class="badge badge-success">v2.1 Sovereign</span>
+          <span class="badge badge-success" id="sidebar-app-version">v...</span>
         </div>
       </div>
 
@@ -386,8 +386,9 @@ systemctl --user enable --now allod-panel</pre>
         <div class="grid-2col" style="margin-bottom: 20px;">
           <!-- Card 1: Software Lifecycle & Aggiornamento Allod -->
           <div class="card">
-            <div class="card-header">
+            <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
               <h3 data-i18n="settings_lifecycle_title">🚀 Software Lifecycle & Self-Update</h3>
+              <span class="badge" id="settings-app-version" style="font-size:12px; font-family:monospace; background:rgba(255,255,255,0.08); padding:3px 8px; border-radius:4px; border:1px solid rgba(255,255,255,0.1);">...</span>
             </div>
             <p class="text-muted" style="font-size:12.5px; margin-bottom:16px; line-height:1.4;" data-i18n="settings_lifecycle_desc">
               Fetch latest source code from GitHub, recompile Go binaries, or perform a zero-downtime background self-update.

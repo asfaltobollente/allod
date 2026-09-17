@@ -26,12 +26,32 @@ import (
 	"github.com/asfaltobollente/allod/internal/ring"
 	"github.com/asfaltobollente/allod/internal/state"
 	"github.com/asfaltobollente/allod/internal/updater"
+	"github.com/asfaltobollente/allod/internal/version"
 )
 
 //go:embed web/*
 var webFS embed.FS
 
 var validTriadUserRegex = regexp.MustCompile(`^[a-z0-9_.-]+$`)
+
+func getGitVersionBuildArgs() []string {
+	cmd := exec.Command("git", "describe", "--tags", "--always", "--dirty")
+	out, err := cmd.Output()
+	if err == nil {
+		v := strings.TrimSpace(string(out))
+		if len(v) > 0 {
+			return []string{"-ldflags", fmt.Sprintf("-X github.com/asfaltobollente/allod/internal/version.Version=%s", v)}
+		}
+	}
+	return nil
+}
+
+func buildGoBinary(outputName, pkgPath string) ([]byte, error) {
+	args := []string{"build"}
+	args = append(args, getGitVersionBuildArgs()...)
+	args = append(args, "-o", outputName, pkgPath)
+	return exec.Command("go", args...).CombinedOutput()
+}
 
 type PanelResponse struct {
 	Status  string      `json:"status"`
@@ -351,6 +371,7 @@ func main() {
 		isRootless := uid != 0
 
 		data := map[string]interface{}{
+			"version":                  version.Get(),
 			"node_name":                cfg.Node.Name,
 			"channel":                  cfg.Node.Channel,
 			"ram_total_mb":             realRAM.TotalMB,
@@ -803,18 +824,15 @@ func main() {
 
 		// Build both allod CLI and allod-panel
 		var report strings.Builder
-		cmd1 := exec.Command("go", "build", "-o", "allod", "./cmd/allod")
-		out1, err1 := cmd1.CombinedOutput()
+		out1, err1 := buildGoBinary("allod", "./cmd/allod")
 		report.WriteString("[go build -o allod ./cmd/allod]\n")
 		report.WriteString(string(out1))
 
-		cmd2 := exec.Command("go", "build", "-o", "allod-panel", "./cmd/allod-panel")
-		out2, err2 := cmd2.CombinedOutput()
+		out2, err2 := buildGoBinary("allod-panel", "./cmd/allod-panel")
 		report.WriteString("\n[go build -o allod-panel ./cmd/allod-panel]\n")
 		report.WriteString(string(out2))
 
-		cmd3 := exec.Command("go", "build", "-o", "allod-helperd", "./cmd/allod-helperd")
-		out3, err3 := cmd3.CombinedOutput()
+		out3, err3 := buildGoBinary("allod-helperd", "./cmd/allod-helperd")
 		report.WriteString("\n[go build -o allod-helperd ./cmd/allod-helperd]\n")
 		report.WriteString(string(out3))
 
@@ -1065,10 +1083,10 @@ exit 0
 
 		// 2. go build allod-panel to temp first, then rename (atomic replace prevents ETXTBSY)
 		_ = os.Remove("allod-panel.new")
-		buildOut, err := exec.Command("go", "build", "-o", "allod-panel.new", "./cmd/allod-panel").CombinedOutput()
+		buildOut, err := buildGoBinary("allod-panel.new", "./cmd/allod-panel")
 		logReport.WriteString("[go build -o allod-panel.new ./cmd/allod-panel]\n" + string(buildOut) + "\n")
 		if err != nil {
-			buildOut2, err2 := exec.Command("go", "build", "-o", "allod-panel", "./cmd/allod-panel").CombinedOutput()
+			buildOut2, err2 := buildGoBinary("allod-panel", "./cmd/allod-panel")
 			logReport.WriteString("[go build -o allod-panel fallback]\n" + string(buildOut2) + "\n")
 			if err2 != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -1087,7 +1105,7 @@ exit 0
 
 		// Build allod cli too
 		_ = os.Remove("allod.new")
-		buildCliOut, _ := exec.Command("go", "build", "-o", "allod.new", "./cmd/allod").CombinedOutput()
+		buildCliOut, _ := buildGoBinary("allod.new", "./cmd/allod")
 		logReport.WriteString("[go build -o allod ./cmd/allod]\n" + string(buildCliOut) + "\n")
 		_ = os.Remove("allod")
 		_ = os.Rename("allod.new", "allod")
@@ -1096,7 +1114,7 @@ exit 0
 		// Build allod-helperd to /tmp/allod-helperd-update (guaranteed write access)
 		tmpHelper := filepath.Join(os.TempDir(), "allod-helperd-update")
 		_ = os.Remove(tmpHelper)
-		buildHelperOut, errH := exec.Command("go", "build", "-o", tmpHelper, "./cmd/allod-helperd").CombinedOutput()
+		buildHelperOut, errH := buildGoBinary(tmpHelper, "./cmd/allod-helperd")
 		logReport.WriteString(fmt.Sprintf("[go build -o %s ./cmd/allod-helperd]\n%s\n", tmpHelper, string(buildHelperOut)))
 		if errH == nil {
 			_ = os.Remove("allod-helperd")
