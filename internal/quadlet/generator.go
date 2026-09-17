@@ -1,7 +1,9 @@
 package quadlet
 
 import (
+	"crypto/rand"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,6 +69,72 @@ func Generate(modID string, m *manifest.Manifest, levelName string) (*GenerateRe
 	return result, nil
 }
 
+const (
+	legacyCloudPostgresPassword  = "allod_secure_pass"
+	legacyPhotosPostgresPassword = "postgres"
+)
+
+func generateRandomPassword(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	for i, b := range bytes {
+		bytes[i] = charset[b%byte(len(charset))]
+	}
+	return string(bytes), nil
+}
+
+// EnsureModuleSecret ensures that <storage>/<module>/secrets/<key>.env exists with mode 0600 (dir 0700).
+// If it does not exist, but existing DB data exists, it migrates using legacy credentials.
+// Otherwise it generates a 32-character random alphanumeric secret.
+func EnsureModuleSecret(module, key, legacyValue string) error {
+	return ensureModuleSecret(module, key, legacyValue)
+}
+
+func ensureModuleSecret(module, key, legacyValue string) error {
+	resBaseDir := ResolvedStorageBaseDir()
+	secDir := filepath.Join(resBaseDir, module, "secrets")
+	if err := os.MkdirAll(secDir, 0700); err != nil {
+		return err
+	}
+	secFile := filepath.Join(secDir, key+".env")
+	if _, err := os.Stat(secFile); err == nil {
+		return nil
+	}
+
+	dbDir := filepath.Join(resBaseDir, module, "postgres")
+	isLegacy := false
+	if entries, err := os.ReadDir(dbDir); err == nil && len(entries) > 0 {
+		isLegacy = true
+	}
+
+	var password string
+	if isLegacy {
+		password = legacyValue
+		log.Printf("NOTICE: migrating existing %s database using legacy credentials to %s; consider rotating password", module, secFile)
+	} else {
+		genPass, err := generateRandomPassword(32)
+		if err != nil {
+			return fmt.Errorf("failed to generate random secret for %s/%s: %w", module, key, err)
+		}
+		password = genPass
+	}
+
+	var envContent string
+	switch module {
+	case "cloud":
+		envContent = fmt.Sprintf("POSTGRES_HOST=cloud-postgres\nPOSTGRES_DB=nextcloud\nPOSTGRES_USER=nextcloud\nPOSTGRES_PASSWORD=%s\n", password)
+	case "photos":
+		envContent = fmt.Sprintf("DB_HOSTNAME=photos-postgres\nDB_DATABASE_NAME=immich\nDB_USERNAME=postgres\nDB_PASSWORD=%s\nREDIS_HOSTNAME=photos-valkey\nPOSTGRES_DB=immich\nPOSTGRES_USER=postgres\nPOSTGRES_PASSWORD=%s\nPOSTGRES_INITDB_ARGS=--data-checksums\n", password, password)
+	default:
+		envContent = fmt.Sprintf("PASSWORD=%s\n", password)
+	}
+
+	return os.WriteFile(secFile, []byte(envContent), 0600)
+}
+
 // EnsureStorageDirectories creates all host volume mount paths with permissive access.
 func EnsureStorageDirectories(modID string) {
 	baseDir := ResolvedStorageBaseDir()
@@ -78,12 +146,26 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "cloud", "data"),
 			filepath.Join(baseDir, "cloud", "postgres"),
 		}
+		for _, d := range dirs {
+			_ = os.MkdirAll(d, 0777)
+			_ = os.Chmod(d, 0777)
+		}
+		_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "secrets"), 0700)
+		_ = ensureModuleSecret("cloud", "postgres", legacyCloudPostgresPassword)
+		return
 	case "photos":
 		dirs = []string{
 			filepath.Join(baseDir, "photos", "upload"),
 			filepath.Join(baseDir, "photos", "postgres"),
 			filepath.Join(baseDir, "photos", "valkey"),
 		}
+		for _, d := range dirs {
+			_ = os.MkdirAll(d, 0777)
+			_ = os.Chmod(d, 0777)
+		}
+		_ = os.MkdirAll(filepath.Join(baseDir, "photos", "secrets"), 0700)
+		_ = ensureModuleSecret("photos", "postgres", legacyPhotosPostgresPassword)
+		return
 	case "backup":
 		dirs = []string{
 			filepath.Join(baseDir, "backup", "vault"),
@@ -288,36 +370,26 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	baseDir := StorageBaseDir()
 	switch m.ID {
 	case "cloud":
+		_ = ensureModuleSecret("cloud", "postgres", legacyCloudPostgresPassword)
 		if isPrimary {
 			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/html:/var/www/html:Z\n", baseDir))
 			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/data:/var/www/html/data:Z\n", baseDir))
 			if strings.Contains(img.Ref, "nextcloud") {
-				sb.WriteString("Environment=POSTGRES_HOST=cloud-postgres\n")
-				sb.WriteString("Environment=POSTGRES_DB=nextcloud\n")
-				sb.WriteString("Environment=POSTGRES_USER=nextcloud\n")
-				sb.WriteString("Environment=POSTGRES_PASSWORD=allod_secure_pass\n")
+				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/cloud/secrets/postgres.env\n", baseDir))
 			}
 		} else if strings.Contains(img.Ref, "postgres") {
 			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/postgres:/var/lib/postgresql/data:Z\n", baseDir))
-			sb.WriteString("Environment=POSTGRES_DB=nextcloud\n")
-			sb.WriteString("Environment=POSTGRES_USER=nextcloud\n")
-			sb.WriteString("Environment=POSTGRES_PASSWORD=allod_secure_pass\n")
+			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/cloud/secrets/postgres.env\n", baseDir))
 		}
 	case "photos":
+		_ = ensureModuleSecret("photos", "postgres", legacyPhotosPostgresPassword)
 		if isPrimary {
 			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/usr/src/app/upload:Z\n", baseDir))
 			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/data:Z\n", baseDir))
-			sb.WriteString("Environment=DB_HOSTNAME=photos-postgres\n")
-			sb.WriteString("Environment=DB_DATABASE_NAME=immich\n")
-			sb.WriteString("Environment=DB_USERNAME=postgres\n")
-			sb.WriteString("Environment=DB_PASSWORD=postgres\n")
-			sb.WriteString("Environment=REDIS_HOSTNAME=photos-valkey\n")
+			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/photos/secrets/postgres.env\n", baseDir))
 		} else if strings.Contains(img.Ref, "postgres") {
 			sb.WriteString(fmt.Sprintf("Volume=%s/photos/postgres:/var/lib/postgresql/data:Z\n", baseDir))
-			sb.WriteString("Environment=POSTGRES_DB=immich\n")
-			sb.WriteString("Environment=POSTGRES_USER=postgres\n")
-			sb.WriteString("Environment=POSTGRES_PASSWORD=postgres\n")
-			sb.WriteString("Environment=POSTGRES_INITDB_ARGS=--data-checksums\n")
+			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/photos/secrets/postgres.env\n", baseDir))
 			sb.WriteString("ShmSize=128m\n")
 		} else if strings.Contains(img.Ref, "valkey") {
 			sb.WriteString(fmt.Sprintf("Volume=%s/photos/valkey:/data:Z\n", baseDir))
