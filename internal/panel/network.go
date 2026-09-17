@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/allod-project/allod/internal/config"
-	"github.com/allod-project/allod/internal/helper"
-	"github.com/allod-project/allod/internal/manifest"
-	"github.com/allod-project/allod/internal/quadlet"
+	"github.com/asfaltobollente/allod/internal/config"
+	"github.com/asfaltobollente/allod/internal/helper"
+	"github.com/asfaltobollente/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/quadlet"
 )
 
 // HelperClient provides an interface to execute root helper actions.

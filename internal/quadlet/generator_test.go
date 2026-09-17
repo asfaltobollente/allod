@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/allod-project/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/manifest"
 )
 
 func TestGenerateNativeModule(t *testing.T) {

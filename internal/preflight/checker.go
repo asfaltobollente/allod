@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/allod-project/allod/internal/config"
-	"github.com/allod-project/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/config"
+	"github.com/asfaltobollente/allod/internal/manifest"
 )
 
 const (

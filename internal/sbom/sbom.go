@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/allod-project/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/manifest"
 )
 
 type Component struct {
@@ -57,7 +57,7 @@ func GenerateSBOM(modulesDir string) (*SBOMDocument, error) {
 		Name:        "allod-core",
 		Version:     "2.1.0",
 		Description: "Allod Personal Cloud & Federated Backup Orchestrator",
-		PURL:        "pkg:golang/github.com/allod-project/allod@2.1.0",
+		PURL:        "pkg:golang/github.com/asfaltobollente/allod@2.1.0",
 		License:     "AGPL-3.0",
 	})
 

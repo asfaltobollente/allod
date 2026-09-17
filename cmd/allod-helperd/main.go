@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/allod-project/allod/internal/helper"
+	"github.com/asfaltobollente/allod/internal/helper"
 )
 
 func main() {

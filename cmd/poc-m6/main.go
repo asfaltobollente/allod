@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/allod-project/allod/internal/ring"
+	"github.com/asfaltobollente/allod/internal/ring"
 )
 
 func main() {

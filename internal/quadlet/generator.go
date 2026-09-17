@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/allod-project/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/manifest"
 )
 
 // GenerateResult holds one or more generated Quadlet unit files for a module.
