@@ -21,13 +21,11 @@ Allod is designed with strict privilege separation:
 If you discover a security vulnerability in Allod, please **do not open a public GitHub issue**.
 
 Please report vulnerabilities privately via:
-* **Email**: `security@allod.dev` (or open a GitHub Security Advisory)
-* **GPG Key**: Available on `https://dl.allod.dev/security.gpg`
+* **GitHub Security Advisories**: Navigate to the repository's **Security** tab and click **Report a vulnerability** to submit a confidential report.
 
 ### Response Timeline
-* **Initial Acknowledgement**: Within 48 hours.
-* **Triage & Reproduction**: Within 5 business days.
-* **Fix & Coordinated Disclosure**: As soon as a patch is verified and backported to active branches.
+* **Initial Acknowledgement**: Best effort by the maintainer (typically within 7 days).
+* **Fix & Coordinated Disclosure**: Once a remediation is verified on `main`.
 
 ## Scope & Exclusions
 * Denial of service attacks against personal nodes behind rate limits are out of scope unless they bypass the root privilege boundary.
