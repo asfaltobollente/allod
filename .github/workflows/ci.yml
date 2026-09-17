@@ -26,6 +26,11 @@ jobs:
           chmod +x ./scripts/check-pii.sh
           ./scripts/check-pii.sh
 
+      - name: Verify README Project Status Table
+        run: |
+          chmod +x ./scripts/check-status-table.sh
+          ./scripts/check-status-table.sh
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:

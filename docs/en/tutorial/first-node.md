@@ -12,18 +12,22 @@ This guide walks you through setting up a self-hosted, personal cloud node on an
 
 ---
 
-## Step 1: Install Allod Core
+## Step 1: Install Allod & Setup Privileges
 
-On your fresh Ubuntu Server, install the Allod repository keyring and package:
+Clone the repository and build the binaries with Go (>= 1.25):
 
 ```bash
-# Add official Allod repository
-sudo wget -O /usr/share/keyrings/allod.gpg https://dl.allod.dev/key.gpg
-echo "deb [signed-by=/usr/share/keyrings/allod.gpg] https://dl.allod.dev/apt stable main" | sudo tee /etc/apt/sources.list.d/allod.list
+git clone https://github.com/asfaltobollente/allod.git
+cd allod
+go build -o allod ./cmd/allod
+go build -o allod-panel ./cmd/allod-panel
+go build -o allod-helperd ./cmd/allod-helperd
 
-# Install allod-core
-sudo apt-get update
-sudo apt-get install -y allod-core
+# Install the privileged helper daemon
+sudo install -m 0755 allod-helperd /usr/local/bin/allod-helperd
+sudo groupadd -f allod
+sudo usermod -aG allod $USER
+sudo systemctl restart allod-helperd
 ```
 
 ---

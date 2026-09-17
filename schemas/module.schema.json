@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://allod.dev/schemas/module.schema.json",
+  "$id": "https://github.com/asfaltobollente/allod/schemas/module.schema.json",
   "title": "Allod Module Manifest",
   "description": "Schema per i manifest dichiarativi dei moduli Allod",
   "type": "object",
