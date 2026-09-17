@@ -3,8 +3,8 @@ node:
     channel: stable
     group: git+ssh://git@my-allod-ring/ring.git
 catalog:
-    source: https://dl.allod.dev/catalog/v1.json
-    mode: online
+    source: ./modules
+    mode: local
 people:
     - id: owner
       role: owner

@@ -21,8 +21,8 @@ autoinstall:
     - btrfs-progs
   runcmd:
     - echo "Impostazione repository Allod..."
-    - wget -O /usr/share/keyrings/allod.gpg https://dl.allod.dev/key.gpg
-    - echo "deb [signed-by=/usr/share/keyrings/allod.gpg] https://dl.allod.dev/apt stable main" > /etc/apt/sources.list.d/allod.list
+    - wget -O /usr/share/keyrings/allod.gpg https://get.example.com/key.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/allod.gpg] https://get.example.com/apt stable main" > /etc/apt/sources.list.d/allod.list
     - apt-get update && apt-get install -y allod-core
     - systemctl enable --now allod-panel
 `

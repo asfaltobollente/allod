@@ -73,46 +73,85 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 
 ---
 
-## 🚀 Quickstart & First Installation Guide
+## 🧭 Project Status
 
-Set up a sovereign Allod node on **Ubuntu Server 24.04 LTS** in less than 5 minutes.
+> **Status Snapshot**: September 2026 (`main` branch)
 
-### 1. Prerequisites
+| Component / Feature | Category | State & Description |
+| :--- | :--- | :--- |
+| **Allod CLI Orchestrator** | **Funzionante oggi** *(Working Today)* | Full declarative lifecycle (`plan`, `apply`, `destroy`, `doctor`, `preflight`, `sbom`, `ring`, `purge`, `version`). Rootless Quadlet generation. |
+| **Privileged Helper Daemon** | **Funzionante oggi** *(Working Today)* | Root socket at `/run/allod/helper.sock` with `allod` group ownership, strict 16-action whitelist, and full argument audit logging. |
+| **Multi-Tenancy & Storage** | **Funzionante oggi** *(Working Today)* | Multi-user Linux provisioning with nologin shells, Samba `0770`/`0777` shares, Btrfs RAID 1/Single pool detection and auto-healing. |
+| **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update, and Triad orchestration. |
+| **Hybrid Mesh Networking** | **Funzionante oggi** *(Working Today)* | Self-hosted Headscale control plane + Cloudflare outbound tunnel with zero router ports and CGNAT bypass. |
+| **Media & Photos Modules** | **In sviluppo** *(In Development)* | Immich standard/full and Jellyfin container orchestration functional; automated mobile client integration in refinement. |
+| **Cloud Module (Nextcloud)** | **In sviluppo** *(In Development)* | Nextcloud 30 with dedicated PostgreSQL 16 Alpine and dynamic secret management; automated WebDAV setup in refinement. |
+| **Federated Backup Engine** | **In sviluppo** *(In Development)* | `rest-server` 0.12.1 rootless Quadlet provisioned; federated snapshot client orchestration, automated timer scheduling, and per-peer htpasswd auth in progress. |
+| **Tailscale Native Backend** | **Pianificato** *(Planned)* | Hosted Tailscale client mode alongside existing Headscale and WireGuard options. |
+| **Web Panel Auth Gate** | **Pianificato** *(Planned)* | Dedicated session authentication and optional 2FA for panel administration. |
+| **Release Cryptographic Signing** | **Pianificato** *(Planned)* | Cosign / Minisign keyless artifact and SBOM signing for production release binaries. |
+| **Automated Ring Snapshot & Restore** | **Pianificato** *(Planned)* | One-click snapshot scheduling across federated peers and interactive disaster recovery restore CLI. |
+
+---
+
+## 🚀 Quickstart & Installation Guide
+
+Set up a sovereign Allod node on **Ubuntu Server 24.04 LTS** with this 5-step walkthrough:
+
+### 1. System Requirements & Dependencies
+Ensure your host is running **Ubuntu Server 24.04 LTS** (or compatible Debian/Ubuntu derivative) with **Go >= 1.25** and rootless Podman:
 ```bash
 sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools
 ```
 
-### 2. Clone & Compile
+### 2. Clone & Compile Binaries
+Clone the official repository and compile the CLI, web panel, and privileged helper daemon:
 ```bash
 cd ~
 git clone https://github.com/asfaltobollente/allod.git
 cd allod
 go build -o allod ./cmd/allod
 go build -o allod-panel ./cmd/allod-panel
+go build -o allod-helperd ./cmd/allod-helperd
 ```
 
-### 3. Essential: Enable 24/7 Boot Autostart (Linger & Systemd) ⚠️
-> [!IMPORTANT]
-> **Why is this step mandatory?**  
-> Allod and Podman run in **rootless** mode under your unprivileged user account. On Linux, systemd normally shuts down unprivileged user sessions when you disconnect from SSH.  
-> Enabling **linger** (`loginctl enable-linger $USER`) tells systemd to boot your user session and start all Podman containers (Immich, Nextcloud, Samba) **automatically at machine power-on**, running 24/7 without requiring anyone to log in!
-
-Execute these commands on your server:
+### 3. Setup Privileged Helper & User Group
+Install the root helper daemon, configure socket permissions, and add your user to the `allod` group:
 ```bash
-# A. Enable systemd user linger for 24/7 background execution
+# Install binary and systemd service
+sudo install -m 0755 allod-helperd /usr/local/bin/allod-helperd
+sudo install -m 0644 configs/allod-helperd.service /etc/systemd/system/allod-helperd.service
+
+# Create group and add current user
+sudo groupadd -f allod
+sudo usermod -aG allod $USER
+
+# Start the helper daemon
+sudo systemctl daemon-reload
+sudo systemctl enable --now allod-helperd
+
+# Reload user group membership (or re-login via SSH)
+newgrp allod
+```
+
+### 4. Configure & Enable 24/7 Autostart (Linger)
+Enable systemd user linger so that your rootless Podman containers run 24/7 even after SSH logout:
+```bash
+# Enable 24/7 background execution
 loginctl enable-linger $USER
 
-# B. Register the Web Dashboard as a permanent systemd boot service
+# Prepare local configuration
+cp configs/config.example.yaml configs/config.yaml
+
+# Register and start Web Dashboard as a persistent user service
 mkdir -p ~/.config/systemd/user
 cp configs/allod-panel.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now allod-panel
 ```
 
-*(Note: You can also start `./allod-panel` once and click the **"⚡ Completa Configurazione Boot (1-Click Setup)"** button directly from the Web Dashboard!)*
-
-### 4. Open the Web Dashboard
-Access the dashboard from any phone, tablet, or PC on your local network:  
+### 5. Access the Web Dashboard
+Open your browser and navigate to:  
 👉 **`http://<SERVER-IP>:8080`**
 
 From the Web GUI, you can:

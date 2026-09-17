@@ -44,6 +44,25 @@ Performs comprehensive diagnostic checks on active modules, resource allocations
 ### `allod install <hostname>`
 Generates zero-touch `cloud-init` configuration for automated Ubuntu Server provisioning.
 
+### `allod start <module>`
+Starts the user systemd service and container units for the specified module.
+
+### `allod stop <module>`
+Stops the user systemd service and container units for the specified module.
+
+### `allod purge <module>` (alias: `reset`)
+Stops services, removes containers, clears generated Quadlet units, cleans `state.db` records, and re-initializes storage directories.
+* Flags:
+  * `-f, --force`: Bypasses the interactive confirmation prompt (`CANCELLA`).
+
+### `allod storage setup <mode> <devices...>`
+Formats disks (single, raid0, raid1) and mounts a dedicated Btrfs pool on `/mnt/allod-storage` with subvolumes for modules.
+* Flags:
+  * `-m, --mount <path>`: Custom mount directory (default: `/mnt/allod-storage`).
+
+### `allod version`
+Prints the current dynamic version of the Allod binary (resolved from build-time ldflags or VCS revision).
+
 ### `allod ring status`
 Displays group topology, member quotas, and verification of 2-replica remote placement.
 
