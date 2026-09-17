@@ -433,6 +433,12 @@ Complete documentation according to the official project structure is available 
 
 ---
 
+## ⚠️ Known Limitations
+
+* **Backup Module (Receiver-Only PoC)**: The federated backup module is under active development. Currently, only the passive backup receiver daemon (`rest-server`) is deployed, running with `--append-only --no-auth`. While `--append-only` prevents existing historical snapshots from being altered or deleted by a compromised client, any node on the mesh network can append data. The active client engine (automated `restic`), backup scheduler, per-peer `htpasswd` authentication, and restore orchestration are not yet implemented and are planned for future releases.
+
+---
+
 ## 🛡️ Security & Compliance
 
 * **Cyber Resilience Act (CRA)**: Formal SBOM generation via `allod sbom`.
