@@ -885,75 +885,19 @@ func main() {
 			return nil
 		}
 
-		// 2. Try standard helper users.create call
-		if client != nil {
-			_, _ = client.Execute("users.create", map[string]interface{}{"username": username}, false)
-			if linuxUserExists(username) {
-				return nil
-			}
+		// 2. Authoritative creation via privileged root helper
+		if client == nil {
+			return fmt.Errorf("helper daemon is not connected")
 		}
 
-		// 3. Helper might be running older version without PATH or useradd failed.
-		// Unlock /usr/local/bin via shares.apply (pass both 'name' and 'path')
-		if client != nil {
-			_, _ = client.Execute("shares.apply", map[string]interface{}{
-				"name": "shares",
-				"path": "/usr/local/bin",
-			}, false)
-		}
-
-		// 4. Create an ultra-resilient useradd wrapper script in /usr/local/bin/useradd
-		wrapperScript := `#!/bin/sh
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
-export PATH
-
-USER=""
-for arg in "$@"; do
-    case "$arg" in
-        -* ) ;;
-        * ) USER="$arg" ;;
-    esac
-done
-
-if [ -z "$USER" ]; then
-    exit 0
-fi
-
-if id -u "$USER" >/dev/null 2>&1; then
-    exit 0
-fi
-
-/usr/sbin/useradd -M -s /usr/sbin/nologin "$USER" 2>/dev/null || \
-/usr/sbin/useradd -M -N -s /usr/sbin/nologin "$USER" 2>/dev/null || \
-/usr/sbin/useradd -M -g users -s /usr/sbin/nologin "$USER" 2>/dev/null || \
-/usr/sbin/useradd "$@" 2>/dev/null || \
-/usr/sbin/adduser --disabled-password --gecos "" --no-create-home "$USER" 2>/dev/null || true
-
-if ! id -u "$USER" >/dev/null 2>&1; then
-    MAXUID=$(awk -F: '$3 >= 1000 && $3 < 60000 { if ($3 > max) max=$3 } END { print (max ? max+1 : 1001) }' /etc/passwd)
-    echo "$USER:x:$MAXUID:$MAXUID:$USER:/mnt/allod-storage/shares/$USER:/usr/sbin/nologin" >> /etc/passwd
-    echo "$USER:x:$MAXUID:" >> /etc/group
-fi
-exit 0
-`
-		wrapperPath := "/usr/local/bin/useradd"
-		if errW := os.WriteFile(wrapperPath, []byte(wrapperScript), 0755); errW == nil {
-			_ = os.Chmod(wrapperPath, 0755)
-			if client != nil {
-				_, _ = client.Execute("users.create", map[string]interface{}{"username": username}, false)
-			}
-			_ = os.Remove(wrapperPath)
-		}
-
-		// 5. Try direct sudo -n as fallback
-		if !linuxUserExists(username) {
-			_ = exec.Command("sudo", "-n", "useradd", "-M", "-s", "/usr/sbin/nologin", username).Run()
+		if err := client.CreateUser(username); err != nil {
+			return fmt.Errorf("failed to create Linux user '%s': %w", username, err)
 		}
 
 		if linuxUserExists(username) {
 			return nil
 		}
-		return fmt.Errorf("impossibile registrare l'utente '%s' nel sistema Linux (/etc/passwd)", username)
+		return fmt.Errorf("user '%s' was not found in /etc/passwd after creation", username)
 	}
 
 	upgradeAndRestartHelper := func(client *helper.Client, logReport *strings.Builder) error {
@@ -1718,19 +1662,12 @@ WantedBy=default.target
 		}
 
 		// 2. Set Samba password and create private share [<username>]
-		resSmb, err := client.Execute("shares.set_password", map[string]interface{}{
-			"username": req.Username,
-			"password": req.Password,
-		}, false)
-		if err != nil || !resSmb.Ok {
+		if errSmb := client.SetSambaPassword(req.Username, req.Password); errSmb != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			errMsg := "Errore configurazione password Samba"
-			if err != nil {
-				errMsg = err.Error()
-			} else if resSmb.Error != "" {
-				errMsg = resSmb.Error
-			}
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore configurazione password Samba: %v", errSmb),
+			})
 			return
 		}
 
@@ -1752,10 +1689,7 @@ WantedBy=default.target
 
 		// 5. Execute bind mount for user photos if requested
 		if linkPhotos {
-			_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
-				"enabled":  true,
-				"username": req.Username,
-			}, false)
+			_ = client.BindPhotos(req.Username, true)
 		}
 
 		host := r.Host
@@ -1861,20 +1795,12 @@ WantedBy=default.target
 		}
 
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-		resp, err := client.Execute("shares.bind_photos", map[string]interface{}{
-			"enabled":  req.Enabled,
-			"username": req.Username,
-		}, false)
-
-		if err != nil || !resp.Ok {
+		if err := client.BindPhotos(req.Username, req.Enabled); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			errMsg := "Errore esecuzione bind mount"
-			if err != nil {
-				errMsg = err.Error()
-			} else if resp.Error != "" {
-				errMsg = resp.Error
-			}
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore configurazione bind photos: %v", err),
+			})
 			return
 		}
 
@@ -2119,26 +2045,15 @@ WantedBy=default.target
 
 		// 2. Set Samba password if provided
 		if req.Password != "" {
-			resSmb, err := client.Execute("shares.set_password", map[string]interface{}{
-				"username": req.Username,
-				"password": req.Password,
-			}, false)
-			if err != nil || !resSmb.Ok {
+			if errSmb := client.SetSambaPassword(req.Username, req.Password); errSmb != nil {
 				// Retry with auto-heal
 				_ = ensureSystemUser(&client, req.Username)
-				resRetry, errRetry := client.Execute("shares.set_password", map[string]interface{}{
-					"username": req.Username,
-					"password": req.Password,
-				}, false)
-				if errRetry != nil || !resRetry.Ok {
+				if errRetry := client.SetSambaPassword(req.Username, req.Password); errRetry != nil {
 					w.WriteHeader(http.StatusInternalServerError)
-					errMsg := "Errore configurazione password Samba"
-					if errRetry != nil {
-						errMsg = errRetry.Error()
-					} else if resRetry.Error != "" {
-						errMsg = resRetry.Error
-					}
-					json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+					json.NewEncoder(w).Encode(PanelResponse{
+						Status:  "error",
+						Message: fmt.Sprintf("Errore configurazione password Samba: %v", errRetry),
+					})
 					return
 				}
 			}
@@ -2162,10 +2077,7 @@ WantedBy=default.target
 
 		// 5. Execute bind mount for user photos if requested
 		if linkPhotos {
-			_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
-				"enabled":  true,
-				"username": req.Username,
-			}, false)
+			_ = client.BindPhotos(req.Username, true)
 		}
 
 		// 6. Save member in state.db
@@ -2298,10 +2210,7 @@ WantedBy=default.target
 
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		// 1. Unbind photos
-		_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
-			"enabled":  false,
-			"username": req.Username,
-		}, false)
+		_ = client.BindPhotos(req.Username, false)
 
 		// 2. Delete member and lock auto-import
 		st, err := state.Open(dbPath)
@@ -2316,8 +2225,8 @@ WantedBy=default.target
 		userShareDir := filepath.Join(baseDir, "shares", req.Username)
 		_ = os.Rename(userShareDir, userShareDir+".deleted."+time.Now().Format("20060102150405"))
 
-		// 4. Try removing user from Samba
-		_ = exec.Command("sudo", "-n", "smbpasswd", "-x", req.Username).Run()
+		// 4. Remove user from Samba via helper
+		_ = client.DeleteSambaUser(req.Username)
 
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
@@ -2424,53 +2333,19 @@ WantedBy=default.target
 			log.Printf("[portal] Avviso ensureSystemUser: %v", errEnsure)
 		}
 
-		resp, errSmb := client.Execute("shares.set_password", map[string]interface{}{
-			"username": targetUser,
-			"password": req.NewPassword,
-		}, false)
-
-		if errSmb != nil || !resp.Ok {
-			// Auto-heal retry: force ensureSystemUser again and retry shares.set_password
+		errSmb := client.SetSambaPassword(targetUser, req.NewPassword)
+		if errSmb != nil {
+			// Retry once after ensuring user
 			_ = ensureSystemUser(&client, targetUser)
-			respRetry, errRetry := client.Execute("shares.set_password", map[string]interface{}{
-				"username": targetUser,
-				"password": req.NewPassword,
-			}, false)
-			if errRetry == nil && respRetry.Ok {
-				resp = respRetry
-				errSmb = nil
-			}
+			errSmb = client.SetSambaPassword(targetUser, req.NewPassword)
 		}
 
-		if errSmb != nil || !resp.Ok {
-			// Direct fallback via sudo -n if helper was running older code
-			_ = exec.Command("sudo", "-n", "useradd", "-M", "-s", "/usr/sbin/nologin", targetUser).Run()
-			cmdSmb := exec.Command("sudo", "-n", "smbpasswd", "-a", "-s", targetUser)
-			cmdSmb.Stdin = strings.NewReader(req.NewPassword + "\n" + req.NewPassword + "\n")
-			if _, errSudo := cmdSmb.CombinedOutput(); errSudo == nil {
-				_ = exec.Command("sudo", "-n", "smbpasswd", "-e", targetUser).Run()
-				errSmb = nil
-				resp.Ok = true
-			} else {
-				cmdSmb2 := exec.Command("sudo", "-n", "smbpasswd", "-s", targetUser)
-				cmdSmb2.Stdin = strings.NewReader(req.NewPassword + "\n" + req.NewPassword + "\n")
-				if _, errSudo2 := cmdSmb2.CombinedOutput(); errSudo2 == nil {
-					_ = exec.Command("sudo", "-n", "smbpasswd", "-e", targetUser).Run()
-					errSmb = nil
-					resp.Ok = true
-				}
-			}
-		}
-
-		if errSmb != nil || !resp.Ok {
+		if errSmb != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			errMsg := "Errore aggiornamento password Samba"
-			if errSmb != nil {
-				errMsg = errSmb.Error()
-			} else if resp.Error != "" {
-				errMsg = resp.Error
-			}
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore aggiornamento password Samba: %v", errSmb),
+			})
 			return
 		}
 
@@ -2530,22 +2405,12 @@ WantedBy=default.target
 		}
 
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-		res, err := client.Execute("storage.init", map[string]interface{}{
-			"disks": req.Disks,
-			"mode":  req.Mode,
-			"mount": req.Mount,
-			"user":  os.Getenv("USER"),
-		}, false)
-
-		if err != nil || !res.Ok {
-			errMsg := "Errore comunicazione con allod-helperd (assicurati che sia avviato con sudo)"
-			if err != nil {
-				errMsg = err.Error()
-			} else if res.Error != "" {
-				errMsg = res.Error
-			}
+		if err := client.InitStorage(req.Mode, req.Disks, req.Mount, os.Getenv("USER")); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore inizializzazione storage: %v", err),
+			})
 			return
 		}
 
@@ -2565,13 +2430,13 @@ WantedBy=default.target
 
 		// Try privileged helper first for 100% complete root device stats and detailed chunks
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-		if resp, err := client.Execute("storage.diagnostics", map[string]interface{}{"mount": mountPoint}, false); err == nil && resp.Ok && resp.Output != "" {
+		if output, err := client.StorageDiagnostics(mountPoint); err == nil && output != "" {
 			var diagData struct {
 				Usage string `json:"usage"`
 				Stats string `json:"stats"`
 				Df    string `json:"df"`
 			}
-			if err := json.Unmarshal([]byte(resp.Output), &diagData); err == nil {
+			if err := json.Unmarshal([]byte(output), &diagData); err == nil {
 				usageStr = diagData.Usage
 				statsStr = diagData.Stats
 				dfStr = diagData.Df
