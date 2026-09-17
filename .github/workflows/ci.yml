@@ -13,6 +13,18 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Security Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check PII & IP Leaks
+        run: |
+          chmod +x ./scripts/check-pii.sh
+          ./scripts/check-pii.sh
 
       - name: Setup Go
         uses: actions/setup-go@v5
