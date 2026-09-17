@@ -198,6 +198,9 @@ dns:
 // StorageBaseDir determines the root directory for persistent module volumes.
 // If /mnt/allod-storage (the Btrfs NAS pool) exists, it is preferred.
 func StorageBaseDir() string {
+	if env := os.Getenv("ALLOD_STORAGE_DIR"); env != "" {
+		return env
+	}
 	if _, err := os.Stat("/mnt/allod-storage"); err == nil {
 		return "/mnt/allod-storage"
 	}
