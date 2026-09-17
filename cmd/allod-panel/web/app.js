@@ -2500,7 +2500,7 @@ async function recheckHelperConnection(btn) {
 }
 
 function copyHelperInstallCli(btn) {
-  const code = `sudo cp ~/allod/allod-helperd /usr/local/bin/
+  const code = `sudo install -m 0755 ~/allod/allod-helperd /usr/local/bin/allod-helperd
 sudo groupadd -f allod && sudo usermod -aG allod $USER
 sudo cp ~/allod/configs/allod-helperd.service /etc/systemd/system/
 sudo systemctl daemon-reload

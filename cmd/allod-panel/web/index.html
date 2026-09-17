@@ -476,7 +476,7 @@ systemctl --user enable --now allod-panel</pre>
                 <span style="font-size:11px; font-weight:600; color:var(--primary);" data-i18n="helper_service_box_title">⚙️ Registra come Servizio Systemd (Boot 24/7):</span>
                 <button class="btn btn-sm btn-outline-secondary" onclick="copyHelperInstallCli(this)" style="padding:2px 8px; font-size:10.5px;">📋 <span data-i18n="btn_copy">Copia</span></button>
               </div>
-              <pre id="settings-helper-install-code" style="margin:0; font-family:'JetBrains Mono',monospace; font-size:11px; color:#38bdf8; overflow-x:auto; line-height:1.4;">sudo cp ~/allod/allod-helperd /usr/local/bin/
+              <pre id="settings-helper-install-code" style="margin:0; font-family:'JetBrains Mono',monospace; font-size:11px; color:#38bdf8; overflow-x:auto; line-height:1.4;">sudo install -m 0755 ~/allod/allod-helperd /usr/local/bin/allod-helperd
 sudo groupadd -f allod && sudo usermod -aG allod $USER
 sudo cp ~/allod/configs/allod-helperd.service /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -661,7 +661,7 @@ Ready for operations. Click any maintenance action above to see real-time output
               📋 <span data-i18n="btn_copy">Copia</span>
             </button>
           </div>
-          <pre id="helper-modal-install-code" style="margin:0; background:#090d16; border:1px solid var(--card-border); border-radius:6px; padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; overflow-x:auto; line-height:1.4;">sudo cp ~/allod/allod-helperd /usr/local/bin/
+          <pre id="helper-modal-install-code" style="margin:0; background:#090d16; border:1px solid var(--card-border); border-radius:6px; padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; overflow-x:auto; line-height:1.4;">sudo install -m 0755 ~/allod/allod-helperd /usr/local/bin/allod-helperd
 sudo groupadd -f allod && sudo usermod -aG allod $USER
 sudo cp ~/allod/configs/allod-helperd.service /etc/systemd/system/
 sudo systemctl daemon-reload
