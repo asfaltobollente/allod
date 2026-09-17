@@ -113,7 +113,7 @@ func TestGenerateNetworkHybrid(t *testing.T) {
 		},
 		Images: []manifest.Image{
 			{Ref: "docker.io/headscale/headscale", Tag: "0.25.1", Channel: "patch"},
-			{Ref: "docker.io/cloudflare/cloudflared", Tag: "latest", Channel: "patch"},
+			{Ref: "docker.io/cloudflare/cloudflared", Tag: "2026.9.1", Channel: "patch"},
 		},
 	}
 
@@ -147,7 +147,7 @@ func TestGenerateNetworkHybrid(t *testing.T) {
 	if !ok {
 		t.Fatalf("network-cloudflared.container not generated")
 	}
-	if !strings.Contains(cfUnit, "Image=docker.io/cloudflare/cloudflared:latest") {
+	if !strings.Contains(cfUnit, "Image=docker.io/cloudflare/cloudflared:2026.9.1") {
 		t.Errorf("expected cloudflared image in unit, got:\n%s", cfUnit)
 	}
 	if !strings.Contains(cfUnit, "Network=host") {

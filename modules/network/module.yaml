@@ -38,7 +38,7 @@ images:
     tag: "0.25.1"
     channel: patch
   - ref: docker.io/cloudflare/cloudflared
-    tag: "latest"
+    tag: "2026.9.1"
     channel: patch
 
 update:
