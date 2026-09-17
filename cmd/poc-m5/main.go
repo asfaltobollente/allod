@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/allod-project/allod/internal/watch"
+	"github.com/asfaltobollente/allod/internal/watch"
 )
 
 func main() {

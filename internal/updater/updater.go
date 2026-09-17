@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/allod-project/allod/internal/config"
-	"github.com/allod-project/allod/internal/manifest"
-	"github.com/allod-project/allod/internal/quadlet"
-	"github.com/allod-project/allod/internal/state"
+	"github.com/asfaltobollente/allod/internal/config"
+	"github.com/asfaltobollente/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/quadlet"
+	"github.com/asfaltobollente/allod/internal/state"
 )
 
 type UpdateState string

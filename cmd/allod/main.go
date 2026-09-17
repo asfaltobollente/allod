@@ -15,15 +15,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/allod-project/allod/internal/cloudinit"
-	"github.com/allod-project/allod/internal/config"
-	"github.com/allod-project/allod/internal/helper"
-	"github.com/allod-project/allod/internal/manifest"
-	"github.com/allod-project/allod/internal/preflight"
-	"github.com/allod-project/allod/internal/quadlet"
-	"github.com/allod-project/allod/internal/ring"
-	"github.com/allod-project/allod/internal/sbom"
-	"github.com/allod-project/allod/internal/state"
+	"github.com/asfaltobollente/allod/internal/cloudinit"
+	"github.com/asfaltobollente/allod/internal/config"
+	"github.com/asfaltobollente/allod/internal/helper"
+	"github.com/asfaltobollente/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/preflight"
+	"github.com/asfaltobollente/allod/internal/quadlet"
+	"github.com/asfaltobollente/allod/internal/ring"
+	"github.com/asfaltobollente/allod/internal/sbom"
+	"github.com/asfaltobollente/allod/internal/state"
 )
 
 var (

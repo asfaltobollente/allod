@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/allod-project/allod/internal/helper"
+	"github.com/asfaltobollente/allod/internal/helper"
 )
 
 type mockHelperClient struct {
