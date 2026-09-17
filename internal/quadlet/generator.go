@@ -132,6 +132,7 @@ func EnsureStorageDirectories(modID string) {
 	case "network":
 		hsCfgDir := filepath.Join(baseDir, "network", "headscale", "config")
 		hsDataDir := filepath.Join(baseDir, "network", "headscale", "data")
+		netSecretsDir := filepath.Join(baseDir, "network", "secrets")
 		dirs = []string{
 			hsCfgDir,
 			hsDataDir,
@@ -139,6 +140,7 @@ func EnsureStorageDirectories(modID string) {
 		for _, d := range dirs {
 			_ = os.MkdirAll(d, 0777)
 		}
+		_ = os.MkdirAll(netSecretsDir, 0700)
 		cfgFile := filepath.Join(hsCfgDir, "config.yaml")
 		if _, err := os.Stat(cfgFile); err != nil {
 			defaultHeadscaleYaml := `server_url: http://127.0.0.1:8085
@@ -332,13 +334,24 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		} else if strings.Contains(img.Ref, "cloudflared") {
 			sb.WriteString("Exec=tunnel --no-autoupdate run\n")
 			resBaseDir := ResolvedStorageBaseDir()
+			secretsDir := filepath.Join(resBaseDir, "network", "secrets")
+			secretEnv := filepath.Join(secretsDir, "cloudflared.env")
 			tokenFile := filepath.Join(resBaseDir, "network", "cloudflared.token")
+			legacyEnvFile := filepath.Join(resBaseDir, "network", "cloudflared.env")
+
+			// If token file exists, ensure secrets dir (0700) and write secrets/cloudflared.env (0600)
 			if tokBytes, err := os.ReadFile(tokenFile); err == nil && len(strings.TrimSpace(string(tokBytes))) > 0 {
-				sb.WriteString(fmt.Sprintf("Environment=TUNNEL_TOKEN=%s\n", strings.TrimSpace(string(tokBytes))))
+				_ = os.MkdirAll(secretsDir, 0700)
+				_ = os.WriteFile(secretEnv, []byte(fmt.Sprintf("TUNNEL_TOKEN=%s\n", strings.TrimSpace(string(tokBytes)))), 0600)
 			}
-			envFile := filepath.Join(resBaseDir, "network", "cloudflared.env")
-			if _, err := os.Stat(envFile); err == nil {
-				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s\n", filepath.Join(baseDir, "network", "cloudflared.env")))
+
+			// Point to EnvironmentFile in Quadlet container
+			if _, err := os.Stat(secretEnv); err == nil {
+				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/secrets/cloudflared.env\n", baseDir))
+			} else if _, err := os.Stat(legacyEnvFile); err == nil {
+				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/cloudflared.env\n", baseDir))
+			} else {
+				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/secrets/cloudflared.env\n", baseDir))
 			}
 		}
 	default:

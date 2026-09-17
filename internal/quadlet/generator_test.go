@@ -156,6 +156,12 @@ func TestGenerateNetworkHybrid(t *testing.T) {
 	if !strings.Contains(cfUnit, "Exec=tunnel --no-autoupdate run") {
 		t.Errorf("expected tunnel run exec, got:\n%s", cfUnit)
 	}
+	if !strings.Contains(cfUnit, "EnvironmentFile=") || !strings.Contains(cfUnit, "secrets/cloudflared.env") {
+		t.Errorf("expected EnvironmentFile pointing to secrets/cloudflared.env, got:\n%s", cfUnit)
+	}
+	if strings.Contains(cfUnit, "Environment=TUNNEL_TOKEN=") {
+		t.Errorf("expected TUNNEL_TOKEN to NOT be inlined as Environment=, got:\n%s", cfUnit)
+	}
 }
 
 func TestGenerateMediaJellyfin(t *testing.T) {
