@@ -4,10 +4,12 @@ Security and data ownership are the primary design principles of Allod. We welco
 
 ## Supported Versions
 
+Only the latest release tag on the `main` branch is supported with security patches and bugfixes. Prior to the first stable tag release, only the `main` branch is supported.
+
 | Version | Supported          |
 | :---    | :---               |
-| 2.x     | :white_check_mark: |
-| < 2.0   | :x:                |
+| Latest tag on `main` (or `main` branch pre-tag) | :white_check_mark: |
+| Older releases     | :x:                |
 
 ## Privilege Boundary Architecture
 

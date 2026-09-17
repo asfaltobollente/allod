@@ -2,6 +2,7 @@ package sbom
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/asfaltobollente/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/version"
 )
 
 type Component struct {
@@ -37,10 +39,11 @@ type Metadata struct {
 }
 
 func GenerateSBOM(modulesDir string) (*SBOMDocument, error) {
+	v := version.Get()
 	doc := &SBOMDocument{
 		BOMFormat:    "CycloneDX",
 		SpecVersion:  "1.5",
-		SerialNumber: "urn:uuid:allod-core-sbom-v2.1",
+		SerialNumber: fmt.Sprintf("urn:uuid:allod-core-sbom-%s", v),
 		Version:      1,
 		Metadata: Metadata{
 			Timestamp: time.Now().UTC(),
@@ -55,9 +58,9 @@ func GenerateSBOM(modulesDir string) (*SBOMDocument, error) {
 	doc.Components = append(doc.Components, Component{
 		Type:        "application",
 		Name:        "allod-core",
-		Version:     "2.1.0",
+		Version:     v,
 		Description: "Allod Personal Cloud & Federated Backup Orchestrator",
-		PURL:        "pkg:golang/github.com/asfaltobollente/allod@2.1.0",
+		PURL:        fmt.Sprintf("pkg:golang/github.com/asfaltobollente/allod@%s", v),
 		License:     "AGPL-3.0",
 	})
 

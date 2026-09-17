@@ -357,6 +357,15 @@ function renderOverview() {
 
   const sidebarName = document.getElementById('sidebar-node-name');
   if (sidebarName) sidebarName.textContent = currentStatus.node_name || 'allod-node';
+
+  const sidebarVer = document.getElementById('sidebar-app-version');
+  if (sidebarVer && currentStatus.version) {
+    sidebarVer.textContent = currentStatus.version.startsWith('v') ? currentStatus.version : `v${currentStatus.version}`;
+  }
+  const settingsVer = document.getElementById('settings-app-version');
+  if (settingsVer && currentStatus.version) {
+    settingsVer.textContent = currentStatus.version.startsWith('v') ? currentStatus.version : `v${currentStatus.version}`;
+  }
   
   // RAM metric
   const ramUsedMB = currentStatus.ram_used_mb || 0;

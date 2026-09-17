@@ -24,6 +24,7 @@ import (
 	"github.com/asfaltobollente/allod/internal/ring"
 	"github.com/asfaltobollente/allod/internal/sbom"
 	"github.com/asfaltobollente/allod/internal/state"
+	"github.com/asfaltobollente/allod/internal/version"
 )
 
 var (
@@ -1048,6 +1049,14 @@ var purgeCmd = &cobra.Command{
 	},
 }
 
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Mostra la versione corrente di Allod",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("allod version %s\n", version.Get())
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "configs/config.example.yaml", "file di configurazione")
 	rootCmd.PersistentFlags().StringVar(&stateDB, "state-db", "state.db", "percorso file state.db")
@@ -1085,6 +1094,7 @@ func init() {
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(ringCmd)
 	rootCmd.AddCommand(sbomCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func main() {
