@@ -1,6 +1,8 @@
 package quadlet
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -205,5 +207,160 @@ func TestGenerateMediaJellyfin(t *testing.T) {
 	}
 	if !strings.Contains(unit, "MemoryMax=500M") {
 		t.Errorf("expected MemoryMax=500M, got:\n%s", unit)
+	}
+}
+
+func TestDatabaseSecretsDynamic(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+
+	mPhotos := &manifest.Manifest{
+		ID:   "photos",
+		Tier: "recommended",
+		Levels: map[string]manifest.Level{
+			"standard": {RAMMB: 1500},
+		},
+		Images: []manifest.Image{
+			{Ref: "ghcr.io/immich-app/immich-server", Tag: "v1.118.0", Channel: "patch"},
+			{Ref: "ghcr.io/immich-app/postgres", Tag: "14", Channel: "pinned"},
+			{Ref: "docker.io/valkey/valkey", Tag: "9", Channel: "pinned"},
+		},
+	}
+
+	resPhotos, err := Generate("photos", mPhotos, "standard")
+	if err != nil {
+		t.Fatalf("unexpected error generating photos: %v", err)
+	}
+
+	for _, unitName := range []string{"photos.container", "photos-postgres.container"} {
+		content := resPhotos.Files[unitName]
+		if strings.Contains(content, "POSTGRES_PASSWORD=") || strings.Contains(content, "DB_PASSWORD=") {
+			t.Errorf("expected unit %s to NOT contain plaintext password, got:\n%s", unitName, content)
+		}
+		if !strings.Contains(content, "EnvironmentFile=") || !strings.Contains(content, "photos/secrets/postgres.env") {
+			t.Errorf("expected unit %s to contain EnvironmentFile pointing to secrets/postgres.env, got:\n%s", unitName, content)
+		}
+	}
+
+	// Verify secret file exists and is populated
+	secretPath := filepath.Join(tempDir, "photos", "secrets", "postgres.env")
+	info, err := os.Stat(secretPath)
+	if err != nil {
+		t.Fatalf("expected secret file to exist: %v", err)
+	}
+	// Check content has 32-char generated password and required variables
+	secBytes, err := os.ReadFile(secretPath)
+	if err != nil {
+		t.Fatalf("failed to read secret file: %v", err)
+	}
+	secStr := string(secBytes)
+	if strings.Contains(secStr, "PASSWORD=postgres") {
+		t.Errorf("expected freshly generated password, not legacy 'postgres', got: %s", secStr)
+	}
+	if !strings.Contains(secStr, "DB_PASSWORD=") || !strings.Contains(secStr, "POSTGRES_PASSWORD=") {
+		t.Errorf("expected DB_PASSWORD and POSTGRES_PASSWORD in secret env, got:\n%s", secStr)
+	}
+	_ = info
+
+	// Test cloud module
+	mCloud := &manifest.Manifest{
+		ID:   "cloud",
+		Tier: "recommended",
+		Levels: map[string]manifest.Level{
+			"basic": {RAMMB: 1000},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/nextcloud", Tag: "30-apache", Channel: "patch"},
+			{Ref: "docker.io/postgres", Tag: "16", Channel: "pinned"},
+		},
+	}
+
+	resCloud, err := Generate("cloud", mCloud, "basic")
+	if err != nil {
+		t.Fatalf("unexpected error generating cloud: %v", err)
+	}
+
+	for _, unitName := range []string{"cloud.container", "cloud-postgres.container"} {
+		content := resCloud.Files[unitName]
+		if strings.Contains(content, "POSTGRES_PASSWORD=") {
+			t.Errorf("expected unit %s to NOT contain plaintext password, got:\n%s", unitName, content)
+		}
+		if !strings.Contains(content, "EnvironmentFile=") || !strings.Contains(content, "cloud/secrets/postgres.env") {
+			t.Errorf("expected unit %s to contain EnvironmentFile pointing to secrets/postgres.env, got:\n%s", unitName, content)
+		}
+	}
+}
+
+func TestDatabaseSecretsLegacyMigration(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+
+	// Simulate existing cloud database directory with data
+	cloudDbDir := filepath.Join(tempDir, "cloud", "postgres")
+	if err := os.MkdirAll(cloudDbDir, 0755); err != nil {
+		t.Fatalf("failed to create simulated db dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cloudDbDir, "PG_VERSION"), []byte("16\n"), 0644); err != nil {
+		t.Fatalf("failed to create PG_VERSION: %v", err)
+	}
+
+	// Generate cloud units
+	mCloud := &manifest.Manifest{
+		ID:   "cloud",
+		Tier: "recommended",
+		Levels: map[string]manifest.Level{
+			"basic": {RAMMB: 1000},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/nextcloud", Tag: "30-apache", Channel: "patch"},
+			{Ref: "docker.io/postgres", Tag: "16", Channel: "pinned"},
+		},
+	}
+
+	if _, err := Generate("cloud", mCloud, "basic"); err != nil {
+		t.Fatalf("unexpected error generating cloud: %v", err)
+	}
+
+	cloudSecBytes, err := os.ReadFile(filepath.Join(tempDir, "cloud", "secrets", "postgres.env"))
+	if err != nil {
+		t.Fatalf("failed to read cloud secret file: %v", err)
+	}
+	if !strings.Contains(string(cloudSecBytes), "POSTGRES_PASSWORD=allod_secure_pass") {
+		t.Errorf("expected legacy password 'allod_secure_pass' in migrated secret, got:\n%s", string(cloudSecBytes))
+	}
+
+	// Simulate existing photos database directory with data
+	photosDbDir := filepath.Join(tempDir, "photos", "postgres")
+	if err := os.MkdirAll(photosDbDir, 0755); err != nil {
+		t.Fatalf("failed to create simulated photos db dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(photosDbDir, "PG_VERSION"), []byte("14\n"), 0644); err != nil {
+		t.Fatalf("failed to create PG_VERSION: %v", err)
+	}
+
+	mPhotos := &manifest.Manifest{
+		ID:   "photos",
+		Tier: "recommended",
+		Levels: map[string]manifest.Level{
+			"standard": {RAMMB: 1500},
+		},
+		Images: []manifest.Image{
+			{Ref: "ghcr.io/immich-app/immich-server", Tag: "v1.118.0", Channel: "patch"},
+			{Ref: "ghcr.io/immich-app/postgres", Tag: "14", Channel: "pinned"},
+			{Ref: "docker.io/valkey/valkey", Tag: "9", Channel: "pinned"},
+		},
+	}
+
+	if _, err := Generate("photos", mPhotos, "standard"); err != nil {
+		t.Fatalf("unexpected error generating photos: %v", err)
+	}
+
+	photosSecBytes, err := os.ReadFile(filepath.Join(tempDir, "photos", "secrets", "postgres.env"))
+	if err != nil {
+		t.Fatalf("failed to read photos secret file: %v", err)
+	}
+	photosSecStr := string(photosSecBytes)
+	if !strings.Contains(photosSecStr, "POSTGRES_PASSWORD=postgres") || !strings.Contains(photosSecStr, "DB_PASSWORD=postgres") {
+		t.Errorf("expected legacy password 'postgres' in migrated secret, got:\n%s", photosSecStr)
 	}
 }
