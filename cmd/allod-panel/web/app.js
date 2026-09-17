@@ -104,7 +104,7 @@ function renderLaunchpad() {
   const container = document.getElementById('launchpad-grid');
   if (!container || !currentModules) return;
 
-  const lanHost = window.location.hostname || '192.168.0.122';
+  const lanHost = window.location.hostname || '192.168.1.50';
   const meshHost = '100.64.0.1';
   const activeHost = (launchpadMode === 'mesh') ? meshHost : lanHost;
 
@@ -1971,7 +1971,7 @@ function openSpeedtestModal() {
   const modal = document.getElementById('speedtest-modal');
   const ipSpan = document.getElementById('speedtest-server-ip');
   if (ipSpan) {
-    ipSpan.textContent = window.location.hostname || '192.168.0.122';
+    ipSpan.textContent = window.location.hostname || '192.168.1.50';
   }
   if (modal) modal.classList.remove('hidden');
 }
@@ -2562,7 +2562,7 @@ function openSmbPasswordModal() {
   const modal = document.getElementById('smb-password-modal');
   if (!modal) return;
 
-  const host = window.location.hostname || '192.168.0.122';
+  const host = window.location.hostname || '192.168.1.50';
   const pathEl = document.getElementById('smb-network-path');
   if (pathEl) {
     pathEl.textContent = `\\\\${host}\\shares`;
