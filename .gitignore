@@ -47,3 +47,11 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Runtime configuration & secrets (the repo checkout is also the runtime dir)
+/config.yaml
+/ring.yaml
+*.log
+*.token
+*.env
+*.new
