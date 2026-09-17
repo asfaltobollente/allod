@@ -2652,9 +2652,13 @@ WantedBy=default.target
 			}
 		}
 
-		baseDir := quadlet.StorageBaseDir()
+		baseDir := quadlet.ResolvedStorageBaseDir()
 		tokenFile := filepath.Join(baseDir, "network", "cloudflared.token")
-		tokBytes, _ := os.ReadFile(tokenFile)
+		secretEnvFile := filepath.Join(baseDir, "network", "secrets", "cloudflared.env")
+		tokBytes, _ := os.ReadFile(secretEnvFile)
+		if len(tokBytes) == 0 {
+			tokBytes, _ = os.ReadFile(tokenFile)
+		}
 		hasToken := len(strings.TrimSpace(string(tokBytes))) > 0
 
 		hsConfigFile := filepath.Join(baseDir, "network", "headscale", "config", "config.yaml")
@@ -2716,12 +2720,16 @@ WantedBy=default.target
 			domain = "https://" + domain
 		}
 
-		baseDir := quadlet.StorageBaseDir()
+		baseDir := quadlet.ResolvedStorageBaseDir()
 		netDir := filepath.Join(baseDir, "network")
 		_ = os.MkdirAll(netDir, 0777)
+		secretsDir := filepath.Join(netDir, "secrets")
+		_ = os.MkdirAll(secretsDir, 0700)
 
 		if req.TunnelToken != "" {
 			tokClean := strings.TrimSpace(req.TunnelToken)
+			secretEnv := filepath.Join(secretsDir, "cloudflared.env")
+			_ = os.WriteFile(secretEnv, []byte(fmt.Sprintf("TUNNEL_TOKEN=%s\n", tokClean)), 0600)
 			tokenFile := filepath.Join(netDir, "cloudflared.token")
 			_ = os.WriteFile(tokenFile, []byte(tokClean), 0600)
 			envFile := filepath.Join(netDir, "cloudflared.env")
