@@ -178,8 +178,8 @@ Allod abandons primitive binary switches in favor of **hardware-aware resource l
 | **`media`** *(Jellyfin)* | **`full`** | **1000 MB** | 8 GB System RAM, GPU | Everything in `basic` + **Hardware Transcoding** via Intel QuickSync / AMD VA-API (`/dev/dri/renderD128`). |
 | **`cloud`** *(Nextcloud)* | **`basic`** | **1.0 GB** | 8 GB System RAM | Files sync, mobile file explorer, WebDAV, notes, and calendar. |
 | **`network`** *(Hybrid Shield)* | **`hybrid`** | **120 MB** | 4 GB System RAM | **Recommended**: Self-hosted Headscale control plane + Cloudflare Tunnel. Zero router ports, CGNAT/Starlink bypass. Video/sync data flows direct P2P outside Cloudflare. |
-| **`network`** *(Pure WireGuard)* | **`wireguard`** | **50 MB** | 4 GB System RAM | 100% sovereign native kernel WireGuard with instant cryptographic QR pairing. Zero third-party cloud, zero accounts. Requires public IP or UDP port forward. |
-| **`network`** *(Zero-Click Cloud)* | **`tailscale`** | **60 MB** | 4 GB System RAM | Tailscale client connected to hosted control plane (`tailscale.com`). 30-second zero-click setup for users without a domain. |
+| **`network`** *(Pure WireGuard)* | **`wireguard`** *(📋 planned)* | **50 MB** | 4 GB System RAM | 100% sovereign native kernel WireGuard with instant cryptographic QR pairing. Zero third-party cloud, zero accounts. Requires public IP or UDP port forward. |
+| **`network`** *(Zero-Click Cloud)* | **`tailscale`** *(📋 planned)* | **60 MB** | 4 GB System RAM | Tailscale client connected to hosted control plane (`tailscale.com`). 30-second zero-click setup for users without a domain. |
 
 ### 🛡️ What Happens When You Change a Level on an Active Service?
 
@@ -243,7 +243,7 @@ Allod solves this by offering **three distinct, freedom-first remote access opti
 
 ### The 3 Freedom-First Access Architectures
 
-#### 1. Option 1: Pure Sovereign WireGuard (`wireguard` level — 50 MB RAM)
+#### 1. Option 1: Pure Sovereign WireGuard (`wireguard` level — 50 MB RAM — 📋 planned)
 * **100% Sovereign & Cloud-Free**: Zero third parties, zero external accounts, zero subscriptions. You depend on nobody.
 * **Native Kernel Performance**: Operates directly in the Linux kernel via WireGuard for minimum CPU overhead and maximum battery life on mobile devices.
 * **Instant QR Code Pairing**: The Allod Web Dashboard generates a cryptographic QR code. Scan it with the official, open-source WireGuard app on iOS or Android to connect in seconds.
@@ -255,7 +255,7 @@ Allod solves this by offering **three distinct, freedom-first remote access opti
 * **Direct P2P Data Plane (Zero Cloudflare ToS Risk)**: Cloudflare is used *only* for lightweight signaling JSON (authentication and peer discovery). Heavy data streams — **4K Jellyfin streaming, bulk Immich photo backups, Nextcloud sync, and Samba transfers** — flow **directly peer-to-peer (P2P)** between your phone and your server over an end-to-end encrypted WireGuard tunnel, completely outside Cloudflare. No bandwidth throttling, no ToS streaming violations!
 * **Zero-Hassle Mobile Pairing**: Connects with the free, official Tailscale apps (iOS, Android, macOS, Windows). In the app, choose *"Change server"*, enter your coordination domain, and paste a 1-hour pre-auth key generated in 1 click from the Allod Dashboard.
 
-#### 3. Option 3: Zero-Click Cloud (`tailscale` level — 60 MB RAM)
+#### 3. Option 3: Zero-Click Cloud (`tailscale` level — 60 MB RAM — 📋 planned)
 * **30-Second Turnkey Setup**: Connects your node directly to Tailscale's hosted SaaS control plane (`tailscale.com`).
 * **No Domain or Tunnel Required**: Perfect for beginners who do not own a custom domain name or Cloudflare account and want immediate remote access with zero setup friction.
 * **Peer-to-Peer WireGuard**: Traffic remains direct and end-to-end encrypted between your devices.
@@ -264,7 +264,7 @@ Allod solves this by offering **three distinct, freedom-first remote access opti
 
 ### ⚖️ Architectural & Privacy Comparison
 
-| Feature / Metric | Option 1: `wireguard` (Pure Sovereign) | Option 2: `hybrid` (Headscale Shield — ⭐ Recommended) | Option 3: `tailscale` (Zero-Click Cloud) |
+| Feature / Metric | Option 1: `wireguard` *(📋 planned)* | Option 2: `hybrid` (Headscale Shield — ⭐ Recommended) | Option 3: `tailscale` *(📋 planned)* |
 | :--- | :---: | :---: | :---: |
 | **Control Plane** | Fully Local (Kernel WireGuard) | **Self-Hosted Headscale** (On Allod) | Hosted SaaS (`tailscale.com`) |
 | **Third-Party Dependency** | **0% (Pure Self-Hosted)** | Minimal (Cloudflare Tunnel for signaling) | Third-Party SaaS Account |
