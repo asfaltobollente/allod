@@ -6,7 +6,7 @@
 > *Your data, held in full ownership, with the simplicity you expect.*
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8.svg)](go.mod)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](go.mod)
 [![Target OS](https://img.shields.io/badge/Target%20OS-Ubuntu%20Server%2024.04%20LTS-E95420.svg)](docs/en/tutorial/first-node.md)
 [![Architecture](https://img.shields.io/badge/Arch-x86--64%20%7C%20ARM64-brightgreen.svg)](docs/en/explanation/architecture.md)
 
@@ -297,8 +297,10 @@ When you leave home, open the Allod Dashboard over WireGuard, toggle the switch 
 * **Hardware**: Minimum 4 GB RAM (8 GB recommended for AI photo indexing), 1x or 2x disks for storage.
 * **System Packages**:
   ```bash
-  sudo apt update && sudo apt install -y podman btrfs-progs git golang-go
+  sudo apt update && sudo apt install -y podman btrfs-progs git
   ```
+* **Go Compiler (≥ 1.25)**:
+  Allod requires Go 1.25 or newer (for modern embedded SQLite database engines). Install it from [go.dev/dl](https://go.dev/dl/) or enable automatic toolchain fetching via `export GOTOOLCHAIN=auto`.
 
 ---
 
