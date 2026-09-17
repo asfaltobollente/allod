@@ -343,7 +343,7 @@ go build -o allod-panel ./cmd/allod-panel
 Allod operates with a **two-daemon security model**:
 
 1. **Root Helper Daemon (`allod-helperd`)**: Runs with root privileges (via `sudo` or systemd) to handle low-level disk management, btrfs snapshots, and SMART health checks over a secured local UNIX socket (`/run/allod/helper.sock`, mode `0660`, owned by `root:allod`, with kernel-level `SO_PEERCRED` verification).
-2. **Web Dashboard (`allod-panel`)**: Runs as an unprivileged user (rootless) to manage containers and serve the web UI.
+2. **Web Dashboard (`allod-panel`)**: Runs as an unprivileged user (rootless) to manage containers and serve the web UI. To communicate with the root helper, the user running `allod-panel` must belong to the `allod` system group (analogous to the `docker` or `libvirt` group model).
 
 **Quick Launch (Background):**
 ```bash
@@ -357,13 +357,16 @@ nohup ./allod-panel > panel.log 2>&1 &
 **Production Launch (systemd Services):**
 ```bash
 # 1. Install & start root helper system daemon
-sudo cp allod-helperd /usr/local/bin/
+sudo install -m 0755 allod-helperd /usr/local/bin/allod-helperd
 sudo groupadd -f allod && sudo usermod -aG allod $USER
 sudo cp configs/allod-helperd.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now allod-helperd
 
-# 2. Install & start user dashboard daemon
+# 2. Reload session to activate group membership (due to linger)
+loginctl terminate-user $USER # or: sudo reboot
+
+# 3. Install & start user dashboard daemon (after logging back in)
 mkdir -p ~/.config/systemd/user
 cp configs/allod-panel.service ~/.config/systemd/user/
 systemctl --user daemon-reload
