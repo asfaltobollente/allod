@@ -92,8 +92,8 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	nodesList := []map[string]interface{}{}
 	meshIP := "100.64.0.1"
-	if resp, err := h.Helper.Execute("network.headscale_cli", map[string]interface{}{"command": "nodes_list"}, false); err == nil && resp.Ok && resp.Output != "" {
-		_ = json.Unmarshal([]byte(resp.Output), &nodesList)
+	if out, err := executeHeadscale("nodes_list", h.Helper); err == nil && out != "" {
+		_ = json.Unmarshal([]byte(out), &nodesList)
 	}
 
 	data := map[string]interface{}{
@@ -107,6 +107,85 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
+}
+
+// executeHeadscale attempts to execute a Headscale command directly in the rootless Podman
+// session first. If direct execution fails or container is not running locally, it falls back
+// to the root helper client.
+func executeHeadscale(cmdType string, client HelperClient) (string, error) {
+	isMatch := func(name string) bool {
+		if strings.Contains(name, "cloudflared") {
+			return false
+		}
+		return name == "network" || name == "systemd-network" ||
+			name == "network-headscale" || name == "systemd-network-headscale" ||
+			strings.HasPrefix(name, "network-") || strings.HasPrefix(name, "systemd-network-")
+	}
+
+	target := ""
+	if out, err := exec.Command("podman", "ps", "--format", "{{.Names}}").Output(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			name := strings.TrimSpace(line)
+			if isMatch(name) {
+				target = name
+				break
+			}
+		}
+	}
+
+	if target != "" {
+		switch cmdType {
+		case "preauthkey_create":
+			// Ensure default user exists
+			_ = exec.Command("podman", "exec", target, "headscale", "users", "create", "default").Run()
+			cmd := exec.Command("podman", "exec", target, "headscale", "preauthkeys", "create", "-u", "default", "--reusable=false", "--expiration", "1h")
+			if out, err := cmd.Output(); err == nil {
+				lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+				for i := len(lines) - 1; i >= 0; i-- {
+					l := strings.TrimSpace(lines[i])
+					if l != "" {
+						return l, nil
+					}
+				}
+			}
+		case "nodes_list":
+			cmd := exec.Command("podman", "exec", target, "headscale", "nodes", "list", "--output", "json")
+			if out, err := cmd.Output(); err == nil {
+				return strings.TrimSpace(string(out)), nil
+			}
+		case "users_list":
+			cmd := exec.Command("podman", "exec", target, "headscale", "users", "list", "--output", "json")
+			if out, err := cmd.Output(); err == nil {
+				return strings.TrimSpace(string(out)), nil
+			}
+		}
+	}
+
+	// Fallback to helper client
+	if client != nil {
+		resp, err := client.Execute("network.headscale_cli", map[string]interface{}{"command": cmdType}, false)
+		if err == nil && resp.Ok {
+			raw := strings.TrimSpace(resp.Output)
+			if cmdType == "preauthkey_create" {
+				lines := strings.Split(raw, "\n")
+				for i := len(lines) - 1; i >= 0; i-- {
+					l := strings.TrimSpace(lines[i])
+					if l != "" {
+						return l, nil
+					}
+				}
+			}
+			return raw, nil
+		}
+		if resp.Error != "" {
+			return "", fmt.Errorf("%s", resp.Error)
+		}
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return "", fmt.Errorf("impossibile eseguire il comando headscale: container non trovato")
 }
 
 func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request) {
@@ -196,11 +275,11 @@ func (h *NetworkHandler) handlePreauthKey(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resp, err := h.Helper.Execute("network.headscale_cli", map[string]interface{}{"command": "preauthkey_create"}, false)
-	if err != nil || !resp.Ok {
+	key, err := executeHeadscale("preauthkey_create", h.Helper)
+	if err != nil || key == "" {
 		errMsg := "Errore esecuzione comando Headscale (verifica che il modulo network sia avviato)"
-		if resp.Error != "" {
-			errMsg = resp.Error
+		if err != nil {
+			errMsg = err.Error()
 		}
 		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
 		return
@@ -227,7 +306,7 @@ func (h *NetworkHandler) handlePreauthKey(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(PanelResponse{
 		Status: "ok",
 		Data: map[string]interface{}{
-			"key":        strings.TrimSpace(resp.Output),
+			"key":        key,
 			"server_url": domain,
 			"expires_in": "1 ora",
 		},

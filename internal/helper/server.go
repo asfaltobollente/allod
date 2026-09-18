@@ -858,49 +858,51 @@ func (s *Server) processRequest(req Request) Response {
 			cmdType = "users_list"
 		}
 
-		// Rileva dinamicamente il nome del container Headscale (network o network-headscale)
-		targetContainer := "network"
-		if out, err := exec.Command("podman", "ps", "--format", "{{.Names}}").Output(); err == nil {
-			for _, line := range strings.Split(string(out), "\n") {
-				name := strings.TrimSpace(line)
-				if name == "network-headscale" || name == "systemd-network-headscale" {
-					targetContainer = name
-					break
-				}
-				if name == "network" || name == "systemd-network" {
-					targetContainer = name
-				}
-			}
-		}
+		targetContainer, runuserPrefix := findHeadscaleTarget()
 
-		var args []string
+		var podmanArgs []string
 		switch cmdType {
 		case "preauthkey_create":
 			// Assicura che l'utente 'default' esista in Headscale
-			_ = exec.Command("podman", "exec", targetContainer, "headscale", "users", "create", "default").Run()
-			args = []string{"exec", targetContainer, "headscale", "preauthkeys", "create", "-u", "default", "--reusable=false", "--expiration", "1h"}
+			ensureCmd := append(runuserPrefix, "podman", "exec", targetContainer, "headscale", "users", "create", "default")
+			_ = exec.Command(ensureCmd[0], ensureCmd[1:]...).Run()
+			podmanArgs = []string{"exec", targetContainer, "headscale", "preauthkeys", "create", "-u", "default", "--reusable=false", "--expiration", "1h"}
 		case "nodes_list":
-			args = []string{"exec", targetContainer, "headscale", "nodes", "list", "--output", "json"}
+			podmanArgs = []string{"exec", targetContainer, "headscale", "nodes", "list", "--output", "json"}
 		case "users_list":
-			args = []string{"exec", targetContainer, "headscale", "users", "list", "--output", "json"}
+			podmanArgs = []string{"exec", targetContainer, "headscale", "users", "list", "--output", "json"}
 		default:
 			return Response{Ok: false, Error: "Comando Headscale non consentito: " + cmdType}
 		}
 
-		plan := []string{fmt.Sprintf("podman %s", strings.Join(args, " "))}
+		fullCmd := append(runuserPrefix, "podman")
+		fullCmd = append(fullCmd, podmanArgs...)
+		plan := []string{strings.Join(fullCmd, " ")}
+
 		if !req.Plan {
-			out, err := exec.Command("podman", args...).CombinedOutput()
+			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
 			if err != nil {
 				// Fallback su comando host se disponibile
-				if len(args) > 3 {
-					directArgs := args[3:]
+				if len(podmanArgs) > 3 {
+					directArgs := podmanArgs[3:]
 					if out2, err2 := exec.Command("headscale", directArgs...).CombinedOutput(); err2 == nil {
 						return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out2)), Plan: plan}
 					}
 				}
 				return Response{Ok: false, Error: fmt.Sprintf("Errore esecuzione Headscale: %v (%s)", err, strings.TrimSpace(string(out)))}
 			}
-			return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+			raw := strings.TrimSpace(string(out))
+			if cmdType == "preauthkey_create" {
+				lines := strings.Split(raw, "\n")
+				for i := len(lines) - 1; i >= 0; i-- {
+					l := strings.TrimSpace(lines[i])
+					if l != "" {
+						raw = l
+						break
+					}
+				}
+			}
+			return Response{Ok: true, Applied: true, Output: raw, Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
@@ -908,4 +910,46 @@ func (s *Server) processRequest(req Request) Response {
 		// Rifiuta tassativamente tutto ciò che non è nella lista chiusa
 		return Response{Ok: false, Error: "Action not allowed: " + req.Action}
 	}
+}
+
+// findHeadscaleTarget looks for a running Headscale container in root podman or in active user namespaces via runuser.
+// Returns (containerName, runuserPrefix).
+func findHeadscaleTarget() (string, []string) {
+	isMatch := func(name string) bool {
+		if strings.Contains(name, "cloudflared") {
+			return false
+		}
+		return name == "network" || name == "systemd-network" ||
+			name == "network-headscale" || name == "systemd-network-headscale" ||
+			strings.HasPrefix(name, "network-") || strings.HasPrefix(name, "systemd-network-")
+	}
+
+	// 1. Try root podman ps
+	if out, err := exec.Command("podman", "ps", "--format", "{{.Names}}").Output(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			name := strings.TrimSpace(line)
+			if isMatch(name) {
+				return name, nil
+			}
+		}
+	}
+
+	// 2. Try rootless users in /run/user/<uid>
+	if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
+		for _, dir := range userDirs {
+			uid := filepath.Base(dir)
+			prefix := []string{"runuser", "-u", "#" + uid, "--"}
+			args := append(prefix, "podman", "ps", "--format", "{{.Names}}")
+			if out, err := exec.Command(args[0], args[1:]...).Output(); err == nil {
+				for _, line := range strings.Split(string(out), "\n") {
+					name := strings.TrimSpace(line)
+					if isMatch(name) {
+						return name, prefix
+					}
+				}
+			}
+		}
+	}
+
+	return "network", nil
 }
