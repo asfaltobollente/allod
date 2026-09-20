@@ -3319,7 +3319,7 @@ function updateThemeBadge(themeName) {
     const names = {
       default: (typeof t === 'function' ? t('theme_default', 'Default Slate') : 'Default Slate'),
       moderno: (typeof t === 'function' ? t('theme_moderno', 'Moderno') : 'Moderno'),
-      cia: (typeof t === 'function' ? t('theme_cia', 'CIA // Tactical') : 'CIA // Tactical'),
+      cia: (typeof t === 'function' ? t('theme_cia', 'CIA // Tactical (Tom Clancy)') : 'CIA // Tactical (Tom Clancy)'),
       allod: (typeof t === 'function' ? t('theme_allod', 'Allod') : 'Allod')
     };
     badge.textContent = names[themeName] || themeName;
