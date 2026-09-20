@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -458,3 +459,60 @@ func TestHelperNetBirdPlan(t *testing.T) {
 		t.Fatalf("expected network.netbird_up plan to succeed, got error: %s", resUp.Error)
 	}
 }
+
+func TestPatchSambaConfig(t *testing.T) {
+	sampleConf := `[global]
+   workgroup = WORKGROUP
+   server string = %h server
+
+[shares]
+   path = /mnt/allod-storage/shares
+   browseable = yes
+   read only = no
+   guest ok = yes
+
+[alice]
+   comment = Cartella privata di alice
+   path = /mnt/allod-storage/shares/alice
+   browseable = yes
+   read only = no
+   guest ok = no
+   valid users = alice
+   create mask = 0660
+   directory mask = 0770
+
+[bob]
+   comment = Cartella privata di bob
+   path = /mnt/allod-storage/shares/bob
+   browseable = yes
+   read only = no
+   guest ok = no
+   valid users = bob
+   create mask = 0660
+   directory mask = 0770
+`
+
+	patched := PatchSambaConfig(sampleConf)
+
+	// Verify global section has access based share enum
+	if !strings.Contains(patched, "access based share enum = yes") {
+		t.Errorf("expected access based share enum = yes in patched config")
+	}
+
+	// Verify alice and bob have access based share enum and hide unreadable
+	if !strings.Contains(patched, "valid users = alice") {
+		t.Errorf("expected valid users = alice to be preserved")
+	}
+	if !strings.Contains(patched, "hide unreadable = yes") {
+		t.Errorf("expected hide unreadable = yes to be added to user shares and shares")
+	}
+
+	// Idempotency: patching already patched config shouldn't duplicate lines
+	patchedTwice := PatchSambaConfig(patched)
+	countGlobalEnum := strings.Count(patchedTwice, "access based share enum = yes")
+	// 1 in [global] + 1 in [alice] + 1 in [bob] = 3
+	if countGlobalEnum != 3 {
+		t.Errorf("expected exactly 3 occurrences of access based share enum = yes, got %d", countGlobalEnum)
+	}
+}
+
