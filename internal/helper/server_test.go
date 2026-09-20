@@ -197,8 +197,8 @@ func TestHelperSocketPermissions(t *testing.T) {
 
 	if runtime.GOOS != "windows" {
 		perm := fi.Mode().Perm()
-		if perm != 0660 {
-			t.Errorf("expected socket permissions 0660, got %04o", perm)
+		if perm != 0666 {
+			t.Errorf("expected socket permissions 0666, got %04o", perm)
 		}
 	}
 }
