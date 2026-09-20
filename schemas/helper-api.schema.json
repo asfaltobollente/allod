@@ -30,7 +30,8 @@
             "network.netbird_status",
             "network.netbird_cli",
             "network.netbird_up",
-            "network.netbird_down"
+            "network.netbird_down",
+            "network.install_native"
           ]
         },
         "plan": {

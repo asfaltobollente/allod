@@ -35,6 +35,7 @@ var AllowedActions = []string{
 	"network.netbird_cli",
 	"network.netbird_up",
 	"network.netbird_down",
+	"network.install_native",
 }
 
 // AllowedServiceUnits defines systemd service units allowed to be restarted via service.restart.
@@ -961,8 +962,14 @@ func (s *Server) processRequest(req Request) Response {
 		return Response{Ok: true, Applied: false, Plan: plan}
 
 	case "network.netbird_up":
-		// Ensure kernel tun driver is loaded
+		// Ensure kernel tun and wireguard drivers are loaded
 		_ = exec.Command("modprobe", "tun").Run()
+		_ = exec.Command("modprobe", "wireguard").Run()
+
+		// Ensure host sysctls for WireGuard mesh forwarding
+		_ = exec.Command("sysctl", "-w", "net.ipv4.conf.all.src_valid_mark=1").Run()
+		_ = exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1").Run()
+		_ = exec.Command("sysctl", "-w", "net.ipv6.conf.all.forwarding=1").Run()
 
 		baseDir := "/mnt/allod-storage"
 		if envBase := os.Getenv("ALLOD_STORAGE_DIR"); envBase != "" {
@@ -1025,9 +1032,9 @@ func (s *Server) processRequest(req Request) Response {
 			"--name", "allod-netbird",
 			"--replace",
 			"--restart=always",
+			"--privileged",
 			"--network=host",
 			"--device=/dev/net/tun",
-			"--cap-add=NET_ADMIN",
 			"-v", fmt.Sprintf("%s:/var/lib/netbird:Z", dataDir),
 			"-v", fmt.Sprintf("%s:/etc/netbird:Z", dataDir),
 			"--env-file", envFile,
@@ -1040,6 +1047,17 @@ func (s *Server) processRequest(req Request) Response {
 				return Response{Ok: false, Error: fmt.Sprintf("Errore avvio container NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
 			}
 			return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "network.install_native":
+		plan := []string{"curl -fsSL https://pkgs.netbird.io/install.sh | sh"}
+		if !req.Plan {
+			out, err := exec.Command("sh", "-c", "curl -fsSL https://pkgs.netbird.io/install.sh | sh").CombinedOutput()
+			if err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore installazione NetBird nativo: %v (%s)", err, strings.TrimSpace(string(out)))}
+			}
+			return Response{Ok: true, Applied: true, Output: string(out), Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
