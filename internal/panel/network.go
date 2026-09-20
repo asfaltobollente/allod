@@ -27,7 +27,7 @@ type PanelResponse struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// NetworkHandler handles network and Headscale mesh operations.
+// NetworkHandler handles network and NetBird mesh operations.
 type NetworkHandler struct {
 	Helper        HelperClient
 	GetConfigPath func() string
@@ -45,7 +45,26 @@ func RegisterNetworkRoutes(mux *http.ServeMux, h *NetworkHandler) {
 
 	mux.HandleFunc("/api/network/status", h.handleStatus)
 	mux.HandleFunc("/api/network/configure", h.handleConfigure)
-	mux.HandleFunc("/api/network/preauth-key", h.handlePreauthKey)
+	mux.HandleFunc("/api/network/preauth-key", h.handlePairingInfo)
+	mux.HandleFunc("/api/network/pairing-info", h.handlePairingInfo)
+}
+
+type netbirdStatusJSON struct {
+	NetbirdIP  string `json:"netbirdIp"`
+	PublicKey  string `json:"publicKey"`
+	Management struct {
+		Connected bool   `json:"connected"`
+		URL       string `json:"url"`
+	} `json:"management"`
+	Signal struct {
+		Connected bool   `json:"connected"`
+		URL       string `json:"url"`
+	} `json:"signal"`
+	Peers struct {
+		Total     int                      `json:"total"`
+		Connected int                      `json:"connected"`
+		Details   []map[string]interface{} `json:"details"`
+	} `json:"peers"`
 }
 
 func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -59,67 +78,100 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	netLevel := "off"
 	if cfg != nil && cfg.Modules != nil {
-		if m, ok := cfg.Modules["network"]; ok {
+		if m, ok := cfg.Modules["network"]; ok && m.Level != "" {
 			netLevel = m.Level
 		}
 	}
 
 	baseDir := quadlet.ResolvedStorageBaseDir()
-	tokenFile := filepath.Join(baseDir, "network", "cloudflared.token")
-	secretEnvFile := filepath.Join(baseDir, "network", "secrets", "cloudflared.env")
-	tokBytes, _ := os.ReadFile(secretEnvFile)
-	if len(tokBytes) == 0 {
-		tokBytes, _ = os.ReadFile(tokenFile)
-	}
-	hasToken := len(strings.TrimSpace(string(tokBytes))) > 0
+	secretEnvFile := filepath.Join(baseDir, "network", "secrets", "netbird.env")
 
-	hsConfigFile := filepath.Join(baseDir, "network", "headscale", "config", "config.yaml")
-	domain := ""
-	if hsBytes, err := os.ReadFile(hsConfigFile); err == nil {
-		lines := strings.Split(string(hsBytes), "\n")
-		for _, line := range lines {
+	setupKey := ""
+	managementURL := "https://api.netbird.io:443"
+	if envBytes, err := os.ReadFile(secretEnvFile); err == nil {
+		for _, line := range strings.Split(string(envBytes), "\n") {
 			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "server_url:") {
-				parts := strings.SplitN(trimmed, ":", 2)
-				if len(parts) == 2 {
-					domain = strings.TrimSpace(parts[1])
-					domain = strings.Trim(domain, `"'`)
+			if strings.HasPrefix(trimmed, "NB_SETUP_KEY=") {
+				setupKey = strings.TrimSpace(strings.TrimPrefix(trimmed, "NB_SETUP_KEY="))
+				setupKey = strings.Trim(setupKey, `"'`)
+			} else if strings.HasPrefix(trimmed, "NB_MANAGEMENT_URL=") {
+				val := strings.TrimSpace(strings.TrimPrefix(trimmed, "NB_MANAGEMENT_URL="))
+				val = strings.Trim(val, `"'`)
+				if val != "" {
+					managementURL = val
 				}
-				break
 			}
 		}
 	}
 
-	nodesList := []map[string]interface{}{}
-	meshIP := "100.64.0.1"
-	if out, err := executeHeadscale("nodes_list", h.Helper); err == nil && out != "" {
-		_ = json.Unmarshal([]byte(out), &nodesList)
+	mode := netLevel
+	if mode != "selfhosted" {
+		mode = "cloud"
+	}
+	hasKey := len(setupKey) > 0
+
+	meshIP := "--"
+	connected := false
+	peersCount := 0
+	peersList := []map[string]interface{}{}
+
+	if out, err := executeNetBirdStatus(h.Helper); err == nil && out != "" {
+		var nbStatus netbirdStatusJSON
+		if jsonErr := json.Unmarshal([]byte(out), &nbStatus); jsonErr == nil {
+			if nbStatus.NetbirdIP != "" {
+				meshIP = strings.Split(nbStatus.NetbirdIP, "/")[0]
+			}
+			connected = nbStatus.Management.Connected
+			peersCount = nbStatus.Peers.Total
+			if nbStatus.Peers.Details != nil {
+				peersList = nbStatus.Peers.Details
+			}
+			if nbStatus.Management.URL != "" {
+				managementURL = nbStatus.Management.URL
+			}
+		}
+	}
+
+	// If container status was not reachable via JSON CLI, check config.json or fallback
+	if meshIP == "--" && hasKey && netLevel != "off" {
+		nbConfigFile := filepath.Join(baseDir, "network", "netbird", "config.json")
+		if cfgBytes, err := os.ReadFile(nbConfigFile); err == nil {
+			var rawCfg map[string]interface{}
+			if err := json.Unmarshal(cfgBytes, &rawCfg); err == nil {
+				if ip, ok := rawCfg["WireGuardIp"].(string); ok && ip != "" {
+					meshIP = strings.Split(ip, "/")[0]
+					connected = true
+				}
+			}
+		}
+	}
+
+	if meshIP == "--" && hasKey && netLevel != "off" {
+		meshIP = "100.64.0.1"
 	}
 
 	data := map[string]interface{}{
-		"level":       netLevel,
-		"enabled":     netLevel != "off",
-		"has_token":   hasToken,
-		"server_url":  domain,
-		"mesh_ip":     meshIP,
-		"nodes_count": len(nodesList),
-		"nodes":       nodesList,
+		"level":          netLevel,
+		"enabled":        netLevel != "off",
+		"mode":           mode,
+		"has_key":        hasKey,
+		"management_url": managementURL,
+		"mesh_ip":        meshIP,
+		"connected":      connected,
+		"peers_count":    peersCount,
+		"nodes_count":    peersCount,
+		"peers":          peersList,
+		"nodes":          peersList,
 	}
 
 	json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
 }
 
-// executeHeadscale attempts to execute a Headscale command directly in the rootless Podman
-// session first. If direct execution fails or container is not running locally, it falls back
-// to the root helper client.
-func executeHeadscale(cmdType string, client HelperClient) (string, error) {
+// executeNetBirdStatus queries status from the running NetBird container or helper daemon.
+func executeNetBirdStatus(client HelperClient) (string, error) {
 	isMatch := func(name string) bool {
-		if strings.Contains(name, "cloudflared") {
-			return false
-		}
 		return name == "network" || name == "systemd-network" ||
-			name == "network-headscale" || name == "systemd-network-headscale" ||
-			strings.HasPrefix(name, "network-") || strings.HasPrefix(name, "systemd-network-")
+			name == "network-netbird" || name == "systemd-network-netbird"
 	}
 
 	target := ""
@@ -134,58 +186,21 @@ func executeHeadscale(cmdType string, client HelperClient) (string, error) {
 	}
 
 	if target != "" {
-		switch cmdType {
-		case "preauthkey_create":
-			// Ensure default user exists
-			_ = exec.Command("podman", "exec", target, "headscale", "users", "create", "default").Run()
-			cmd := exec.Command("podman", "exec", target, "headscale", "preauthkeys", "create", "-u", "default", "--reusable=false", "--expiration", "1h")
-			if out, err := cmd.Output(); err == nil {
-				lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-				for i := len(lines) - 1; i >= 0; i-- {
-					l := strings.TrimSpace(lines[i])
-					if l != "" {
-						return l, nil
-					}
-				}
-			}
-		case "nodes_list":
-			cmd := exec.Command("podman", "exec", target, "headscale", "nodes", "list", "--output", "json")
-			if out, err := cmd.Output(); err == nil {
-				return strings.TrimSpace(string(out)), nil
-			}
-		case "users_list":
-			cmd := exec.Command("podman", "exec", target, "headscale", "users", "list", "--output", "json")
-			if out, err := cmd.Output(); err == nil {
-				return strings.TrimSpace(string(out)), nil
-			}
+		cmd := exec.Command("podman", "exec", target, "netbird", "status", "--json")
+		if out, err := cmd.Output(); err == nil {
+			return strings.TrimSpace(string(out)), nil
 		}
 	}
 
 	// Fallback to helper client
 	if client != nil {
-		resp, err := client.Execute("network.headscale_cli", map[string]interface{}{"command": cmdType}, false)
-		if err == nil && resp.Ok {
-			raw := strings.TrimSpace(resp.Output)
-			if cmdType == "preauthkey_create" {
-				lines := strings.Split(raw, "\n")
-				for i := len(lines) - 1; i >= 0; i-- {
-					l := strings.TrimSpace(lines[i])
-					if l != "" {
-						return l, nil
-					}
-				}
-			}
-			return raw, nil
-		}
-		if resp.Error != "" {
-			return "", fmt.Errorf("%s", resp.Error)
-		}
-		if err != nil {
-			return "", err
+		resp, err := client.Execute("network.netbird_status", nil, false)
+		if err == nil && resp.Ok && resp.Output != "" {
+			return strings.TrimSpace(resp.Output), nil
 		}
 	}
 
-	return "", fmt.Errorf("impossibile eseguire il comando headscale: container non trovato")
+	return "", fmt.Errorf("container NetBird non attivo")
 }
 
 func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request) {
@@ -196,8 +211,9 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		Domain      string `json:"domain"`
-		TunnelToken string `json:"tunnel_token"`
+		Mode          string `json:"mode"`
+		SetupKey      string `json:"setup_key"`
+		ManagementURL string `json:"management_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -205,9 +221,17 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	domain := strings.TrimSpace(req.Domain)
-	if domain != "" && !strings.HasPrefix(domain, "http://") && !strings.HasPrefix(domain, "https://") {
-		domain = "https://" + domain
+	mode := strings.TrimSpace(req.Mode)
+	if mode == "" || (mode != "cloud" && mode != "selfhosted") {
+		mode = "cloud"
+	}
+
+	setupKey := strings.TrimSpace(req.SetupKey)
+	mgmtURL := strings.TrimSpace(req.ManagementURL)
+	if mode == "cloud" {
+		mgmtURL = "https://api.netbird.io:443"
+	} else if mgmtURL != "" && !strings.HasPrefix(mgmtURL, "http://") && !strings.HasPrefix(mgmtURL, "https://") {
+		mgmtURL = "https://" + mgmtURL
 	}
 
 	baseDir := quadlet.ResolvedStorageBaseDir()
@@ -216,34 +240,47 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 	secretsDir := filepath.Join(netDir, "secrets")
 	_ = os.MkdirAll(secretsDir, 0700)
 
-	if req.TunnelToken != "" {
-		tokClean := strings.TrimSpace(req.TunnelToken)
-		secretEnv := filepath.Join(secretsDir, "cloudflared.env")
-		_ = os.WriteFile(secretEnv, []byte(fmt.Sprintf("TUNNEL_TOKEN=%s\n", tokClean)), 0600)
-		tokenFile := filepath.Join(netDir, "cloudflared.token")
-		_ = os.WriteFile(tokenFile, []byte(tokClean), 0600)
-		envFile := filepath.Join(netDir, "cloudflared.env")
-		_ = os.WriteFile(envFile, []byte(fmt.Sprintf("TUNNEL_TOKEN=%s\n", tokClean)), 0600)
-	}
+	netbirdEnvFile := filepath.Join(secretsDir, "netbird.env")
 
-	if domain != "" {
-		hsConfigFile := filepath.Join(netDir, "headscale", "config", "config.yaml")
-		if hsBytes, err := os.ReadFile(hsConfigFile); err == nil {
-			content := string(hsBytes)
-			lines := strings.Split(content, "\n")
-			newLines := []string{}
-			for _, l := range lines {
-				if strings.HasPrefix(strings.TrimSpace(l), "server_url:") {
-					newLines = append(newLines, fmt.Sprintf("server_url: %s", domain))
-				} else {
-					newLines = append(newLines, l)
+	// Read existing setup key if omitted in request
+	if setupKey == "" {
+		if curBytes, err := os.ReadFile(netbirdEnvFile); err == nil {
+			for _, line := range strings.Split(string(curBytes), "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "NB_SETUP_KEY=") {
+					setupKey = strings.TrimSpace(strings.TrimPrefix(trimmed, "NB_SETUP_KEY="))
+					setupKey = strings.Trim(setupKey, `"'`)
+					break
 				}
 			}
-			_ = os.WriteFile(hsConfigFile, []byte(strings.Join(newLines, "\n")), 0644)
 		}
 	}
 
-	// Rigenera unità Quadlet per riflettere le modifiche
+	envContent := fmt.Sprintf("# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=%s\nNB_MANAGEMENT_URL=%s\n", setupKey, mgmtURL)
+	if err := os.WriteFile(netbirdEnvFile, []byte(envContent), 0600); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore salvataggio secret: %v", err)})
+		return
+	}
+
+	// Update level in config.yaml
+	cfgPath := ""
+	if h.GetConfigPath != nil {
+		cfgPath = h.GetConfigPath()
+	}
+	if cfgPath != "" {
+		if cfg, err := config.LoadConfig(cfgPath); err == nil {
+			if cfg.Modules == nil {
+				cfg.Modules = make(map[string]config.ModuleConfig)
+			}
+			mCfg := cfg.Modules["network"]
+			mCfg.Level = mode
+			cfg.Modules["network"] = mCfg
+			_ = cfg.Save(cfgPath)
+		}
+	}
+
+	// Regenerate Quadlet unit files for NetBird
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		quadDir := filepath.Join(home, ".config", "containers", "systemd")
@@ -253,7 +290,7 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 		}
 		mPath := filepath.Join(modDir, "network", "module.yaml")
 		if m, err := manifest.LoadManifest(mPath); err == nil {
-			if genRes, err := quadlet.Generate("network", m, "hybrid"); err == nil {
+			if genRes, err := quadlet.Generate("network", m, mode); err == nil {
 				for fname, content := range genRes.Files {
 					_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
 				}
@@ -262,53 +299,69 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
 	}
 
-	// Riavvia micro-servizi se attivi
-	_ = exec.Command("systemctl", "--user", "restart", "network", "network-headscale", "network-cloudflared").Run()
+	// Restart network service
+	_ = exec.Command("systemctl", "--user", "restart", "network").Run()
 
-	json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Configurazione salvata"})
+	json.NewEncoder(w).Encode(PanelResponse{
+		Status:  "ok",
+		Message: "Configurazione NetBird salvata con successo! Riavvio servizio in corso...",
+	})
 }
 
-func (h *NetworkHandler) handlePreauthKey(w http.ResponseWriter, r *http.Request) {
+func (h *NetworkHandler) handlePairingInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
 
-	key, err := executeHeadscale("preauthkey_create", h.Helper)
-	if err != nil || key == "" {
-		errMsg := "Errore esecuzione comando Headscale (verifica che il modulo network sia avviato)"
-		if err != nil {
-			errMsg = err.Error()
+	cfgPath := ""
+	if h.GetConfigPath != nil {
+		cfgPath = h.GetConfigPath()
+	}
+	cfg, _ := config.LoadConfig(cfgPath)
+
+	netLevel := "cloud"
+	if cfg != nil && cfg.Modules != nil {
+		if m, ok := cfg.Modules["network"]; ok && m.Level != "" && m.Level != "off" {
+			netLevel = m.Level
 		}
-		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
-		return
 	}
 
 	baseDir := quadlet.ResolvedStorageBaseDir()
-	hsConfigFile := filepath.Join(baseDir, "network", "headscale", "config", "config.yaml")
-	domain := ""
-	if hsBytes, err := os.ReadFile(hsConfigFile); err == nil {
-		lines := strings.Split(string(hsBytes), "\n")
-		for _, line := range lines {
+	secretEnvFile := filepath.Join(baseDir, "network", "secrets", "netbird.env")
+
+	setupKey := ""
+	managementURL := "https://api.netbird.io:443"
+	if envBytes, err := os.ReadFile(secretEnvFile); err == nil {
+		for _, line := range strings.Split(string(envBytes), "\n") {
 			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "server_url:") {
-				parts := strings.SplitN(trimmed, ":", 2)
-				if len(parts) == 2 {
-					domain = strings.TrimSpace(parts[1])
-					domain = strings.Trim(domain, `"'`)
+			if strings.HasPrefix(trimmed, "NB_SETUP_KEY=") {
+				setupKey = strings.TrimSpace(strings.TrimPrefix(trimmed, "NB_SETUP_KEY="))
+				setupKey = strings.Trim(setupKey, `"'`)
+			} else if strings.HasPrefix(trimmed, "NB_MANAGEMENT_URL=") {
+				val := strings.TrimSpace(strings.TrimPrefix(trimmed, "NB_MANAGEMENT_URL="))
+				val = strings.Trim(val, `"'`)
+				if val != "" {
+					managementURL = val
 				}
-				break
 			}
+		}
+	}
+
+	meshIP := "100.64.0.1"
+	if out, err := executeNetBirdStatus(h.Helper); err == nil && out != "" {
+		var nbStatus netbirdStatusJSON
+		if jsonErr := json.Unmarshal([]byte(out), &nbStatus); jsonErr == nil && nbStatus.NetbirdIP != "" {
+			meshIP = strings.Split(nbStatus.NetbirdIP, "/")[0]
 		}
 	}
 
 	json.NewEncoder(w).Encode(PanelResponse{
 		Status: "ok",
 		Data: map[string]interface{}{
-			"key":        key,
-			"server_url": domain,
-			"expires_in": "1 ora",
+			"mode":           netLevel,
+			"management_url": managementURL,
+			"mesh_ip":        meshIP,
+			"has_key":        len(setupKey) > 0,
+			"key":            setupKey,
+			"server_url":     managementURL,
 		},
 	})
 }

@@ -7,38 +7,27 @@ platforms: [amd64, arm64]
 levels:
   off:
     ram_mb: 0
-  hybrid:
-    ram_mb: 120
+  cloud:
+    ram_mb: 40
     requires:
       modules: [storage]
-    grants: [Accesso remoto sicuro WireGuard tramite Headscale + Cloudflare Shield, zero porte aperte]
-  wireguard:
-    ram_mb: 50
+    grants: [Accesso remoto sicuro WireGuard tramite NetBird Cloud Europeo (Francoforte), zero porte aperte]
+  selfhosted:
+    ram_mb: 40
     requires:
       modules: [storage]
-    grants: [WireGuard nativo sovrano con QR code, zero cloud terze parti]
-  tailscale:
-    ram_mb: 60
-    requires:
-      modules: [storage]
-    grants: [Client Tailscale connesso a control plane cloud ufficiale]
+    grants: [Accesso remoto sicuro WireGuard tramite NetBird Server Self-Hosted sovrano]
 
-ports:
-  - n: 8085
-    scope: localhost
-    share: none
+ports: []
 
 privileges:
   userns: rootless
-  devices: []
+  devices: [/dev/net/tun]
   caps: [NET_ADMIN]
 
 images:
-  - ref: docker.io/headscale/headscale
-    tag: "0.25.1"
-    channel: patch
-  - ref: docker.io/cloudflare/cloudflared
-    tag: "2026.9.1"
+  - ref: docker.io/netbirdio/netbird
+    tag: "0.35.7"
     channel: patch
 
 update:
@@ -46,18 +35,16 @@ update:
   breaks_mobile_apps: false
 
 transitions:
-  off -> hybrid: safe
-  hybrid -> off: safe
-  off -> wireguard: safe
-  wireguard -> off: safe
-  off -> tailscale: safe
-  tailscale -> off: safe
-  hybrid -> wireguard: safe
-  wireguard -> hybrid: safe
+  off -> cloud: safe
+  cloud -> off: safe
+  off -> selfhosted: safe
+  selfhosted -> off: safe
+  cloud -> selfhosted: safe
+  selfhosted -> cloud: safe
 
 datasets:
   - id: network
-    includes: [config, db]
+    includes: [config]
 
 help:
   en: help/network.en.md

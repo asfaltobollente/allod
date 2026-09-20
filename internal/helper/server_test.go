@@ -405,7 +405,7 @@ func TestInvalidArgumentRejection(t *testing.T) {
 			args:   map[string]interface{}{"mount": "/etc/shadow"},
 		},
 		{
-			name:   "network.headscale_cli unallowed command",
+			name:   "network.headscale_cli retired action",
 			action: "network.headscale_cli",
 			args:   map[string]interface{}{"command": "delete_all"},
 		},
@@ -430,5 +430,31 @@ func TestInvalidArgumentRejection(t *testing.T) {
 				t.Errorf("expected non-empty error for %s", tc.name)
 			}
 		})
+	}
+}
+
+func TestHelperNetBirdPlan(t *testing.T) {
+	s := &Server{}
+	req := Request{
+		Action: "network.netbird_status",
+		Plan:   true,
+		Args:   map[string]interface{}{},
+	}
+	res := s.processRequest(req)
+	if !res.Ok {
+		t.Fatalf("expected network.netbird_status plan to succeed, got error: %s", res.Error)
+	}
+	if len(res.Plan) != 1 {
+		t.Errorf("expected 1 plan item, got %d", len(res.Plan))
+	}
+
+	reqUp := Request{
+		Action: "network.netbird_up",
+		Plan:   true,
+		Args:   map[string]interface{}{},
+	}
+	resUp := s.processRequest(reqUp)
+	if !resUp.Ok {
+		t.Fatalf("expected network.netbird_up plan to succeed, got error: %s", resUp.Error)
 	}
 }

@@ -159,15 +159,15 @@ function renderLaunchpad() {
     },
     {
       id: 'network',
-      name: 'WireGuard Mesh (Headscale)',
+      name: 'NetBird Sovereign Mesh',
       icon: '🌐',
       color: '#f59e0b',
-      desc: 'Rete mesh privata crittografata punto-punto per accedere a tutti i servizi da fuori casa con zero porte aperte sul router.',
+      desc: 'Rete mesh WireGuard sovrana punto-punto per accedere a Immich, Jellyfin, Nextcloud e Samba da remoto con zero porte aperte sul router.',
       port: null,
       url: null,
       path: null,
-      primaryActionText: '📱 Associa Smartphone',
-      secondaryActionText: '⚙️ Configura Tunnel'
+      primaryActionText: '📱 Connetti Dispositivi',
+      secondaryActionText: '⚙️ Configura NetBird'
     },
     {
       id: 'storage',
@@ -715,11 +715,11 @@ const moduleTechInfo = {
       linkProtocol: 'http'
     },
     network: {
-      product: 'Headscale (WireGuard) + Cloudflare Shield',
-      desc: 'Zero-trust WireGuard mesh network for ultra-secure remote access to Immich, Jellyfin, and Web Panel with zero open router ports.',
-      db: 'SQLite (Embedded /var/lib/headscale)',
-      dbNote: 'Coordinates WireGuard public keys and IP allocation. Actual media and photos travel direct P2P outside Cloudflare.',
-      linkPort: 8085,
+      product: 'NetBird (WireGuard + WebRTC Mesh)',
+      desc: 'Zero-trust WireGuard mesh network for ultra-secure remote access to Immich, Jellyfin, and Samba with zero open router ports.',
+      db: 'NetBird Config (/etc/netbird)',
+      dbNote: 'Peer-to-peer WireGuard cryptography with automated WebRTC NAT traversal. Full support for SMB TCP 445 and 4K Jellyfin streaming.',
+      linkPort: null,
       linkProtocol: 'http'
     },
     watch: {
@@ -777,11 +777,11 @@ const moduleTechInfo = {
       linkProtocol: 'http'
     },
     network: {
-      product: 'Headscale (WireGuard) + Cloudflare Shield',
-      desc: 'Rete mesh privata WireGuard a zero-trust per accedere a Immich, Jellyfin e al pannello da fuori casa senza aprire porte sul router.',
-      db: 'SQLite (Incorporato /var/lib/headscale)',
-      dbNote: 'Gestisce lo scambio chiavi crittografiche. Streaming e foto viaggiano in P2P diretto WireGuard fuori da Cloudflare.',
-      linkPort: 8085,
+      product: 'NetBird (WireGuard + WebRTC Mesh)',
+      desc: 'Rete mesh privata WireGuard a zero-trust per accedere a Immich, Jellyfin, Nextcloud e Samba da fuori casa senza aprire porte sul router.',
+      db: 'Configurazione NetBird (/etc/netbird)',
+      dbNote: 'Crittografia WireGuard punto-punto con NAT traversal WebRTC automatico. Supporto nativo per streaming Jellyfin 4K e file sharing Samba TCP 445.',
+      linkPort: null,
       linkProtocol: 'http'
     },
     watch: {

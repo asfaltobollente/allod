@@ -1,4 +1,16 @@
-// Network module for Allod Panel (ES module)
+// Network module for Allod Panel (NetBird Sovereign Mesh - ES module)
+
+export function toggleNetworkModeUI() {
+  const modeSelect = document.getElementById('network-mode-select');
+  const mgmtGroup = document.getElementById('network-mgmt-group');
+  if (!modeSelect || !mgmtGroup) return;
+
+  if (modeSelect.value === 'selfhosted') {
+    mgmtGroup.style.display = 'block';
+  } else {
+    mgmtGroup.style.display = 'none';
+  }
+}
 
 export async function openNetworkConfigModal() {
   const modal = document.getElementById('network-config-modal');
@@ -8,10 +20,25 @@ export async function openNetworkConfigModal() {
     const res = await fetch('/api/network/status');
     const json = await res.json();
     if (json.status === 'ok' && json.data) {
-      const domainInput = document.getElementById('network-domain-input');
-      if (domainInput && json.data.server_url) {
-        domainInput.value = json.data.server_url;
+      const modeSelect = document.getElementById('network-mode-select');
+      const mgmtInput = document.getElementById('network-mgmt-url-input');
+      const keyInput = document.getElementById('network-setup-key-input');
+
+      if (modeSelect && json.data.mode) {
+        modeSelect.value = json.data.mode;
       }
+      if (mgmtInput && json.data.management_url) {
+        mgmtInput.value = json.data.management_url;
+      }
+      if (keyInput) {
+        keyInput.value = '';
+        if (json.data.has_key) {
+          keyInput.placeholder = '●●●●●●●●●● (Già configurata - lascia vuoto per mantenere)';
+        } else {
+          keyInput.placeholder = 'es. 4A8B7C21-D4E5-...';
+        }
+      }
+      toggleNetworkModeUI();
     }
   } catch (_) {}
 
@@ -24,34 +51,40 @@ export function closeNetworkConfigModal() {
 }
 
 export async function saveNetworkConfig() {
-  const domainInput = document.getElementById('network-domain-input');
-  const tokenInput = document.getElementById('network-token-input');
+  const modeSelect = document.getElementById('network-mode-select');
+  const keyInput = document.getElementById('network-setup-key-input');
+  const mgmtInput = document.getElementById('network-mgmt-url-input');
   const btn = document.getElementById('network-save-btn');
 
-  const domain = domainInput ? domainInput.value.trim() : '';
-  const token = tokenInput ? tokenInput.value.trim() : '';
+  const mode = modeSelect ? modeSelect.value : 'cloud';
+  const setupKey = keyInput ? keyInput.value.trim() : '';
+  const managementURL = mgmtInput ? mgmtInput.value.trim() : '';
 
-  if (!domain && !token) {
+  if (mode === 'selfhosted' && !managementURL) {
     if (typeof showAlert === 'function') {
-      showAlert('Inserisci il dominio o il token del tunnel', 'warning');
+      showAlert('Inserisci l\'URL del server di coordinamento NetBird per la modalità Self-Hosted', 'warning');
     }
     return;
   }
 
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span>⏳ Salvataggio...</span>';
+    btn.innerHTML = '<span>⏳ Salvataggio NetBird in corso...</span>';
   }
 
   try {
     const res = await fetch('/api/network/configure', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain: domain, tunnel_token: token })
+      body: JSON.stringify({
+        mode: mode,
+        setup_key: setupKey,
+        management_url: managementURL
+      })
     });
     const data = await res.json();
     if (data.status === 'ok') {
-      if (typeof showAlert === 'function') showAlert(data.message || 'Configurazione tunnel salvata!', 'success');
+      if (typeof showAlert === 'function') showAlert(data.message || 'Configurazione NetBird salvata!', 'success');
       closeNetworkConfigModal();
       if (typeof refreshData === 'function') refreshData();
     } else {
@@ -62,7 +95,7 @@ export async function saveNetworkConfig() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      const label = typeof t === 'function' ? t('network_modal_save', 'Save & Restart Services') : 'Save & Restart Services';
+      const label = typeof t === 'function' ? t('network_modal_save', 'Salva e Riavvia NetBird') : 'Salva e Riavvia NetBird';
       btn.innerHTML = label;
     }
   }
@@ -72,29 +105,27 @@ export async function openNetworkPairingModal() {
   const modal = document.getElementById('network-pairing-modal');
   if (!modal) return;
 
+  const modeEl = document.getElementById('pairing-mode-label');
+  const meshIpEl = document.getElementById('pairing-mesh-ip');
   const serverUrlEl = document.getElementById('pairing-server-url');
-  const authKeyEl = document.getElementById('pairing-auth-key');
 
+  if (modeEl) modeEl.textContent = 'Caricamento...';
+  if (meshIpEl) meshIpEl.textContent = '--';
   if (serverUrlEl) serverUrlEl.textContent = 'Caricamento...';
-  if (authKeyEl) authKeyEl.textContent = 'Generazione chiave crittografica in corso...';
 
   modal.classList.remove('hidden');
 
   try {
-    const res = await fetch('/api/network/preauth-key', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
+    const res = await fetch('/api/network/status');
     const data = await res.json();
     if (data.status === 'ok' && data.data) {
-      if (serverUrlEl) serverUrlEl.textContent = data.data.server_url || 'https://tuodominio.it';
-      if (authKeyEl) authKeyEl.textContent = data.data.key;
-    } else {
-      if (authKeyEl) authKeyEl.textContent = 'Errore: ' + (data.message || 'Verifica che il modulo network sia avviato');
+      const isSelf = data.data.mode === 'selfhosted';
+      if (modeEl) modeEl.textContent = isSelf ? 'NetBird Self-Hosted' : 'NetBird Cloud (EU)';
+      if (meshIpEl) meshIpEl.textContent = data.data.mesh_ip || '100.64.0.1';
+      if (serverUrlEl) serverUrlEl.textContent = data.data.management_url || 'https://api.netbird.io:443';
     }
   } catch (err) {
-    if (authKeyEl) authKeyEl.textContent = 'Errore di connessione: ' + err.message;
+    if (modeEl) modeEl.textContent = 'Errore di connessione';
   }
 }
 
@@ -104,6 +135,7 @@ export function closeNetworkPairingModal() {
 }
 
 // Bind to window object for inline HTML onclick handlers
+window.toggleNetworkModeUI = toggleNetworkModeUI;
 window.openNetworkConfigModal = openNetworkConfigModal;
 window.closeNetworkConfigModal = closeNetworkConfigModal;
 window.saveNetworkConfig = saveNetworkConfig;

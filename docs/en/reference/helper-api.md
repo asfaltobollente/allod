@@ -57,11 +57,10 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 | `smart.read` | Query SMART health status of a physical storage drive | `disk` (regex device / ID) | `smartctl -H /dev/disk/by-id/<disk>` |
 | `service.restart` | Restart an allowed Allod systemd service | `unit` (regex from `AllowedServiceUnits`) | `systemctl restart <unit>` (special update logic for `allod-helperd`) |
 | `storage.init` | Format disks and create initial Btrfs pool structure | `disks` (list/string of regex devices), `mode` (`single`\|`raid1`), `mount` (allowed path), `user` (optional regex) | `umount`, `mkfs.btrfs`, `mount`, `mkdir -p`, `chmod`, `chown` |
-| `storage.diagnostics` | Collect Btrfs filesystem usage and device stats | `mount` (optional allowed path) | `btrfs filesystem usage`, `btrfs device stats`, `btrfs filesystem df` |
-| `network.headscale_cli` | Execute controlled Headscale coordination commands | `command` (`preauthkey_create`\|`nodes_list`\|`users_list`) | `podman exec <container> headscale ...` (or host binary fallback) |
-| `network.preauthkey_create` | Direct action alias: generate Headscale pre-auth key | *(none)* | `podman exec <container> headscale preauthkeys create -u default ...` |
-| `network.nodes_list` | Direct action alias: query Headscale registered nodes | *(none)* | `podman exec <container> headscale nodes list --output json` |
-| `network.users_list` | Direct action alias: list Headscale mesh users | *(none)* | `podman exec <container> headscale users list --output json` |
+| `network.netbird_status` | Query NetBird mesh status and connected peers in JSON | *(none)* | `podman exec <container> netbird status --json` |
+| `network.netbird_cli` | Execute controlled NetBird CLI query | `command` (`status`\|`status_detail`) | `podman exec <container> netbird status ...` |
+| `network.netbird_up` | Connect node to NetBird overlay mesh | *(none)* | `podman exec <container> netbird up` |
+| `network.netbird_down` | Disconnect node from NetBird overlay mesh | *(none)* | `podman exec <container> netbird down` |
 
 ---
 
@@ -124,7 +123,7 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 * **Support for `plan: true`**: Yes.
 
 ### 10. `service.restart`
-* **Input & Validation**: `unit` must match `^[a-zA-Z0-9_.-]{1,64}$` AND exist in `AllowedServiceUnits` (`allod-helperd`, `allod-panel`, `smbd`, `smb`, `network`, `network-headscale`, `network-cloudflared`, `cloud`, `cloud-postgres`, `photos`, `photos-postgres`, `photos-valkey`, `media`, `backup`, `storage`, `nftables`).
+* **Input & Validation**: `unit` must match `^[a-zA-Z0-9_.-]{1,64}$` AND exist in `AllowedServiceUnits` (`allod-helperd`, `allod-panel`, `smbd`, `smb`, `network`, `network-netbird`, `cloud`, `cloud-postgres`, `photos`, `photos-postgres`, `photos-valkey`, `media`, `backup`, `storage`, `nftables`).
 * **Compromised Panel Impact**: Could restart whitelisted Allod services, causing temporary service interruption.
 * **Mitigations**: Closed allowlist of units; an attacker cannot restart arbitrary host services (e.g., `ssh`, `systemd-journald`, `login`).
 * **Idempotency**: Yes.
@@ -144,9 +143,9 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 * **Idempotency**: Yes (read-only).
 * **Support for `plan: true`**: Yes.
 
-### 13. `network.headscale_cli`, 14. `network.preauthkey_create`, 15. `network.nodes_list`, 16. `network.users_list`
-* **Input & Validation**: `command` is strictly restricted to an enum: `"preauthkey_create"`, `"nodes_list"`, or `"users_list"`. Direct action aliases require no arguments.
-* **Compromised Panel Impact**: Could generate a 1-hour single-use pre-auth key for joining the mesh or list connected mesh nodes and users.
-* **Mitigations**: Pre-auth keys are configured as single-use with an expiration of 1 hour. No arbitrary Headscale commands (such as deleting nodes or altering coordination settings) can be executed.
-* **Idempotency**: `nodes_list` and `users_list` are read-only. `preauthkey_create` creates a single ephemeral key.
+### 13. `network.netbird_status`, 14. `network.netbird_cli`, 15. `network.netbird_up`, 16. `network.netbird_down`
+* **Input & Validation**: `command` (for `network.netbird_cli`) is strictly restricted to an enum: `"status"`, `"status_detail"`. Direct actions require no arguments.
+* **Compromised Panel Impact**: Could query NetBird overlay network status, list connected peers, or trigger a disconnect/reconnect of the mesh client.
+* **Mitigations**: Read-only queries for status. Setup keys and tokens are not accepted over the socket (they are managed in `0600` secret files).
+* **Idempotency**: Status queries are read-only. Connect/disconnect actions are idempotent state changes.
 * **Support for `plan: true`**: Yes.

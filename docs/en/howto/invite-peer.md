@@ -1,12 +1,12 @@
 # How-to: Invite a Friend to your Ring
 
-Allod achieves decentralized data safety through **federated peer backup rings**. By connecting with friends over a secure WireGuard mesh (via Headscale/Tailscale), your nodes store encrypted, append-only backup replicas for each other.
+Allod achieves decentralized data safety through **federated peer backup rings**. By connecting with friends over a secure WireGuard mesh (via NetBird sovereign mesh), your nodes store encrypted, append-only backup replicas for each other.
 
 ---
 
 ## 1. Prerequisites
 
-* Two or more running Allod nodes connected to the same WireGuard/Headscale overlay network.
+* Two or more running Allod nodes connected to the same NetBird overlay network.
 * Mesh IP addresses for all participating nodes (e.g. `100.64.0.1`, `100.64.0.2`, `100.64.0.3`).
 
 ---

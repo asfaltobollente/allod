@@ -3,7 +3,6 @@ package panel
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -29,30 +28,28 @@ func TestNetworkStatus(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
 
-	// Create headscale config
-	hsCfgDir := filepath.Join(tempDir, "network", "headscale", "config")
-	if err := os.MkdirAll(hsCfgDir, 0755); err != nil {
-		t.Fatalf("failed to create hs cfg dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(hsCfgDir, "config.yaml"), []byte("server_url: https://vpn.test.example.com\n"), 0644); err != nil {
-		t.Fatalf("failed to write hs cfg: %v", err)
-	}
-
-	// Create cloudflared secret env
+	// Create netbird secret env
 	secDir := filepath.Join(tempDir, "network", "secrets")
 	if err := os.MkdirAll(secDir, 0700); err != nil {
 		t.Fatalf("failed to create secrets dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(secDir, "cloudflared.env"), []byte("TUNNEL_TOKEN=fake-token-123\n"), 0600); err != nil {
-		t.Fatalf("failed to write cloudflared.env: %v", err)
+	envContent := "NB_SETUP_KEY=nb-key-12345\nNB_MANAGEMENT_URL=https://api.netbird.io:443\n"
+	if err := os.WriteFile(filepath.Join(secDir, "netbird.env"), []byte(envContent), 0600); err != nil {
+		t.Fatalf("failed to write netbird.env: %v", err)
 	}
 
 	mock := &mockHelperClient{
 		executeFn: func(action string, args map[string]interface{}, plan bool) (helper.Response, error) {
-			if action == "network.headscale_cli" && args["command"] == "nodes_list" {
+			if action == "network.netbird_status" {
 				return helper.Response{
-					Ok:     true,
-					Output: `[{"id": 1, "name": "test-phone"}]`,
+					Ok: true,
+					Output: `{
+						"netbirdIp": "100.64.0.1/16",
+						"publicKey": "pubkey-xyz",
+						"management": { "connected": true, "url": "https://api.netbird.io:443" },
+						"signal": { "connected": true, "url": "https://signal.netbird.io:443" },
+						"peers": { "total": 2, "connected": 2, "details": [] }
+					}`,
 				}, nil
 			}
 			return helper.Response{Ok: false, Error: "unexpected action"}, nil
@@ -85,14 +82,17 @@ func TestNetworkStatus(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected map data, got %T", resp.Data)
 	}
-	if dataMap["has_token"] != true {
-		t.Errorf("expected has_token=true, got %v", dataMap["has_token"])
+	if dataMap["has_key"] != true {
+		t.Errorf("expected has_key=true, got %v", dataMap["has_key"])
 	}
-	if dataMap["server_url"] != "https://vpn.test.example.com" {
-		t.Errorf("expected server_url=https://vpn.test.example.com, got %v", dataMap["server_url"])
+	if dataMap["management_url"] != "https://api.netbird.io:443" {
+		t.Errorf("expected management_url=https://api.netbird.io:443, got %v", dataMap["management_url"])
 	}
-	if dataMap["nodes_count"] != float64(1) {
-		t.Errorf("expected nodes_count=1, got %v", dataMap["nodes_count"])
+	if dataMap["mesh_ip"] != "100.64.0.1" {
+		t.Errorf("expected mesh_ip=100.64.0.1, got %v", dataMap["mesh_ip"])
+	}
+	if dataMap["peers_count"] != float64(2) {
+		t.Errorf("expected peers_count=2, got %v", dataMap["peers_count"])
 	}
 }
 
@@ -106,7 +106,7 @@ func TestNetworkConfigure(t *testing.T) {
 		Helper: mock,
 	})
 
-	body := []byte(`{"domain":"mesh.example.com","tunnel_token":"my-secure-cf-tunnel-token"}`)
+	body := []byte(`{"mode":"selfhosted","setup_key":"my-netbird-setup-key","management_url":"mesh.example.com"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/network/configure", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -126,96 +126,55 @@ func TestNetworkConfigure(t *testing.T) {
 	}
 
 	// Verify secret env file was created
-	secEnvPath := filepath.Join(tempDir, "network", "secrets", "cloudflared.env")
+	secEnvPath := filepath.Join(tempDir, "network", "secrets", "netbird.env")
 	secBytes, err := os.ReadFile(secEnvPath)
 	if err != nil {
-		t.Fatalf("expected secrets/cloudflared.env to exist: %v", err)
+		t.Fatalf("expected secrets/netbird.env to exist: %v", err)
 	}
-	if !strings.Contains(string(secBytes), "TUNNEL_TOKEN=my-secure-cf-tunnel-token") {
-		t.Errorf("unexpected secret content: %s", string(secBytes))
+	content := string(secBytes)
+	if !strings.Contains(content, "NB_SETUP_KEY=my-netbird-setup-key") {
+		t.Errorf("expected NB_SETUP_KEY to be saved, got:\n%s", content)
+	}
+	if !strings.Contains(content, "NB_MANAGEMENT_URL=https://mesh.example.com") {
+		t.Errorf("expected NB_MANAGEMENT_URL with https:// prefix, got:\n%s", content)
 	}
 }
 
-func TestNetworkPreauthKey(t *testing.T) {
+func TestNetworkPairingInfo(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
 
-	hsCfgDir := filepath.Join(tempDir, "network", "headscale", "config")
-	_ = os.MkdirAll(hsCfgDir, 0755)
-	_ = os.WriteFile(filepath.Join(hsCfgDir, "config.yaml"), []byte("server_url: https://vpn.test.example.com\n"), 0644)
+	secDir := filepath.Join(tempDir, "network", "secrets")
+	_ = os.MkdirAll(secDir, 0700)
+	_ = os.WriteFile(filepath.Join(secDir, "netbird.env"), []byte("NB_SETUP_KEY=pair-key-xyz\nNB_MANAGEMENT_URL=https://mesh.test.lan\n"), 0600)
 
-	t.Run("success", func(t *testing.T) {
-		mock := &mockHelperClient{
-			executeFn: func(action string, args map[string]interface{}, plan bool) (helper.Response, error) {
-				if action == "network.headscale_cli" && args["command"] == "preauthkey_create" {
-					return helper.Response{
-						Ok:     true,
-						Output: "preauth-key-xyz-987654321",
-					}, nil
-				}
-				return helper.Response{Ok: false, Error: "not found"}, nil
-			},
-		}
-
-		mux := http.NewServeMux()
-		RegisterNetworkRoutes(mux, &NetworkHandler{
-			Helper: mock,
-		})
-
-		req := httptest.NewRequest(http.MethodPost, "/api/network/preauth-key", nil)
-		rec := httptest.NewRecorder()
-
-		mux.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d", rec.Code)
-		}
-
-		var resp PanelResponse
-		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("failed to decode: %v", err)
-		}
-		if resp.Status != "ok" {
-			t.Fatalf("expected status ok, got %s", resp.Status)
-		}
-		data := resp.Data.(map[string]interface{})
-		if data["key"] != "preauth-key-xyz-987654321" {
-			t.Errorf("expected key preauth-key-xyz-987654321, got %v", data["key"])
-		}
-		if data["server_url"] != "https://vpn.test.example.com" {
-			t.Errorf("expected server_url https://vpn.test.example.com, got %v", data["server_url"])
-		}
+	mock := &mockHelperClient{}
+	mux := http.NewServeMux()
+	RegisterNetworkRoutes(mux, &NetworkHandler{
+		Helper: mock,
 	})
 
-	t.Run("helper error", func(t *testing.T) {
-		mock := &mockHelperClient{
-			executeFn: func(action string, args map[string]interface{}, plan bool) (helper.Response, error) {
-				return helper.Response{
-					Ok:    false,
-					Error: "headscale daemon not running",
-				}, fmt.Errorf("command failed")
-			},
-		}
+	req := httptest.NewRequest(http.MethodPost, "/api/network/pairing-info", nil)
+	rec := httptest.NewRecorder()
 
-		mux := http.NewServeMux()
-		RegisterNetworkRoutes(mux, &NetworkHandler{
-			Helper: mock,
-		})
+	mux.ServeHTTP(rec, req)
 
-		req := httptest.NewRequest(http.MethodPost, "/api/network/preauth-key", nil)
-		rec := httptest.NewRecorder()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
 
-		mux.ServeHTTP(rec, req)
-
-		var resp PanelResponse
-		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("failed to decode: %v", err)
-		}
-		if resp.Status != "error" {
-			t.Fatalf("expected status error, got %s", resp.Status)
-		}
-		if !strings.Contains(resp.Message, "headscale daemon not running") {
-			t.Errorf("expected error message, got: %s", resp.Message)
-		}
-	})
+	var resp PanelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	if resp.Status != "ok" {
+		t.Fatalf("expected status ok, got %s", resp.Status)
+	}
+	data := resp.Data.(map[string]interface{})
+	if data["key"] != "pair-key-xyz" {
+		t.Errorf("expected key pair-key-xyz, got %v", data["key"])
+	}
+	if data["management_url"] != "https://mesh.test.lan" {
+		t.Errorf("expected management_url https://mesh.test.lan, got %v", data["management_url"])
+	}
 }
