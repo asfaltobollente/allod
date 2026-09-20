@@ -37,6 +37,12 @@ func Generate(modID string, m *manifest.Manifest, levelName string) (*GenerateRe
 
 	EnsureStorageDirectories(modID)
 
+	if modID == "network" {
+		// Network (NetBird) is managed at the system level by allod-helperd
+		// because WireGuard tunnel interfaces require root host capabilities.
+		return &GenerateResult{Files: map[string]string{}}, nil
+	}
+
 	if len(m.Images) == 0 {
 		// Native module: generate a .service unit instead of .container
 		result.IsNative = true

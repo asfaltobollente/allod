@@ -123,7 +123,7 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 * **Support for `plan: true`**: Yes.
 
 ### 10. `service.restart`
-* **Input & Validation**: `unit` must match `^[a-zA-Z0-9_.-]{1,64}$` AND exist in `AllowedServiceUnits` (`allod-helperd`, `allod-panel`, `smbd`, `smb`, `network`, `network-netbird`, `cloud`, `cloud-postgres`, `photos`, `photos-postgres`, `photos-valkey`, `media`, `backup`, `storage`, `nftables`).
+* **Input & Validation**: `unit` must match `^[a-zA-Z0-9_.-]{1,64}$` AND exist in `AllowedServiceUnits` (`allod-helperd`, `allod-panel`, `smbd`, `smb`, `network`, `network-netbird`, `netbird`, `cloud`, `cloud-postgres`, `photos`, `photos-postgres`, `photos-valkey`, `media`, `backup`, `storage`, `nftables`).
 * **Compromised Panel Impact**: Could restart whitelisted Allod services, causing temporary service interruption.
 * **Mitigations**: Closed allowlist of units; an attacker cannot restart arbitrary host services (e.g., `ssh`, `systemd-journald`, `login`).
 * **Idempotency**: Yes.
