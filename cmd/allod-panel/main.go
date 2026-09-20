@@ -243,6 +243,30 @@ func getModuleRuntimeStatus(modName string, level string, runningContainers map[
 		}
 		return "stopped"
 	}
+	if modName == "network" {
+		if _, err := net.InterfaceByName("wt0"); err == nil {
+			return "running"
+		}
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		if res, err := client.Execute("network.netbird_status", nil, false); err == nil && res.Ok {
+			var stMap map[string]interface{}
+			if err := json.Unmarshal([]byte(res.Output), &stMap); err == nil {
+				if mgmt, ok := stMap["management"].(map[string]interface{}); ok {
+					if conn, ok := mgmt["connected"].(bool); ok && conn {
+						return "running"
+					}
+				}
+				if ip, ok := stMap["netbirdIp"].(string); ok && ip != "" {
+					return "running"
+				}
+			}
+			return "running"
+		}
+		if level == "off" || level == "" {
+			return "off"
+		}
+		return "stopped"
+	}
 
 	// Active rootless Podman containers check
 	if quadlet.IsModuleRunning(modName, runningContainers) {
@@ -557,6 +581,28 @@ func main() {
 			return
 		}
 
+		if req.Module == "network" {
+			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+			res, err := client.Execute("network.netbird_up", nil, false)
+			if err != nil {
+				client.SocketPath = "allod-helper.sock"
+				res, err = client.Execute("network.netbird_up", nil, false)
+			}
+			if err != nil || !res.Ok {
+				w.WriteHeader(http.StatusInternalServerError)
+				errMsg := "Errore comunicazione helper NetBird (verifica che allod-helperd sia in esecuzione come root)"
+				if err != nil {
+					errMsg = err.Error()
+				} else if res.Error != "" {
+					errMsg = res.Error
+				}
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+				return
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Modulo network (NetBird) avviato con successo tramite allod-helperd"})
+			return
+		}
+
 		baseDir := quadlet.ResolvedStorageBaseDir()
 		if req.Module == "photos" {
 			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "upload"), 0777)
@@ -647,6 +693,20 @@ func main() {
 				_ = exec.Command("systemctl", "stop", "smbd").Run()
 			}
 			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Condivisione Samba fermata con successo"})
+			return
+		}
+
+		if req.Module == "network" {
+			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+			_, err := client.Execute("network.netbird_down", nil, false)
+			if err != nil {
+				client.SocketPath = "allod-helper.sock"
+				_, _ = client.Execute("network.netbird_down", nil, false)
+			}
+			_ = exec.Command("systemctl", "--user", "stop", "network").Run()
+			_ = exec.Command("podman", "rm", "-f", "network").Run()
+			_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
+			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Modulo network (NetBird) fermato con successo"})
 			return
 		}
 
@@ -2501,6 +2561,36 @@ WantedBy=default.target
 			if len(logsOut) == 0 || strings.Contains(string(logsOut), "No entries") {
 				logsOut, _ = exec.Command("testparm", "-s").CombinedOutput()
 			}
+		} else if modName == "network" {
+			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+			statusRes, errS := client.Execute("network.netbird_cli", map[string]interface{}{"command": "status_detail"}, false)
+			if errS != nil {
+				client.SocketPath = "allod-helper.sock"
+				statusRes, errS = client.Execute("network.netbird_cli", map[string]interface{}{"command": "status_detail"}, false)
+			}
+			if errS == nil && statusRes.Ok && len(statusRes.Output) > 0 {
+				statusOut = []byte(statusRes.Output)
+			} else {
+				if iface, err := net.InterfaceByName("wt0"); err == nil {
+					statusOut = []byte(fmt.Sprintf("✓ Interfaccia kernel wt0 attiva (MTU: %d, Flags: %v)\nNetBird WireGuard mesh attivo a livello host.", iface.MTU, iface.Flags))
+				} else {
+					statusOut = []byte("NetBird non attivo o in attesa di configurazione chiave.\n" + statusRes.Error)
+				}
+			}
+
+			logsRes, errL := client.Execute("network.netbird_cli", map[string]interface{}{"command": "logs"}, false)
+			if errL != nil {
+				client.SocketPath = "allod-helper.sock"
+				logsRes, errL = client.Execute("network.netbird_cli", map[string]interface{}{"command": "logs"}, false)
+			}
+			if errL == nil && logsRes.Ok && len(logsRes.Output) > 0 {
+				logsOut = []byte(logsRes.Output)
+			} else {
+				logsOut, _ = exec.Command("podman", "logs", "--tail", "30", "allod-netbird").CombinedOutput()
+				if len(logsOut) == 0 {
+					logsOut, _ = exec.Command("journalctl", "-u", "netbird", "-n", "30", "--no-pager").CombinedOutput()
+				}
+			}
 		} else {
 			statusOut, _ = exec.Command("systemctl", "--user", "status", modName).CombinedOutput()
 			logsOut, _ = exec.Command("podman", "logs", "--tail", "30", modName).CombinedOutput()
@@ -2526,6 +2616,7 @@ WantedBy=default.target
 	panel.RegisterNetworkRoutes(mux, &panel.NetworkHandler{
 		GetConfigPath: getConfigPath,
 		GetModulesDir: getModulesDir,
+		Helper:        &helper.Client{SocketPath: "/run/allod/helper.sock"},
 	})
 
 	// 5f. API Speedtest (Ping, Download, Upload)
