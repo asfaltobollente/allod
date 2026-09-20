@@ -362,6 +362,7 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/shares/public:z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z\n", baseDir))
 	case "network":
+		sb.WriteString(fmt.Sprintf("Volume=%s/network/netbird:/var/lib/netbird:Z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("Volume=%s/network/netbird:/etc/netbird:Z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/secrets/netbird.env\n", baseDir))
 	default:
