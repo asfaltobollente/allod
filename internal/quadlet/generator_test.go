@@ -122,37 +122,10 @@ func TestGenerateNetworkHybrid(t *testing.T) {
 		t.Fatalf("unexpected error generating network: %v", err)
 	}
 
-	if len(res.Files) != 1 {
-		t.Fatalf("expected 1 unit (network.container), got %d", len(res.Files))
-	}
-
-	netbirdUnit, ok := res.Files["network.container"]
-	if !ok {
-		t.Fatalf("network.container not generated")
-	}
-	if !strings.Contains(netbirdUnit, "Image=docker.io/netbirdio/netbird:0.79.0") {
-		t.Errorf("expected netbird image in unit, got:\n%s", netbirdUnit)
-	}
-	if !strings.Contains(netbirdUnit, "Network=host") {
-		t.Errorf("expected Network=host for netbird, got:\n%s", netbirdUnit)
-	}
-	if !strings.Contains(netbirdUnit, "Volume=") || !strings.Contains(netbirdUnit, "network/netbird:/var/lib/netbird:Z") {
-		t.Errorf("expected Volume for /var/lib/netbird, got:\n%s", netbirdUnit)
-	}
-	if !strings.Contains(netbirdUnit, "Volume=") || !strings.Contains(netbirdUnit, "network/netbird:/etc/netbird:Z") {
-		t.Errorf("expected Volume for /etc/netbird, got:\n%s", netbirdUnit)
-	}
-	if !strings.Contains(netbirdUnit, "EnvironmentFile=") || !strings.Contains(netbirdUnit, "network/secrets/netbird.env") {
-		t.Errorf("expected EnvironmentFile pointing to netbird.env, got:\n%s", netbirdUnit)
-	}
-	if !strings.Contains(netbirdUnit, "AddCapability=NET_ADMIN") {
-		t.Errorf("expected AddCapability=NET_ADMIN, got:\n%s", netbirdUnit)
-	}
-	if !strings.Contains(netbirdUnit, "AddDevice=/dev/net/tun") {
-		t.Errorf("expected AddDevice=/dev/net/tun, got:\n%s", netbirdUnit)
-	}
-	if !strings.Contains(netbirdUnit, "MemoryMax=40M") {
-		t.Errorf("expected MemoryMax=40M, got:\n%s", netbirdUnit)
+	// NetBird is managed at the system level by allod-helperd to retain full
+	// kernel WireGuard/TUN capabilities; rootless user Quadlet generation is bypassed.
+	if len(res.Files) != 0 {
+		t.Fatalf("expected 0 user units for network (helper-managed), got %d", len(res.Files))
 	}
 }
 

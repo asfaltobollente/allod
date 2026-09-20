@@ -11,7 +11,6 @@ import (
 
 	"github.com/asfaltobollente/allod/internal/config"
 	"github.com/asfaltobollente/allod/internal/helper"
-	"github.com/asfaltobollente/allod/internal/manifest"
 	"github.com/asfaltobollente/allod/internal/quadlet"
 )
 
@@ -280,27 +279,22 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Regenerate Quadlet unit files for NetBird
-	home, _ := os.UserHomeDir()
-	if home != "" {
-		quadDir := filepath.Join(home, ".config", "containers", "systemd")
-		modDir := "modules"
-		if h.GetModulesDir != nil {
-			modDir = h.GetModulesDir()
-		}
-		mPath := filepath.Join(modDir, "network", "module.yaml")
-		if m, err := manifest.LoadManifest(mPath); err == nil {
-			if genRes, err := quadlet.Generate("network", m, mode); err == nil {
-				for fname, content := range genRes.Files {
-					_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
-				}
-			}
-		}
-		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
-	}
+	// Clean up any legacy rootless user Quadlet units and containers for network
+	_ = quadlet.StopAndRemoveContainers("network", true)
 
-	// Restart network service
-	_ = exec.Command("systemctl", "--user", "restart", "network").Run()
+	// Trigger NetBird via privileged helper (running with root network capabilities)
+	if mode != "off" && setupKey != "" {
+		if h.Helper != nil {
+			_, _ = h.Helper.Execute("network.netbird_up", map[string]interface{}{
+				"setup_key":      setupKey,
+				"management_url": mgmtURL,
+			}, false)
+		}
+	} else if mode == "off" {
+		if h.Helper != nil {
+			_, _ = h.Helper.Execute("network.netbird_down", nil, false)
+		}
+	}
 
 	json.NewEncoder(w).Encode(PanelResponse{
 		Status:  "ok",

@@ -45,6 +45,7 @@ var AllowedServiceUnits = []string{
 	"smb",
 	"network",
 	"network-netbird",
+	"netbird",
 	"cloud",
 	"cloud-postgres",
 	"photos",
@@ -847,43 +848,172 @@ func (s *Server) processRequest(req Request) Response {
 			},
 		}
 
-	case "network.netbird_status", "network.netbird_cli", "network.netbird_up", "network.netbird_down":
-		targetContainer, runuserPrefix := findNetBirdTarget()
-		var podmanArgs []string
-		switch req.Action {
-		case "network.netbird_status":
-			podmanArgs = []string{"exec", targetContainer, "netbird", "status", "--json"}
-		case "network.netbird_up":
-			podmanArgs = []string{"exec", targetContainer, "netbird", "up"}
-		case "network.netbird_down":
-			podmanArgs = []string{"exec", targetContainer, "netbird", "down"}
-		case "network.netbird_cli":
-			cmdType, _ := req.Args["command"].(string)
-			switch cmdType {
-			case "status":
-				podmanArgs = []string{"exec", targetContainer, "netbird", "status"}
-			case "status_detail":
-				podmanArgs = []string{"exec", targetContainer, "netbird", "status", "--detail"}
-			default:
-				podmanArgs = []string{"exec", targetContainer, "netbird", "status", "--json"}
+	case "network.netbird_status":
+		if nbBin, err := exec.LookPath("netbird"); err == nil {
+			fullCmd := []string{nbBin, "status", "--json"}
+			plan := []string{strings.Join(fullCmd, " ")}
+			if !req.Plan {
+				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				if err == nil {
+					return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+				}
+			} else {
+				return Response{Ok: true, Applied: false, Plan: plan}
 			}
 		}
 
-		fullCmd := append(runuserPrefix, "podman")
-		fullCmd = append(fullCmd, podmanArgs...)
+		targetContainer, runuserPrefix := findNetBirdTarget()
+		var fullCmd []string
+		if len(runuserPrefix) > 0 {
+			fullCmd = append(runuserPrefix, "podman", "exec", targetContainer, "netbird", "status", "--json")
+		} else {
+			fullCmd = []string{"podman", "exec", targetContainer, "netbird", "status", "--json"}
+		}
 		plan := []string{strings.Join(fullCmd, " ")}
-
 		if !req.Plan {
 			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
 			if err != nil {
-				if len(podmanArgs) > 3 {
-					directArgs := podmanArgs[3:]
-					if out2, err2 := exec.Command("netbird", directArgs...).CombinedOutput(); err2 == nil {
-						return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out2)), Plan: plan}
-					}
-				}
-				return Response{Ok: false, Error: fmt.Sprintf("Errore esecuzione NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
+				return Response{Ok: false, Error: fmt.Sprintf("Errore status NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
 			}
+			return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "network.netbird_cli":
+		cmdType, _ := req.Args["command"].(string)
+		var args []string
+		switch cmdType {
+		case "status":
+			args = []string{"status"}
+		case "status_detail":
+			args = []string{"status", "--detail"}
+		default:
+			args = []string{"status", "--json"}
+		}
+
+		if nbBin, err := exec.LookPath("netbird"); err == nil {
+			fullCmd := append([]string{nbBin}, args...)
+			plan := []string{strings.Join(fullCmd, " ")}
+			if !req.Plan {
+				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				if err == nil {
+					return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+				}
+			} else {
+				return Response{Ok: true, Applied: false, Plan: plan}
+			}
+		}
+
+		targetContainer, runuserPrefix := findNetBirdTarget()
+		var fullCmd []string
+		if len(runuserPrefix) > 0 {
+			fullCmd = append(runuserPrefix, "podman", "exec", targetContainer, "netbird")
+			fullCmd = append(fullCmd, args...)
+		} else {
+			fullCmd = append([]string{"podman", "exec", targetContainer, "netbird"}, args...)
+		}
+		plan := []string{strings.Join(fullCmd, " ")}
+		if !req.Plan {
+			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+			if err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore CLI NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
+			}
+			return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "network.netbird_up":
+		if nbBin, err := exec.LookPath("netbird"); err == nil {
+			var cmdArgs []string
+			cmdArgs = append(cmdArgs, "up")
+			if key, ok := req.Args["setup_key"].(string); ok && key != "" {
+				cmdArgs = append(cmdArgs, "--setup-key", key)
+			}
+			if mgmt, ok := req.Args["management_url"].(string); ok && mgmt != "" && mgmt != "https://api.netbird.io:443" {
+				cmdArgs = append(cmdArgs, "--management-url", mgmt)
+			}
+			fullCmd := append([]string{nbBin}, cmdArgs...)
+			plan := []string{strings.Join(fullCmd, " ")}
+			if !req.Plan {
+				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				if err != nil {
+					return Response{Ok: false, Error: fmt.Sprintf("Errore netbird up nativo: %v (%s)", err, strings.TrimSpace(string(out)))}
+				}
+				return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+			}
+			return Response{Ok: true, Applied: false, Plan: plan}
+		}
+
+		targetContainer, _ := findNetBirdTarget()
+		isRunning := false
+		if out, err := exec.Command("podman", "ps", "--format", "{{.Names}}").Output(); err == nil {
+			for _, line := range strings.Split(string(out), "\n") {
+				if strings.TrimSpace(line) == targetContainer {
+					isRunning = true
+					break
+				}
+			}
+		}
+
+		if isRunning {
+			fullCmd := []string{"podman", "exec", targetContainer, "netbird", "up"}
+			plan := []string{strings.Join(fullCmd, " ")}
+			if !req.Plan {
+				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				if err != nil {
+					return Response{Ok: false, Error: fmt.Sprintf("Errore netbird up: %v (%s)", err, strings.TrimSpace(string(out)))}
+				}
+				return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+			}
+			return Response{Ok: true, Applied: false, Plan: plan}
+		}
+
+		baseDir := "/mnt/allod-storage"
+		if envBase := os.Getenv("ALLOD_STORAGE_DIR"); envBase != "" {
+			baseDir = envBase
+		}
+		dataDir := filepath.Join(baseDir, "network", "netbird")
+		envFile := filepath.Join(baseDir, "network", "secrets", "netbird.env")
+		fullCmd := []string{
+			"podman", "run", "-d",
+			"--name", "allod-netbird",
+			"--replace",
+			"--restart=always",
+			"--network=host",
+			"--device=/dev/net/tun",
+			"--cap-add=NET_ADMIN",
+			"-v", fmt.Sprintf("%s:/var/lib/netbird:Z", dataDir),
+			"-v", fmt.Sprintf("%s:/etc/netbird:Z", dataDir),
+			"--env-file", envFile,
+			"docker.io/netbirdio/netbird:0.79.0",
+		}
+		plan := []string{strings.Join(fullCmd, " ")}
+		if !req.Plan {
+			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+			if err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore avvio container NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
+			}
+			return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "network.netbird_down":
+		if nbBin, err := exec.LookPath("netbird"); err == nil {
+			fullCmd := []string{nbBin, "down"}
+			plan := []string{strings.Join(fullCmd, " ")}
+			if !req.Plan {
+				out, _ := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+			}
+			return Response{Ok: true, Applied: false, Plan: plan}
+		}
+
+		targetContainer, _ := findNetBirdTarget()
+		fullCmd := []string{"podman", "stop", targetContainer}
+		plan := []string{strings.Join(fullCmd, " ")}
+		if !req.Plan {
+			out, _ := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+			_ = exec.Command("podman", "rm", "-f", targetContainer).Run()
 			return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
@@ -898,7 +1028,7 @@ func (s *Server) processRequest(req Request) Response {
 // Returns (containerName, runuserPrefix).
 func findNetBirdTarget() (string, []string) {
 	isMatch := func(name string) bool {
-		return name == "network" || name == "systemd-network" ||
+		return name == "allod-netbird" || name == "network" || name == "systemd-network" ||
 			name == "network-netbird" || name == "systemd-network-netbird" ||
 			strings.HasPrefix(name, "network-") || strings.HasPrefix(name, "systemd-network-")
 	}
@@ -930,5 +1060,5 @@ func findNetBirdTarget() (string, []string) {
 		}
 	}
 
-	return "network", nil
+	return "allod-netbird", nil
 }

@@ -231,12 +231,26 @@ var applyCmd = &cobra.Command{
 			appliedMod, isApplied := appliedMods[modName]
 
 			if modCfg.Level == "off" {
+				if modName == "network" {
+					hClient := &helper.Client{}
+					_, _ = hClient.Execute("network.netbird_down", nil, false)
+				}
 				if isApplied {
 					cleanModuleUnits(outDir, modName)
 					st.DeleteModule(modName)
 					fmt.Printf("  - %s: OFF → rimosse unità\n", modName)
 					removed++
 				}
+				continue
+			}
+
+			if modName == "network" {
+				cleanModuleUnits(outDir, "network")
+				hClient := &helper.Client{}
+				_, _ = hClient.Execute("network.netbird_up", nil, false)
+				_ = st.SaveModule(modName, modCfg.Level, "helper-managed")
+				fmt.Printf("  ✓ %s (livello %s) [ATTIVO] → [allod-helperd netbird]\n", modName, modCfg.Level)
+				applied++
 				continue
 			}
 
@@ -350,9 +364,18 @@ var startCmd = &cobra.Command{
 				if modCfg.Level == "off" {
 					continue
 				}
+				if modName == "network" {
+					hClient := &helper.Client{}
+					_, errUp := hClient.Execute("network.netbird_up", nil, false)
+					if errUp != nil {
+						fmt.Printf("  ✗ %-12s Errore avvio via helper: %v\n", modName, errUp)
+					} else {
+						fmt.Printf("  ✓ %-12s Avviato (NetBird Mesh)\n", modName)
+					}
+					continue
+				}
 				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-postgres").Run()
 				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-valkey").Run()
-				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-netbird").Run()
 				runCmd := exec.Command("systemctl", "--user", "start", "--no-block", modName)
 				if err := runCmd.Run(); err != nil {
 					fmt.Printf("  ✗ %-12s Errore avvio (systemd unit %s): %v\n", modName, modName, err)
@@ -361,9 +384,18 @@ var startCmd = &cobra.Command{
 				}
 			}
 		} else {
+			if target == "network" {
+				hClient := &helper.Client{}
+				_, errUp := hClient.Execute("network.netbird_up", nil, false)
+				if errUp != nil {
+					fmt.Printf("✗ Errore avvio modulo 'network' via helper: %v\n", errUp)
+					os.Exit(1)
+				}
+				fmt.Printf("✓ Modulo 'network' avviato con successo (NetBird Mesh)\n")
+				return
+			}
 			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-postgres").Run()
 			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-valkey").Run()
-			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-netbird").Run()
 			runCmd := exec.Command("systemctl", "--user", "start", "--no-block", target)
 			if err := runCmd.Run(); err != nil {
 				fmt.Printf("✗ Errore avvio modulo '%s': %v\n", target, err)
@@ -394,10 +426,18 @@ var stopCmd = &cobra.Command{
 		if target == "all" {
 			fmt.Println("Arresto di tutti i moduli...")
 			for modName := range cfg.Modules {
+				if modName == "network" {
+					hClient := &helper.Client{}
+					_, _ = hClient.Execute("network.netbird_down", nil, false)
+				}
 				_ = quadlet.StopAndRemoveContainers(modName, false)
 				fmt.Printf("  ⏹ %-12s Fermato e container rimossi\n", modName)
 			}
 		} else {
+			if target == "network" {
+				hClient := &helper.Client{}
+				_, _ = hClient.Execute("network.netbird_down", nil, false)
+			}
 			_ = quadlet.StopAndRemoveContainers(target, false)
 			fmt.Printf("⏹ Modulo '%s' fermato e container rimossi\n", target)
 		}
@@ -1004,6 +1044,10 @@ var purgeCmd = &cobra.Command{
 		fmt.Printf("Purge del modulo '%s' in corso...\n", modName)
 
 		// 1. Stop systemd services
+		if modName == "network" {
+			hClient := &helper.Client{}
+			_, _ = hClient.Execute("network.netbird_down", nil, false)
+		}
 		_ = exec.Command("systemctl", "--user", "stop", modName).Run()
 		_ = exec.Command("systemctl", "--user", "stop", modName+"-postgres").Run()
 		_ = exec.Command("systemctl", "--user", "stop", modName+"-valkey").Run()
