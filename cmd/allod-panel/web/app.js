@@ -859,365 +859,488 @@ function getModuleTechInfo(modID, currentLevel) {
   };
 }
 
+function createModuleCard(mod) {
+  const card = document.createElement('div');
+  card.className = 'module-card';
+
+  const isOff = !mod.current_level || mod.current_level === 'off';
+  const tierBadge = mod.tier === 'core'
+    ? 'badge-primary'
+    : (mod.tier === 'recommended' ? 'badge-warning' : 'badge-purple');
+  const manifest = mod.manifest || {};
+  const levels = manifest.levels || manifest.Levels || {};
+
+  const tech = getModuleTechInfo(mod.id, mod.current_level);
+
+  let levelOptions = Object.keys(levels).map(lvl => {
+    const selected = lvl === mod.current_level ? 'selected' : '';
+    return `<option value="${lvl}" ${selected}>${lvl}</option>`;
+  }).join('');
+
+  const currentLevelInfo = levels[mod.current_level] || {};
+  const grants = currentLevelInfo.grants || currentLevelInfo.Grants || [];
+  const ramReq = currentLevelInfo.ram_mb || currentLevelInfo.RAMMB || 0;
+
+  let grantsHtml = grants.length > 0
+    ? `<ul class="grants-list">${grants.map(g => `<li>✓ ${g}</li>`).join('')}</ul>`
+    : `<p class="text-muted font-mono" style="font-size:11px; margin-top:8px;">Modulo disattivato</p>`;
+
+  const priv = manifest.privileges || manifest.Privileges || {};
+  const imgs = manifest.images || manifest.Images || [];
+
+  // Runtime status badge
+  let statusBadge = `<span class="badge badge-secondary">OFF</span>`;
+  let actionButtons = ``;
+  let openLinkHtml = ``;
+
+  // Critical Data Modules that must be protected once in production:
+  const criticalDataModules = ['storage', 'cloud', 'photos', 'backup', 'shares', 'media'];
+  const isDataCritical = criticalDataModules.includes(mod.id) || (mod.mounts && mod.mounts.length > 0);
+  const isRunningOrNAS = (mod.runtime_status === 'running' || (mod.id === 'storage' && mod.is_on_nas_pool));
+  const isOrphan = isOff && mod.runtime_status === 'running';
+  const isLocked = isDataCritical && isRunningOrNAS && !isOrphan && !unlockedModules.has(mod.id);
+  const isUnlocked = isDataCritical && isRunningOrNAS && !isOrphan && unlockedModules.has(mod.id);
+
+  if (isOrphan) {
+    card.className = 'module-card';
+    statusBadge = `<span class="badge badge-warning" style="background:#f59e0b; color:#000; font-weight:700;">⚠️ ATTIVO (OFF)</span>`;
+    actionButtons = `
+      <button class="btn btn-sm btn-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;" title="Termina forzatamente il container Podman attivo">⏹ ${t('btn_stop')}</button>
+      <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
+    `;
+    if (tech.linkPort) {
+      const host = window.location.hostname || '127.0.0.1';
+      openLinkHtml = `
+        <div style="margin-top:10px; padding:6px 10px; background:rgba(245,158,11,0.15); border-radius:6px; border:1px solid rgba(245,158,11,0.3);">
+          <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:#f59e0b; font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
+            <span>⚠️ ${t('btn_open_web')} (${tech.product} - Container orfano)</span>
+            <span>Port ${tech.linkPort} ↗</span>
+          </a>
+        </div>
+      `;
+    }
+  } else if (isLocked) {
+    card.className = 'module-card module-card-locked';
+    statusBadge = `<span class="badge badge-success">${t('status_protected')}</span>`;
+    
+    let diagBtn = (mod.id === 'storage')
+      ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 ${t('btn_inspect_btrfs', 'Inspect Btrfs')}</button>`
+      : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
+
+    actionButtons = `
+      ${diagBtn}
+      <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔓 ${t('btn_unlock')}</button>
+    `;
+
+    if (tech.linkPort) {
+      const host = window.location.hostname || '127.0.0.1';
+      openLinkHtml = `
+        <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
+          <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
+            <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
+            <span>Port ${tech.linkPort} ↗</span>
+          </a>
+        </div>
+      `;
+    }
+  } else if (isUnlocked) {
+    card.className = 'module-card';
+    statusBadge = `<span class="badge badge-warning">${t('status_unlocked')}</span>`;
+    
+    let diagBtn = (mod.id === 'storage')
+      ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 ${t('btn_inspect_btrfs', 'Inspect Btrfs')}</button>`
+      : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
+
+    actionButtons = `
+      ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>` : ''}
+      ${diagBtn}
+      <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔒 ${t('btn_lock')}</button>
+    `;
+
+    if (tech.linkPort) {
+      const host = window.location.hostname || '127.0.0.1';
+      openLinkHtml = `
+        <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
+          <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
+            <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
+            <span>Port ${tech.linkPort} ↗</span>
+          </a>
+        </div>
+      `;
+    }
+  } else if (!isOff) {
+    if (mod.runtime_status === 'running') {
+      statusBadge = `<span class="badge badge-success">${t('status_running')}</span>`;
+      actionButtons = `
+        <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>
+        <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
+      `;
+      
+      if (tech.linkPort) {
+        const host = window.location.hostname || '127.0.0.1';
+        openLinkHtml = `
+          <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
+            <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
+              <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
+              <span>Port ${tech.linkPort} ↗</span>
+            </a>
+          </div>
+        `;
+      }
+    } else if (mod.runtime_status === 'failed') {
+      statusBadge = `<span class="badge badge-danger">${t('status_error')}</span>`;
+      actionButtons = `
+        <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_restart')}</button>
+        <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="openDangerPurgeModal('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🗑️ ${t('btn_reset')}</button>
+      `;
+    } else {
+      statusBadge = `<span class="badge badge-warning">${t('status_stopped')}</span>`;
+      actionButtons = `
+        <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_start')}</button>
+        <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
+      `;
+    }
+  }
+
+  // Check if module is currently starting (disable button and show spinner)
+  if (startingModules.has(mod.id)) {
+    const elapsed = Date.now() - startingModules.get(mod.id);
+    if (mod.runtime_status === 'running' || elapsed > 25000) {
+      startingModules.delete(mod.id);
+    } else {
+      statusBadge = `<span class="badge badge-info" style="opacity:0.9;">${t('status_starting')}</span>`;
+      actionButtons = `
+        <button class="btn btn-sm btn-secondary" disabled style="opacity:0.65; cursor:wait; padding:2px 10px; font-size:11px; margin-left:8px;">${t('status_starting')}</button>
+        <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
+      `;
+    }
+  }
+
+  let dbInfoHtml = ``;
+  if (tech.db) {
+    dbInfoHtml = `
+      <div style="margin-top:8px; padding:6px 10px; background:rgba(15, 23, 42, 0.6); border-radius:6px; border-left:3px solid var(--primary); font-size:11px;">
+        <div style="font-weight:600; color:var(--text-main); margin-bottom:2px;">🗄️ ${t('label_database')}: <span style="color:var(--primary);">${tech.db}</span></div>
+        <div style="color:var(--text-muted); line-height:1.35;">${tech.dbNote}</div>
+      </div>
+    `;
+  }
+
+  let storageBoxHtml = ``;
+  if (mod.storage_path) {
+    const nasBadge = mod.is_on_nas_pool 
+      ? `<span class="badge badge-success" style="font-size:10px;">${t('pool_raid1')}</span>` 
+      : `<span class="badge badge-warning" style="font-size:10px;">${t('pool_local')}</span>`;
+
+    storageBoxHtml = `
+      <div style="margin-top:8px; padding:7px 10px; background:rgba(15, 23, 42, 0.6); border-radius:6px; border-left:3px solid ${mod.is_on_nas_pool ? 'var(--success)' : 'var(--warning)'}; font-size:11px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+          <span style="font-weight:600; color:var(--text-main);">${t('label_nas_storage')}</span>
+          ${nasBadge}
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--primary);">📁 ${mod.storage_path}</span>
+          <strong style="color:var(--text-main); font-size:11px;">${mod.storage_size || '0 B'}</strong>
+        </div>
+        ${mod.mounts && mod.mounts.length > 0 ? `
+          <div style="border-top:1px dashed rgba(255,255,255,0.1); padding-top:4px; margin-top:4px;">
+            ${mod.mounts.map(m => `
+              <div style="font-size:10px; color:var(--text-muted); display:flex; justify-content:space-between; margin-bottom:2px; font-family:'JetBrains Mono',monospace;">
+                <span>↳ .../${m.host_path.split('/').slice(-2).join('/')} ➔ <code>${m.container_path}</code></span>
+                <span style="color:${m.exists ? 'var(--success)' : 'var(--text-muted)'}">${m.exists ? m.size_human : t('label_pending')}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  let photosSharesIntegrationHtml = '';
+  if (mod.id === 'photos') {
+    const isChecked = (photosSharesState && photosSharesState.enabled) ? 'checked' : '';
+    const isMounted = photosSharesState && photosSharesState.mounted;
+    const sharesActive = photosSharesState && photosSharesState.shares_active;
+
+    let badgeHtml = isMounted
+      ? `<span style="color:var(--success); font-weight:600;">${t('photos_shares_connected')}</span>`
+      : `<span style="color:var(--text-muted);">${t('photos_shares_unmounted')}</span>`;
+
+    let warningHtml = '';
+    if (photosSharesState && photosSharesState.enabled && !sharesActive) {
+      warningHtml = `<div style="font-size:10.5px; color:#f59e0b; margin-top:4px;">${t('photos_shares_warning_shares')}</div>`;
+    }
+
+    photosSharesIntegrationHtml = `
+      <div style="margin-top:10px; padding:9px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0; font-size:11.5px; font-weight:600; color:var(--text-main);">
+            <input type="checkbox" id="photos-shares-checkbox" onchange="togglePhotosSharesIntegration(this.checked)" ${isChecked} style="cursor:pointer; width:15px; height:15px; accent-color:var(--primary);">
+            <span>🔗 ${t('photos_shares_toggle')}</span>
+          </label>
+          <div style="font-size:10.5px;">${badgeHtml}</div>
+        </div>
+        <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px; line-height:1.35;">
+          ${t('photos_shares_desc')}
+        </div>
+        ${warningHtml}
+      </div>
+    `;
+  }
+
+  let sharesSmbBoxHtml = '';
+  if (mod.id === 'shares') {
+    sharesSmbBoxHtml = `
+      <div style="margin-top:10px; padding:9px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div>
+          <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🔑 ${t('label_smb_credentials')}</div>
+          <div style="font-size:10.5px; color:var(--text-muted);">${t('desc_smb_credentials')}</div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="openSmbPasswordModal()" style="padding:4px 12px; font-size:11px; font-weight:600;">
+          🔑 ${t('btn_smb_password')}
+        </button>
+      </div>
+    `;
+  }
+
+  let networkBoxHtml = '';
+  if (mod.id === 'network') {
+    networkBoxHtml = `
+      <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🌐 ${t('network_module_title')}</div>
+            <div style="font-size:10.5px; color:var(--text-muted);">
+              ${t('network_mesh_ip_label')} <code>100.64.0.1</code>
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-sm btn-info" onclick="openNetworkConfigModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
+              ⚙️ ${t('network_config_btn')}
+            </button>
+            <button class="btn btn-sm btn-success" onclick="openNetworkPairingModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
+              📱 ${t('network_pairing_btn')}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const tierLabel = t('tier_' + mod.tier, mod.tier);
+  const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
+  const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
+
+  card.innerHTML = `
+    <div>
+      <div class="module-card-header">
+        <div>
+          <div class="module-title">
+            ${mod.id}
+            <span class="badge ${tierBadge}">${tierLabel}</span>
+            ${betaBadge}
+          </div>
+          <div style="font-size:12px; font-weight:600; color:var(--primary); margin-top:2px;">
+            📦 ${tech.product}
+          </div>
+        </div>
+        <div>
+          ${statusBadge}
+          ${actionButtons}
+        </div>
+      </div>
+
+      <p style="font-size:12px; color:var(--text-muted); margin:8px 0 10px 0; line-height:1.4;">
+        ${tech.desc}
+      </p>
+
+      <div class="level-selector-row">
+        <label style="font-size:12px; color:var(--text-muted);">${t('label_level')}:</label>
+        <select class="form-control" ${isLocked ? 'disabled style="opacity:0.55; cursor:not-allowed; padding:4px 8px; font-size:12px;"' : 'style="padding:4px 8px; font-size:12px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
+          ${levelOptions}
+        </select>
+        <span class="badge badge-info" style="font-size:11px;">${ramReq} MB RAM</span>
+      </div>
+
+      ${grantsHtml}
+      ${dbInfoHtml}
+      ${storageBoxHtml}
+      ${photosSharesIntegrationHtml}
+      ${sharesSmbBoxHtml}
+      ${networkBoxHtml}
+      ${isLocked ? `
+        <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
+          🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.
+        </div>
+      ` : ''}
+      ${(mod.id === 'storage' && isUnlocked) ? `
+        <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
+          <details style="font-size:11px; color:var(--text-muted);" open>
+            <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Formattazione Dischi</summary>
+            <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
+              <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
+                Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici cancellando definitivamente tutti i dati e le foto presenti.
+              </p>
+              <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:11px; padding:4px 10px;">
+                🗑️ Re-inizializza Pool Storage (Distruttivo)
+              </button>
+            </div>
+          </details>
+        </div>
+      ` : ''}
+      ${(mod.id !== 'storage' && !isLocked && mod.storage_bytes > 0) ? `
+        <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
+          <details style="font-size:11px; color:var(--text-muted);" ${mod.runtime_status === 'failed' ? 'open' : ''}>
+            <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Ripristino Dati (${mod.storage_size})</summary>
+            <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
+              <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
+                Attualmente sono presenti <strong>${mod.storage_size}</strong> di dati su <code>${mod.storage_path}</code>. Puoi azzerarli e ricreare le cartelle pulite da zero.
+              </p>
+              <button class="btn btn-sm btn-danger" onclick="openDangerPurgeModal('${mod.id}')" style="font-size:11px; padding:4px 10px;">
+                🗑️ Cancella Dati & Ripristina Modulo
+              </button>
+            </div>
+          </details>
+        </div>
+      ` : ''}
+      ${openLinkHtml}
+    </div>
+
+    <div style="font-size:11px; color:var(--text-muted); border-top:1px solid var(--card-border); padding-top:8px; display:flex; justify-content:space-between; margin-top:12px;">
+      <span>UserNS: ${priv.userns || 'rootless'}</span>
+      <span>${imgs.length > 0 ? `${imgs.map(i => i.tag || i.Tag).join(', ')}` : 'Nativo'}</span>
+    </div>
+  `;
+
+  return card;
+}
+
 function renderModules() {
   const container = document.getElementById('modules-grid');
   if (!container || !Array.isArray(currentModules)) return;
 
   container.innerHTML = '';
 
+  // Logical sorting weights within tiers
+  const sortWeights = {
+    // Core (System)
+    'storage': 10,
+    'shares': 20,
+    'backup': 30,
+    'watch': 40,
+    // Recommended
+    'network': 10,
+    'photos': 20,
+    // Optional
+    'cloud': 10,
+    'media': 20
+  };
+
+  // Group modules by tier
+  const tierGroups = {
+    core: [],
+    recommended: [],
+    optional: []
+  };
+
   currentModules.forEach(mod => {
-    const card = document.createElement('div');
-    card.className = 'module-card';
+    const tier = (mod.tier || 'optional').toLowerCase();
+    if (tierGroups[tier]) {
+      tierGroups[tier].push(mod);
+    } else {
+      tierGroups.optional.push(mod);
+    }
+  });
 
-    const isOff = !mod.current_level || mod.current_level === 'off';
-    const tierBadge = mod.tier === 'core' ? 'badge-primary' : 'badge-info';
-    const manifest = mod.manifest || {};
-    const levels = manifest.levels || manifest.Levels || {};
+  const tierSectionsDef = [
+    {
+      id: 'core',
+      icon: '🛡️',
+      title: t('tier_section_core_title', 'Moduli di Sistema'),
+      desc: t('tier_section_core_desc', 'Infrastruttura essenziale per il pool storage Btrfs RAID 1, condivisioni SMB locali, motore di backup e watchdog.'),
+      pillClass: 'pill-core',
+      pillLabel: t('tier_core', 'Sistema')
+    },
+    {
+      id: 'recommended',
+      icon: '⭐',
+      title: t('tier_section_recommended_title', 'Moduli Consigliati'),
+      desc: t('tier_section_recommended_desc', 'Connettività mesh WireGuard cifrata per accesso remoto ovunque e backup foto da smartphone.'),
+      pillClass: 'pill-recommended',
+      pillLabel: t('tier_recommended', 'Consigliato')
+    },
+    {
+      id: 'optional',
+      icon: '🧩',
+      title: t('tier_section_optional_title', 'Moduli Opzionali'),
+      desc: t('tier_section_optional_desc', 'Applicazioni multimediali e cloud personale (Nextcloud, Jellyfin), attivabili in base alla RAM disponibile.'),
+      pillClass: 'pill-optional',
+      pillLabel: t('tier_optional', 'Opzionale')
+    }
+  ];
 
-    const tech = getModuleTechInfo(mod.id, mod.current_level);
+  tierSectionsDef.forEach(tierDef => {
+    const mods = tierGroups[tierDef.id] || [];
+    if (mods.length === 0) return;
 
-    let levelOptions = Object.keys(levels).map(lvl => {
-      const selected = lvl === mod.current_level ? 'selected' : '';
-      return `<option value="${lvl}" ${selected}>${lvl}</option>`;
-    }).join('');
+    // Sort logically within tier
+    mods.sort((a, b) => {
+      const wA = sortWeights[a.id] || 99;
+      const wB = sortWeights[b.id] || 99;
+      if (wA !== wB) return wA - wB;
+      return a.id.localeCompare(b.id);
+    });
 
-    const currentLevelInfo = levels[mod.current_level] || {};
-    const grants = currentLevelInfo.grants || currentLevelInfo.Grants || [];
-    const ramReq = currentLevelInfo.ram_mb || currentLevelInfo.RAMMB || 0;
-
-    let grantsHtml = grants.length > 0
-      ? `<ul class="grants-list">${grants.map(g => `<li>✓ ${g}</li>`).join('')}</ul>`
-      : `<p class="text-muted font-mono" style="font-size:11px; margin-top:8px;">Modulo disattivato</p>`;
-
-    const priv = manifest.privileges || manifest.Privileges || {};
-    const imgs = manifest.images || manifest.Images || [];
-
-    // Runtime status badge
-    let statusBadge = `<span class="badge badge-secondary">OFF</span>`;
-    let actionButtons = ``;
-    let openLinkHtml = ``;
-
-    // Critical Data Modules that must be protected once in production:
-    const criticalDataModules = ['storage', 'cloud', 'photos', 'backup', 'shares', 'media'];
-    const isDataCritical = criticalDataModules.includes(mod.id) || (mod.mounts && mod.mounts.length > 0);
-    const isRunningOrNAS = (mod.runtime_status === 'running' || (mod.id === 'storage' && mod.is_on_nas_pool));
-    const isOrphan = isOff && mod.runtime_status === 'running';
-    const isLocked = isDataCritical && isRunningOrNAS && !isOrphan && !unlockedModules.has(mod.id);
-    const isUnlocked = isDataCritical && isRunningOrNAS && !isOrphan && unlockedModules.has(mod.id);
-
-    if (isOrphan) {
-      card.className = 'module-card';
-      statusBadge = `<span class="badge badge-warning" style="background:#f59e0b; color:#000; font-weight:700;">⚠️ ATTIVO (OFF)</span>`;
-      actionButtons = `
-        <button class="btn btn-sm btn-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;" title="Termina forzatamente il container Podman attivo">⏹ ${t('btn_stop')}</button>
-        <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
-      `;
-      if (tech.linkPort) {
-        const host = window.location.hostname || '127.0.0.1';
-        openLinkHtml = `
-          <div style="margin-top:10px; padding:6px 10px; background:rgba(245,158,11,0.15); border-radius:6px; border:1px solid rgba(245,158,11,0.3);">
-            <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:#f59e0b; font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
-              <span>⚠️ ${t('btn_open_web')} (${tech.product} - Container orfano)</span>
-              <span>Port ${tech.linkPort} ↗</span>
-            </a>
-          </div>
-        `;
+    // Count active
+    const activeCount = mods.filter(m => {
+      if (m.id === 'storage') {
+        return m.is_on_nas_pool || (m.current_level && m.current_level !== 'off');
       }
-    } else if (isLocked) {
-      card.className = 'module-card module-card-locked';
-      statusBadge = `<span class="badge badge-success">${t('status_protected')}</span>`;
-      
-      let diagBtn = (mod.id === 'storage')
-        ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 ${t('btn_inspect_btrfs', 'Inspect Btrfs')}</button>`
-        : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
+      return m.current_level && m.current_level !== 'off' && m.runtime_status === 'running';
+    }).length;
+    const totalCount = mods.length;
 
-      actionButtons = `
-        ${diagBtn}
-        <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔓 ${t('btn_unlock')}</button>
-      `;
-
-      if (tech.linkPort) {
-        const host = window.location.hostname || '127.0.0.1';
-        openLinkHtml = `
-          <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
-            <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
-              <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
-              <span>Port ${tech.linkPort} ↗</span>
-            </a>
-          </div>
-        `;
-      }
-    } else if (isUnlocked) {
-      card.className = 'module-card';
-      statusBadge = `<span class="badge badge-warning">${t('status_unlocked')}</span>`;
-      
-      let diagBtn = (mod.id === 'storage')
-        ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 ${t('btn_inspect_btrfs', 'Inspect Btrfs')}</button>`
-        : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
-
-      actionButtons = `
-        ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>` : ''}
-        ${diagBtn}
-        <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔒 ${t('btn_lock')}</button>
-      `;
-
-      if (tech.linkPort) {
-        const host = window.location.hostname || '127.0.0.1';
-        openLinkHtml = `
-          <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
-            <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
-              <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
-              <span>Port ${tech.linkPort} ↗</span>
-            </a>
-          </div>
-        `;
-      }
-    } else if (!isOff) {
-      if (mod.runtime_status === 'running') {
-        statusBadge = `<span class="badge badge-success">${t('status_running')}</span>`;
-        actionButtons = `
-          <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>
-          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
-        `;
-        
-        if (tech.linkPort) {
-          const host = window.location.hostname || '127.0.0.1';
-          openLinkHtml = `
-            <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
-              <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
-                <span>🌐 ${t('btn_open_web')} (${tech.product})</span>
-                <span>Port ${tech.linkPort} ↗</span>
-              </a>
-            </div>
-          `;
-        }
-      } else if (mod.runtime_status === 'failed') {
-        statusBadge = `<span class="badge badge-danger">${t('status_error')}</span>`;
-        actionButtons = `
-          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_restart')}</button>
-          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="openDangerPurgeModal('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🗑️ ${t('btn_reset')}</button>
-        `;
-      } else {
-        statusBadge = `<span class="badge badge-warning">${t('status_stopped')}</span>`;
-        actionButtons = `
-          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_start')}</button>
-          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
-        `;
-      }
+    let countStatusClass = 'count-zero-active';
+    if (activeCount === totalCount && totalCount > 0) {
+      countStatusClass = 'count-all-active';
+    } else if (activeCount > 0) {
+      countStatusClass = 'count-partial-active';
     }
 
-    // Check if module is currently starting (disable button and show spinner)
-    if (startingModules.has(mod.id)) {
-      const elapsed = Date.now() - startingModules.get(mod.id);
-      if (mod.runtime_status === 'running' || elapsed > 25000) {
-        startingModules.delete(mod.id);
-      } else {
-        statusBadge = `<span class="badge badge-info" style="opacity:0.9;">${t('status_starting')}</span>`;
-        actionButtons = `
-          <button class="btn btn-sm btn-secondary" disabled style="opacity:0.65; cursor:wait; padding:2px 10px; font-size:11px; margin-left:8px;">${t('status_starting')}</button>
-          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
-        `;
-      }
-    }
+    const countLabel = t('tier_active_count', '{active} / {total} Attivi')
+      .replace('{active}', activeCount)
+      .replace('{total}', totalCount);
 
-    let dbInfoHtml = ``;
-    if (tech.db) {
-      dbInfoHtml = `
-        <div style="margin-top:8px; padding:6px 10px; background:rgba(15, 23, 42, 0.6); border-radius:6px; border-left:3px solid var(--primary); font-size:11px;">
-          <div style="font-weight:600; color:var(--text-main); margin-bottom:2px;">🗄️ ${t('label_database')}: <span style="color:var(--primary);">${tech.db}</span></div>
-          <div style="color:var(--text-muted); line-height:1.35;">${tech.dbNote}</div>
-        </div>
-      `;
-    }
+    const sectionEl = document.createElement('div');
+    sectionEl.className = `module-tier-section tier-${tierDef.id}`;
 
-    let storageBoxHtml = ``;
-    if (mod.storage_path) {
-      const nasBadge = mod.is_on_nas_pool 
-        ? `<span class="badge badge-success" style="font-size:10px;">${t('pool_raid1')}</span>` 
-        : `<span class="badge badge-warning" style="font-size:10px;">${t('pool_local')}</span>`;
-
-      storageBoxHtml = `
-        <div style="margin-top:8px; padding:7px 10px; background:rgba(15, 23, 42, 0.6); border-radius:6px; border-left:3px solid ${mod.is_on_nas_pool ? 'var(--success)' : 'var(--warning)'}; font-size:11px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-            <span style="font-weight:600; color:var(--text-main);">${t('label_nas_storage')}</span>
-            ${nasBadge}
-          </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--primary);">📁 ${mod.storage_path}</span>
-            <strong style="color:var(--text-main); font-size:11px;">${mod.storage_size || '0 B'}</strong>
-          </div>
-          ${mod.mounts && mod.mounts.length > 0 ? `
-            <div style="border-top:1px dashed rgba(255,255,255,0.1); padding-top:4px; margin-top:4px;">
-              ${mod.mounts.map(m => `
-                <div style="font-size:10px; color:var(--text-muted); display:flex; justify-content:space-between; margin-bottom:2px; font-family:'JetBrains Mono',monospace;">
-                  <span>↳ .../${m.host_path.split('/').slice(-2).join('/')} ➔ <code>${m.container_path}</code></span>
-                  <span style="color:${m.exists ? 'var(--success)' : 'var(--text-muted)'}">${m.exists ? m.size_human : t('label_pending')}</span>
-                </div>
-              `).join('')}
-            </div>
-          ` : ''}
-        </div>
-      `;
-    }
-
-    let photosSharesIntegrationHtml = '';
-    if (mod.id === 'photos') {
-      const isChecked = (photosSharesState && photosSharesState.enabled) ? 'checked' : '';
-      const isMounted = photosSharesState && photosSharesState.mounted;
-      const sharesActive = photosSharesState && photosSharesState.shares_active;
-
-      let badgeHtml = isMounted
-        ? `<span style="color:var(--success); font-weight:600;">${t('photos_shares_connected')}</span>`
-        : `<span style="color:var(--text-muted);">${t('photos_shares_unmounted')}</span>`;
-
-      let warningHtml = '';
-      if (photosSharesState && photosSharesState.enabled && !sharesActive) {
-        warningHtml = `<div style="font-size:10.5px; color:#f59e0b; margin-top:4px;">${t('photos_shares_warning_shares')}</div>`;
-      }
-
-      photosSharesIntegrationHtml = `
-        <div style="margin-top:10px; padding:9px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0; font-size:11.5px; font-weight:600; color:var(--text-main);">
-              <input type="checkbox" id="photos-shares-checkbox" onchange="togglePhotosSharesIntegration(this.checked)" ${isChecked} style="cursor:pointer; width:15px; height:15px; accent-color:var(--primary);">
-              <span>🔗 ${t('photos_shares_toggle')}</span>
-            </label>
-            <div style="font-size:10.5px;">${badgeHtml}</div>
-          </div>
-          <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px; line-height:1.35;">
-            ${t('photos_shares_desc')}
-          </div>
-          ${warningHtml}
-        </div>
-      `;
-    }
-
-    let sharesSmbBoxHtml = '';
-    if (mod.id === 'shares') {
-      sharesSmbBoxHtml = `
-        <div style="margin-top:10px; padding:9px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+    sectionEl.innerHTML = `
+      <div class="module-tier-header">
+        <div class="module-tier-title-group">
+          <div class="module-tier-icon">${tierDef.icon}</div>
           <div>
-            <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🔑 ${t('label_smb_credentials')}</div>
-            <div style="font-size:10.5px; color:var(--text-muted);">${t('desc_smb_credentials')}</div>
-          </div>
-          <button class="btn btn-sm btn-primary" onclick="openSmbPasswordModal()" style="padding:4px 12px; font-size:11px; font-weight:600;">
-            🔑 ${t('btn_smb_password')}
-          </button>
-        </div>
-      `;
-    }
-
-    let networkBoxHtml = '';
-    if (mod.id === 'network') {
-      networkBoxHtml = `
-        <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-            <div>
-              <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🌐 ${t('network_module_title')}</div>
-              <div style="font-size:10.5px; color:var(--text-muted);">
-                ${t('network_mesh_ip_label')} <code>100.64.0.1</code>
-              </div>
+            <div class="module-tier-title">
+              ${tierDef.title}
             </div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button class="btn btn-sm btn-info" onclick="openNetworkConfigModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
-                ⚙️ ${t('network_config_btn')}
-              </button>
-              <button class="btn btn-sm btn-success" onclick="openNetworkPairingModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
-                📱 ${t('network_pairing_btn')}
-              </button>
-            </div>
+            <div class="module-tier-desc">${tierDef.desc}</div>
           </div>
         </div>
-      `;
-    }
-
-    const tierLabel = t('tier_' + mod.tier, mod.tier);
-    const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
-    const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
-
-    card.innerHTML = `
-      <div>
-        <div class="module-card-header">
-          <div>
-            <div class="module-title">
-              ${mod.id}
-              <span class="badge ${tierBadge}">${tierLabel}</span>
-              ${betaBadge}
-            </div>
-            <div style="font-size:12px; font-weight:600; color:var(--primary); margin-top:2px;">
-              📦 ${tech.product}
-            </div>
-          </div>
-          <div>
-            ${statusBadge}
-            ${actionButtons}
-          </div>
+        <div class="module-tier-meta">
+          <span class="module-tier-pill ${tierDef.pillClass}">${tierDef.pillLabel}</span>
+          <span class="module-tier-count ${countStatusClass}">● ${countLabel}</span>
         </div>
-
-        <p style="font-size:12px; color:var(--text-muted); margin:8px 0 10px 0; line-height:1.4;">
-          ${tech.desc}
-        </p>
-
-        <div class="level-selector-row">
-          <label style="font-size:12px; color:var(--text-muted);">${t('label_level')}:</label>
-          <select class="form-control" ${isLocked ? 'disabled style="opacity:0.55; cursor:not-allowed; padding:4px 8px; font-size:12px;"' : 'style="padding:4px 8px; font-size:12px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
-            ${levelOptions}
-          </select>
-          <span class="badge badge-info" style="font-size:11px;">${ramReq} MB RAM</span>
-        </div>
-
-        ${grantsHtml}
-        ${dbInfoHtml}
-        ${storageBoxHtml}
-        ${photosSharesIntegrationHtml}
-        ${sharesSmbBoxHtml}
-        ${networkBoxHtml}
-        ${isLocked ? `
-          <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
-            🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.
-          </div>
-        ` : ''}
-        ${(mod.id === 'storage' && isUnlocked) ? `
-          <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
-            <details style="font-size:11px; color:var(--text-muted);" open>
-              <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Formattazione Dischi</summary>
-              <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
-                <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
-                  Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici cancellando definitivamente tutti i dati e le foto presenti.
-                </p>
-                <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:11px; padding:4px 10px;">
-                  🗑️ Re-inizializza Pool Storage (Distruttivo)
-                </button>
-              </div>
-            </details>
-          </div>
-        ` : ''}
-        ${(mod.id !== 'storage' && !isLocked && mod.storage_bytes > 0) ? `
-          <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
-            <details style="font-size:11px; color:var(--text-muted);" ${mod.runtime_status === 'failed' ? 'open' : ''}>
-              <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Ripristino Dati (${mod.storage_size})</summary>
-              <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
-                <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
-                  Attualmente sono presenti <strong>${mod.storage_size}</strong> di dati su <code>${mod.storage_path}</code>. Puoi azzerarli e ricreare le cartelle pulite da zero.
-                </p>
-                <button class="btn btn-sm btn-danger" onclick="openDangerPurgeModal('${mod.id}')" style="font-size:11px; padding:4px 10px;">
-                  🗑️ Cancella Dati & Ripristina Modulo
-                </button>
-              </div>
-            </details>
-          </div>
-        ` : ''}
-        ${openLinkHtml}
       </div>
-
-      <div style="font-size:11px; color:var(--text-muted); border-top:1px solid var(--card-border); padding-top:8px; display:flex; justify-content:space-between; margin-top:12px;">
-        <span>UserNS: ${priv.userns || 'rootless'}</span>
-        <span>${imgs.length > 0 ? `${imgs.map(i => i.tag || i.Tag).join(', ')}` : 'Nativo'}</span>
-      </div>
+      <div class="modules-grid"></div>
     `;
 
-    container.appendChild(card);
+    const gridEl = sectionEl.querySelector('.modules-grid');
+    mods.forEach(mod => {
+      const card = createModuleCard(mod);
+      gridEl.appendChild(card);
+    });
+
+    container.appendChild(sectionEl);
   });
 }
 
