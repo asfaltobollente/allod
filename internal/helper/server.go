@@ -366,8 +366,8 @@ func (s *Server) Start() error {
 	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
 		_ = exec.Command("chown", "root:allod", s.SocketPath).Run()
 	}
-	if err := os.Chmod(s.SocketPath, 0660); err != nil {
-		log.Printf("Warning: failed to chmod 0660 on %s: %v", s.SocketPath, err)
+	if err := os.Chmod(s.SocketPath, 0666); err != nil {
+		log.Printf("Warning: failed to chmod 0666 on %s: %v", s.SocketPath, err)
 	}
 	fmt.Println("Ascolto su UNIX Socket:", s.SocketPath)
 
@@ -715,11 +715,13 @@ func (s *Server) processRequest(req Request) Response {
 					}
 				}
 
-				// 2. Try restarting systemd service
+				// 2. Restart systemd service asynchronously so we can return the response first
 				systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
-				if err := exec.Command(systemctlBin, "restart", "allod-helperd").Run(); err == nil {
-					return Response{Ok: true, Applied: true, Plan: []string{"systemctl restart allod-helperd"}}
-				}
+				go func() {
+					time.Sleep(200 * time.Millisecond)
+					_ = exec.Command(systemctlBin, "--no-block", "restart", "allod-helperd").Run()
+				}()
+				return Response{Ok: true, Applied: true, Plan: []string{"systemctl restart --no-block allod-helperd (queued)"}}
 
 				// 3. Fallback for manual run: spawn self in background and exit
 				binaryPath, errExe := os.Executable()

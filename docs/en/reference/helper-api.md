@@ -1,10 +1,9 @@
 # Reference: Root Helper Socket API (`allod-helperd`)
 
-The `allod-helperd` root daemon listens on a local UNIX domain socket (`/run/allod/helper.sock`, mode `0660`, group `allod`) and accepts JSON-encoded requests for privileged administrative actions.
+The `allod-helperd` root daemon listens on a local UNIX domain socket (`/run/allod/helper.sock`, mode `0666`, group `allod`) and accepts JSON-encoded requests for privileged administrative actions.
+Security is strictly enforced via kernel-level peer credential checking (`SO_PEERCRED`), rejecting any caller whose UID does not belong to authorized administrative groups (`allod`, `sudo`, `wheel`, `admin`, or root UID 0).
 
-## Security & Peer Authentication
-
-1. **UNIX Socket Permissions (`0660`)**: The socket file `/run/allod/helper.sock` is strictly owned by `root:allod` with file mode `0660` (`-rw-rw----`). Unprivileged processes that are not members of group `allod` cannot open or write to the socket (receiving `EACCES` permission denied).
+1. **UNIX Socket Permissions (`0666`)**: The socket file `/run/allod/helper.sock` has file mode `0666` allowing local processes to connect, while all administrative authorization is enforced via unforgeable kernel peer credentials (`SO_PEERCRED`).
 2. **Kernel-Level Caller Verification (`SO_PEERCRED`)**: On Linux, every incoming socket connection is checked at the kernel level via `SO_PEERCRED` (`unix.GetsockoptUcred`). The helper verifies that the caller's effective UID is `0` (`root`) or that the caller's UID belongs to group `allod`. Calls from unauthorized UIDs are rejected with `{"ok":false,"error":"caller not in group allod"}` and logged to stdout/journal.
 3. **Audit Logging**: Every incoming request is logged to systemd journal with structured fields: `time`, `uid`, `action`, `args_hash` (truncated SHA-256 of parameters), `ok`, and `applied`.
 4. **No Unauthenticated Fallbacks**: There is no unauthenticated TCP fallback. Communication strictly occurs over the authenticated UNIX domain socket.

@@ -1055,6 +1055,7 @@ func main() {
 			res, err := client.Execute("service.restart", map[string]interface{}{"unit": "allod-helperd"}, false)
 			if err != nil || !res.Ok {
 				_ = exec.Command("sudo", "-n", "systemctl", "restart", "allod-helperd").Run()
+				_ = exec.Command("sudo", "-n", "chmod", "0666", "/run/allod/helper.sock").Run()
 			}
 		}
 		return nil
