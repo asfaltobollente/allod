@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -335,13 +336,24 @@ func (s *Server) Start() error {
 	// Ensure group 'allod' exists if running as root on Linux
 	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
 		_ = exec.Command("groupadd", "-f", "allod").Run()
+		// Automatically add active logged-in users (UID >= 1000) to 'allod' group
+		if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
+			for _, d := range userDirs {
+				uidStr := filepath.Base(d)
+				if uid, errU := strconv.Atoi(uidStr); errU == nil && uid >= 1000 {
+					if u, errL := user.LookupId(uidStr); errL == nil {
+						_ = exec.Command("usermod", "-aG", "allod", u.Username).Run()
+					}
+				}
+			}
+		}
 	}
 
 	if dir := filepath.Dir(s.SocketPath); dir != "." && dir != "" {
-		_ = os.MkdirAll(dir, 0750)
+		_ = os.MkdirAll(dir, 0755)
 		if runtime.GOOS == "linux" && os.Geteuid() == 0 {
 			_ = exec.Command("chown", "root:allod", dir).Run()
-			_ = os.Chmod(dir, 0750)
+			_ = os.Chmod(dir, 0755)
 		}
 	}
 
