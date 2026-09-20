@@ -63,6 +63,14 @@ async function refreshData() {
       await fetchPhotosSharesIntegration();
     } catch (_) {}
 
+    try {
+      const netRes = await fetch('/api/network/status').then(r => r.json());
+      if (netRes && netRes.status === 'ok' && netRes.data && netRes.data.mesh_ip && netRes.data.mesh_ip !== '--') {
+        currentMeshIP = netRes.data.mesh_ip;
+        window.currentMeshIP = currentMeshIP;
+      }
+    } catch (_) {}
+
     renderLaunchpad();
     renderOverview();
     renderModules();
@@ -75,6 +83,8 @@ async function refreshData() {
 }
 
 let launchpadMode = 'lan';
+let currentMeshIP = '--';
+window.currentMeshIP = '--';
 
 function setLaunchpadMode(mode) {
   launchpadMode = mode;
@@ -105,7 +115,7 @@ function renderLaunchpad() {
   if (!container || !currentModules) return;
 
   const lanHost = window.location.hostname || '192.168.1.50';
-  const meshHost = '100.64.0.1';
+  const meshHost = (currentMeshIP && currentMeshIP !== '--') ? currentMeshIP : lanHost;
   const activeHost = (launchpadMode === 'mesh') ? meshHost : lanHost;
 
   const apps = [
@@ -1106,13 +1116,14 @@ function createModuleCard(mod) {
 
   let networkBoxHtml = '';
   if (mod.id === 'network') {
+    const displayMeshIp = (currentMeshIP && currentMeshIP !== '--') ? currentMeshIP : '--';
     networkBoxHtml = `
       <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
           <div>
             <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🌐 ${t('network_module_title')}</div>
             <div style="font-size:10.5px; color:var(--text-muted);">
-              ${t('network_mesh_ip_label')} <code>100.64.0.1</code>
+              ${t('network_mesh_ip_label')} <code id="network-mesh-ip-badge">${displayMeshIp}</code>
             </div>
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
