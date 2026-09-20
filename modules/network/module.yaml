@@ -27,7 +27,7 @@ privileges:
 
 images:
   - ref: docker.io/netbirdio/netbird
-    tag: "0.35.7"
+    tag: "0.79.0"
     channel: patch
 
 update:

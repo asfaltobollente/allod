@@ -113,7 +113,7 @@ func TestGenerateNetworkHybrid(t *testing.T) {
 			Devices: []string{"/dev/net/tun"},
 		},
 		Images: []manifest.Image{
-			{Ref: "docker.io/netbirdio/netbird", Tag: "0.35.7", Channel: "patch"},
+			{Ref: "docker.io/netbirdio/netbird", Tag: "0.79.0", Channel: "patch"},
 		},
 	}
 
@@ -130,11 +130,14 @@ func TestGenerateNetworkHybrid(t *testing.T) {
 	if !ok {
 		t.Fatalf("network.container not generated")
 	}
-	if !strings.Contains(netbirdUnit, "Image=docker.io/netbirdio/netbird:0.35.7") {
+	if !strings.Contains(netbirdUnit, "Image=docker.io/netbirdio/netbird:0.79.0") {
 		t.Errorf("expected netbird image in unit, got:\n%s", netbirdUnit)
 	}
 	if !strings.Contains(netbirdUnit, "Network=host") {
 		t.Errorf("expected Network=host for netbird, got:\n%s", netbirdUnit)
+	}
+	if !strings.Contains(netbirdUnit, "Volume=") || !strings.Contains(netbirdUnit, "network/netbird:/var/lib/netbird:Z") {
+		t.Errorf("expected Volume for /var/lib/netbird, got:\n%s", netbirdUnit)
 	}
 	if !strings.Contains(netbirdUnit, "Volume=") || !strings.Contains(netbirdUnit, "network/netbird:/etc/netbird:Z") {
 		t.Errorf("expected Volume for /etc/netbird, got:\n%s", netbirdUnit)
