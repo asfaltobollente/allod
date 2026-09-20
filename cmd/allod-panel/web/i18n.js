@@ -253,8 +253,8 @@ const i18n = {
     theme_default_sub: "Cyber Dark & Neon Cyan",
     theme_moderno: "Moderno",
     theme_moderno_sub: "Material Dashboard Creative Tim, rounded cards & pink glow",
-    theme_cia: "CIA // Tactical",
-    theme_cia_sub: "Jack Ryan Langley, radar stealth & NVG phosphor green",
+    theme_cia: "CIA // Tactical (Tom Clancy)",
+    theme_cia_sub: "Jack Ryan Langley, Splinter Cell NVG & Ghost Recon HUD with animated tactical radar",
     theme_allod: "Allod",
     theme_allod_sub: "Medieval freehold, aged oak, parchment & forged brass",
     btn_theme: "Theme"
@@ -512,8 +512,8 @@ const i18n = {
     theme_default_sub: "Cyber dark ardesia e accenti ciano neon",
     theme_moderno: "Moderno",
     theme_moderno_sub: "Material Dashboard Creative Tim, card arrotondate e gradiente rosa fucsia",
-    theme_cia: "CIA // Tactical",
-    theme_cia_sub: "Jack Ryan Langley, radar stealth e fosforo verde operativo",
+    theme_cia: "CIA // Tactical (Tom Clancy)",
+    theme_cia_sub: "Jack Ryan Langley, Splinter Cell NVG e Ghost Recon HUD con radar tattico animato",
     theme_allod: "Allod",
     theme_allod_sub: "Terre libere medievali, rovere antico, pergamena e ottone battuto",
     btn_theme: "Tema"

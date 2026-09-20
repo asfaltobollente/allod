@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@500;600;700&family=Roboto:wght@400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <script>
     (function() {
       const saved = localStorage.getItem('allod_theme');
@@ -18,6 +18,23 @@
   </script>
 </head>
 <body>
+  <!-- TACTICAL HUD ANIMATED BACKGROUND (Tom Clancy / Splinter Cell / Ghost Recon / Jack Ryan) -->
+  <div id="tactical-bg" class="tactical-bg-layer" aria-hidden="true">
+    <div class="tactical-grid"></div>
+    <div class="tactical-radar-rings"></div>
+    <div class="tactical-radar-sweep"></div>
+    <div class="tactical-scanline"></div>
+    <div class="tactical-crosshair ch-tl"></div>
+    <div class="tactical-crosshair ch-tr"></div>
+    <div class="tactical-crosshair ch-bl"></div>
+    <div class="tactical-crosshair ch-br"></div>
+    <div class="tactical-hud-telemetry top-left">GRID // 38°57'06"N 77°08'48"W // LANGLEY CIA HQ // KH-11 FEED</div>
+    <div class="tactical-hud-telemetry top-right">CLEARANCE // TOP SECRET // ORCON // NOFORN</div>
+    <div class="tactical-hud-telemetry bottom-left">FOURTH ECHELON // GHOST RECON OP-NET // ACTIVE</div>
+    <div class="tactical-hud-telemetry bottom-right">OVERLAY // NVG PHOSPHOR GREEN // 5.84 GHz</div>
+    <div class="tactical-vignette"></div>
+  </div>
+
   <div class="app-container">
     <!-- Sidebar -->
     <aside class="sidebar">
@@ -587,10 +604,10 @@ Ready for operations. Click any maintenance action above to see real-time output
                 </div>
                 <div class="theme-card-body">
                   <div class="theme-card-title">
-                    <span data-i18n="theme_cia">CIA // Tactical</span>
+                    <span data-i18n="theme_cia">CIA // Tactical (Tom Clancy)</span>
                     <span class="theme-check">✓</span>
                   </div>
-                  <div class="theme-card-desc" data-i18n="theme_cia_sub">Jack Ryan Langley, radar stealth e fosforo verde operativo</div>
+                  <div class="theme-card-desc" data-i18n="theme_cia_sub">Jack Ryan Langley, Splinter Cell NVG e Ghost Recon HUD con radar tattico animato</div>
                 </div>
               </div>
 
