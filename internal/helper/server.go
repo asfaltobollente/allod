@@ -474,17 +474,18 @@ func (s *Server) processRequest(req Request) Response {
 				if enabled {
 					// Configure [public] share for guest access without password
 					if !strings.Contains(sContent, "[public]") {
-						publicSnippet := fmt.Sprintf("\n[public]\n   comment = Cartella pubblica Allod (Jellyfin Media)\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n", pubPath)
+						publicSnippet := fmt.Sprintf("\n[public]\n   comment = Cartella pubblica Allod (Jellyfin Media)\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n   hide unreadable = yes\n", pubPath)
 						sContent += publicSnippet
 					}
 
 					// Configure default share (e.g. [shares])
 					shareTag := fmt.Sprintf("[%s]", name)
 					if !strings.Contains(sContent, shareTag) {
-						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n", name, path)
+						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n   hide unreadable = yes\n", name, path)
 						sContent += shareSnippet
 					}
 
+					sContent = PatchSambaConfig(sContent)
 					_ = os.WriteFile(smbConf, []byte(sContent), 0644)
 					_ = exec.Command("systemctl", "restart", "smbd").Run()
 				} else {
@@ -648,15 +649,18 @@ func (s *Server) processRequest(req Request) Response {
 			// Ensure private share configuration in /etc/samba/smb.conf
 			smbConf := "/etc/samba/smb.conf"
 			if content, err := os.ReadFile(smbConf); err == nil {
+				sContent := string(content)
 				userTag := fmt.Sprintf("[%s]", username)
-				if !strings.Contains(string(content), userTag) {
-					userSnippet := fmt.Sprintf("\n[%s]\n   comment = Cartella privata di %s\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = no\n   valid users = %s\n   create mask = 0660\n   directory mask = 0770\n", username, username, userSharePath, username)
-					_ = os.WriteFile(smbConf, []byte(string(content)+userSnippet), 0644)
+				if !strings.Contains(sContent, userTag) {
+					userSnippet := fmt.Sprintf("\n[%s]\n   comment = Cartella privata di %s\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = no\n   valid users = %s\n   create mask = 0660\n   directory mask = 0770\n   access based share enum = yes\n   hide unreadable = yes\n", username, username, userSharePath, username)
+					sContent += userSnippet
 				}
+				sContent = PatchSambaConfig(sContent)
+				_ = os.WriteFile(smbConf, []byte(sContent), 0644)
 			}
 
 			systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
-			_ = exec.Command(systemctlBin, "reload", "smbd").Run()
+			_ = exec.Command(systemctlBin, "restart", "smbd").Run()
 		}
 
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
@@ -1226,4 +1230,127 @@ func findNetBirdTarget() (string, []string, bool, bool) {
 	}
 
 	return "allod-netbird", nil, false, false
+}
+
+// PatchSambaConfig ensures that smb.conf has multi-user isolation enabled:
+// 1. [global] has "access based share enum = yes" so users only see shares they have access to
+// 2. Every share with "valid users" has "access based share enum = yes" and "hide unreadable = yes"
+// 3. Shared directories like [shares] or [public] have "hide unreadable = yes"
+func PatchSambaConfig(content string) string {
+	lines := strings.Split(content, "\n")
+	var sectionOrder []string
+	sectionLines := make(map[string][]string)
+	var preLines []string
+	currentSection := ""
+
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			currentSection = trimmed[1 : len(trimmed)-1]
+			sectionOrder = append(sectionOrder, currentSection)
+			sectionLines[currentSection] = []string{l}
+		} else if currentSection == "" {
+			preLines = append(preLines, l)
+		} else {
+			sectionLines[currentSection] = append(sectionLines[currentSection], l)
+		}
+	}
+
+	if len(sectionOrder) == 0 {
+		if strings.TrimSpace(content) == "" {
+			return "[global]\n   access based share enum = yes\n"
+		}
+		return "[global]\n   access based share enum = yes\n\n" + content
+	}
+
+	hasGlobal := false
+	for _, sec := range sectionOrder {
+		if strings.EqualFold(sec, "global") {
+			hasGlobal = true
+			break
+		}
+	}
+
+	var output []string
+	if !hasGlobal {
+		output = append(output, "[global]", "   access based share enum = yes", "")
+	}
+	output = append(output, preLines...)
+
+	for _, sec := range sectionOrder {
+		secLower := strings.ToLower(sec)
+		sLines := sectionLines[sec]
+
+		if secLower == "global" {
+			hasAccessBased := false
+			for _, sl := range sLines {
+				st := strings.TrimSpace(sl)
+				if strings.HasPrefix(st, "access based share enum") {
+					hasAccessBased = true
+					break
+				}
+			}
+			if !hasAccessBased {
+				var newSec []string
+				newSec = append(newSec, sLines[0])
+				newSec = append(newSec, "   # Allod Multi-User Privacy & ACL Isolation")
+				newSec = append(newSec, "   access based share enum = yes")
+				newSec = append(newSec, sLines[1:]...)
+				sLines = newSec
+			}
+		} else {
+			hasValidUsers := false
+			hasAccessBased := false
+			hasHideUnreadable := false
+
+			for _, sl := range sLines {
+				st := strings.TrimSpace(sl)
+				if strings.HasPrefix(st, "valid users") {
+					hasValidUsers = true
+				}
+				if strings.HasPrefix(st, "access based share enum") {
+					hasAccessBased = true
+				}
+				if strings.HasPrefix(st, "hide unreadable") {
+					hasHideUnreadable = true
+				}
+			}
+
+			if hasValidUsers {
+				if !hasAccessBased {
+					sLines = append(sLines, "   access based share enum = yes")
+				}
+				if !hasHideUnreadable {
+					sLines = append(sLines, "   hide unreadable = yes")
+				}
+			} else if secLower == "shares" || secLower == "public" {
+				if !hasHideUnreadable {
+					sLines = append(sLines, "   hide unreadable = yes")
+				}
+			}
+		}
+
+		output = append(output, sLines...)
+	}
+
+	return strings.Join(output, "\n")
+}
+
+// AutoHealSambaConfig checks /etc/samba/smb.conf and patches it if needed.
+func AutoHealSambaConfig() error {
+	smbConf := "/etc/samba/smb.conf"
+	data, err := os.ReadFile(smbConf)
+	if err != nil {
+		return nil // Samba not installed or file doesn't exist
+	}
+	original := string(data)
+	patched := PatchSambaConfig(original)
+	if patched != original {
+		if err := os.WriteFile(smbConf, []byte(patched), 0644); err != nil {
+			return err
+		}
+		systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
+		_ = exec.Command(systemctlBin, "restart", "smbd").Run()
+	}
+	return nil
 }
