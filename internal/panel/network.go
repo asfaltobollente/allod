@@ -131,15 +131,14 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If container status was not reachable via JSON CLI, check wt0 interface directly
+	// If container status was not reachable via JSON CLI, check wt0 interface directly for assigned IP
 	if meshIP == "--" {
 		if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
 			meshIP = ip
-			connected = true
 		}
 	}
 
-	// If container status was not reachable via JSON CLI or wt0, check config.json
+	// If container status was not reachable via JSON CLI or wt0, check config.json for assigned IP
 	if meshIP == "--" && hasKey && netLevel != "off" {
 		nbConfigFile := filepath.Join(baseDir, "network", "netbird", "config.json")
 		if cfgBytes, err := os.ReadFile(nbConfigFile); err == nil {
@@ -147,7 +146,6 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 			if err := json.Unmarshal(cfgBytes, &rawCfg); err == nil {
 				if ip, ok := rawCfg["WireGuardIp"].(string); ok && ip != "" {
 					meshIP = strings.Split(ip, "/")[0]
-					connected = true
 				}
 			}
 		}
@@ -195,11 +193,6 @@ func executeNetBirdStatus(client HelperClient) (string, error) {
 		if start >= 0 && end > start {
 			return strOut[start : end+1], nil
 		}
-	}
-
-	// Direct check for wt0 interface
-	if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
-		return fmt.Sprintf(`{"netbirdIp":"%s","management":{"connected":true,"url":"https://api.netbird.io:443"},"signal":{"connected":true,"url":"https://signal.netbird.io:443"},"peers":{"total":0,"connected":0}}`, ip), nil
 	}
 
 	return "", fmt.Errorf("container NetBird non attivo")

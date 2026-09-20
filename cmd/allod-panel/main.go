@@ -244,9 +244,6 @@ func getModuleRuntimeStatus(modName string, level string, runningContainers map[
 		return "stopped"
 	}
 	if modName == "network" {
-		if _, err := net.InterfaceByName("wt0"); err == nil {
-			return "running"
-		}
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		if res, err := client.Execute("network.netbird_status", nil, false); err == nil && res.Ok {
 			var stMap map[string]interface{}

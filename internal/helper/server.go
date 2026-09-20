@@ -905,7 +905,7 @@ func (s *Server) processRequest(req Request) Response {
 			}
 		}
 
-		targetContainer, runuserPrefix := findNetBirdTarget()
+		targetContainer, runuserPrefix, isRunning, exists := findNetBirdTarget()
 		var fullCmd []string
 		if len(runuserPrefix) > 0 {
 			fullCmd = append(runuserPrefix, "podman", "exec", targetContainer, "netbird", "status", "--json")
@@ -914,28 +914,47 @@ func (s *Server) processRequest(req Request) Response {
 		}
 		plan := []string{strings.Join(fullCmd, " ")}
 		if !req.Plan {
-			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
-			strOut := strings.TrimSpace(string(out))
-			if err == nil && len(strOut) > 0 {
-				start := strings.Index(strOut, "{")
-				end := strings.LastIndex(strOut, "}")
-				if start >= 0 && end > start {
-					return Response{Ok: true, Applied: true, Output: strOut[start : end+1], Plan: plan}
+			if !isRunning {
+				if exists {
+					var startCmd []string
+					if len(runuserPrefix) > 0 {
+						startCmd = append(runuserPrefix, "podman", "start", targetContainer)
+					} else {
+						startCmd = []string{"podman", "start", targetContainer}
+					}
+					if out, err := exec.Command(startCmd[0], startCmd[1:]...).CombinedOutput(); err == nil {
+						isRunning = true
+					} else {
+						return Response{Ok: false, Error: fmt.Sprintf("Container NetBird (%s) è arrestato (tentativo avvio: %s). Clicca 'Avvia' nel modulo Rete per riavviarlo.", targetContainer, strings.TrimSpace(string(out)))}
+					}
+				} else {
+					return Response{Ok: false, Error: "Container NetBird non configurato o non presente. Avvia il modulo network dal pannello."}
 				}
 			}
-			// Fallback: check if wt0 interface exists on host and extract clean IPv4
-			if ip := GetInterfaceIPv4("wt0"); ip != "" {
-				statusFallback := fmt.Sprintf(`{"netbirdIp":"%s","management":{"connected":true,"url":"https://api.netbird.io:443"},"signal":{"connected":true,"url":"https://signal.netbird.io:443"},"peers":{"total":0,"connected":0}}`, ip)
-				return Response{Ok: true, Applied: true, Output: statusFallback, Plan: plan}
+
+			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+			strOut := strings.TrimSpace(string(out))
+			start := strings.Index(strOut, "{")
+			end := strings.LastIndex(strOut, "}")
+			if start >= 0 && end > start {
+				return Response{Ok: true, Applied: true, Output: strOut[start : end+1], Plan: plan}
 			}
-			return Response{Ok: false, Error: fmt.Sprintf("Errore status NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
+			return Response{Ok: false, Error: fmt.Sprintf("Errore status NetBird: %v (%s)", err, strOut)}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
 	case "network.netbird_cli":
 		cmdType, _ := req.Args["command"].(string)
+		targetContainer, runuserPrefix, isRunning, exists := findNetBirdTarget()
+
 		if cmdType == "logs" {
-			targetContainer, runuserPrefix := findNetBirdTarget()
+			if !exists {
+				outJ, errJ := exec.Command("journalctl", "-u", "netbird", "-n", "30", "--no-pager").CombinedOutput()
+				if errJ == nil && len(outJ) > 0 {
+					return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(outJ)), Plan: []string{"journalctl -u netbird"}}
+				}
+				return Response{Ok: true, Applied: true, Output: "Nessun container NetBird trovato. Avvia il modulo Rete dal pannello.", Plan: nil}
+			}
 			var logCmd []string
 			if len(runuserPrefix) > 0 {
 				logCmd = append(runuserPrefix, "podman", "logs", "--tail", "30", targetContainer)
@@ -945,14 +964,14 @@ func (s *Server) processRequest(req Request) Response {
 			plan := []string{strings.Join(logCmd, " ")}
 			if !req.Plan {
 				out, err := exec.Command(logCmd[0], logCmd[1:]...).CombinedOutput()
-				if err == nil && len(out) > 0 {
-					return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+				strLogs := strings.TrimSpace(string(out))
+				if !isRunning && strLogs != "" {
+					strLogs = fmt.Sprintf("[ATTENZIONE: Il container %s è attualmente ARRESTATO]\n%s", targetContainer, strLogs)
 				}
-				outJ, errJ := exec.Command("journalctl", "-u", "netbird", "-n", "30", "--no-pager").CombinedOutput()
-				if errJ == nil && len(outJ) > 0 {
-					return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(outJ)), Plan: plan}
+				if err == nil && len(strLogs) > 0 {
+					return Response{Ok: true, Applied: true, Output: strLogs, Plan: plan}
 				}
-				return Response{Ok: true, Applied: true, Output: "In attesa di connessione NetBird. Configura e avvia il modulo dal pannello.", Plan: plan}
+				return Response{Ok: true, Applied: true, Output: "In attesa di log da NetBird.", Plan: plan}
 			}
 			return Response{Ok: true, Applied: false, Plan: plan}
 		}
@@ -972,15 +991,15 @@ func (s *Server) processRequest(req Request) Response {
 			plan := []string{strings.Join(fullCmd, " ")}
 			if !req.Plan {
 				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
-				if err == nil {
-					return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+				trimmed := strings.TrimSpace(string(out))
+				if err == nil || len(trimmed) > 0 {
+					return Response{Ok: true, Applied: true, Output: trimmed, Plan: plan}
 				}
 			} else {
 				return Response{Ok: true, Applied: false, Plan: plan}
 			}
 		}
 
-		targetContainer, runuserPrefix := findNetBirdTarget()
 		var fullCmd []string
 		if len(runuserPrefix) > 0 {
 			fullCmd = append(runuserPrefix, "podman", "exec", targetContainer, "netbird")
@@ -990,16 +1009,22 @@ func (s *Server) processRequest(req Request) Response {
 		}
 		plan := []string{strings.Join(fullCmd, " ")}
 		if !req.Plan {
+			if !isRunning {
+				if exists {
+					return Response{Ok: false, Error: fmt.Sprintf("Il container %s è arrestato. Clicca su 'Avvia' nel modulo Rete per avviarlo.", targetContainer)}
+				}
+				return Response{Ok: false, Error: "Nessun container NetBird configurato. Clicca su 'Avvia' nel modulo Rete per configurare e avviare."}
+			}
+
 			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
-			if err == nil {
-				return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+			trimmed := strings.TrimSpace(string(out))
+			if len(trimmed) > 0 {
+				return Response{Ok: true, Applied: true, Output: trimmed, Plan: plan}
 			}
-			// Fallback to checking wt0 interface
-			if iface, errI := net.InterfaceByName("wt0"); errI == nil {
-				msg := fmt.Sprintf("✓ Interfaccia kernel wt0 attiva (MTU: %d, Flags: %v)\nNetBird WireGuard mesh attivo a livello kernel host.", iface.MTU, iface.Flags)
-				return Response{Ok: true, Applied: true, Output: msg, Plan: plan}
+			if err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore CLI NetBird: %v", err)}
 			}
-			return Response{Ok: false, Error: fmt.Sprintf("NetBird non attivo: %v (%s)", err, strings.TrimSpace(string(out)))}
+			return Response{Ok: true, Applied: true, Output: "", Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
@@ -1066,8 +1091,14 @@ func (s *Server) processRequest(req Request) Response {
 			}
 		}
 
+		// Clean up any lingering or orphan wt0 interface before creating container
+		_ = exec.Command("ip", "link", "delete", "wt0").Run()
+
 		// Stop and remove any prior root container to restart cleanly
 		_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
+
+		// Enable podman-restart service so containers with --restart=always restart on boot
+		_ = exec.Command("systemctl", "enable", "--now", "podman-restart.service").Run()
 
 		fullCmd := []string{
 			"podman", "run", "-d",
@@ -1109,6 +1140,7 @@ func (s *Server) processRequest(req Request) Response {
 			plan := []string{strings.Join(fullCmd, " ")}
 			if !req.Plan {
 				out, _ := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				_ = exec.Command("ip", "link", "delete", "wt0").Run()
 				return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
 			}
 			return Response{Ok: true, Applied: false, Plan: plan}
@@ -1119,6 +1151,7 @@ func (s *Server) processRequest(req Request) Response {
 		if !req.Plan {
 			_ = exec.Command("podman", "stop", "allod-netbird").Run()
 			_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
+			_ = exec.Command("ip", "link", "delete", "wt0").Run()
 			return Response{Ok: true, Applied: true, Output: "allod-netbird fermato", Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
@@ -1129,26 +1162,26 @@ func (s *Server) processRequest(req Request) Response {
 	}
 }
 
-// findNetBirdTarget looks for a running NetBird container in root podman or in active user namespaces via runuser.
-// Returns (containerName, runuserPrefix).
-func findNetBirdTarget() (string, []string) {
+// findNetBirdTarget looks for a NetBird container in root podman or in active user namespaces via runuser.
+// Returns (containerName, runuserPrefix, isRunning, exists).
+func findNetBirdTarget() (string, []string, bool, bool) {
 	isMatch := func(name string) bool {
 		return name == "allod-netbird" || name == "network" || name == "systemd-network" ||
 			name == "network-netbird" || name == "systemd-network-netbird" ||
 			strings.HasPrefix(name, "network-") || strings.HasPrefix(name, "systemd-network-")
 	}
 
-	// 1. Try root podman ps
+	// 1. Try root podman ps (running)
 	if out, err := exec.Command("podman", "ps", "--format", "{{.Names}}").Output(); err == nil {
 		for _, line := range strings.Split(string(out), "\n") {
 			name := strings.TrimSpace(line)
 			if isMatch(name) {
-				return name, nil
+				return name, nil, true, true
 			}
 		}
 	}
 
-	// 2. Try rootless users in /run/user/<uid>
+	// 2. Try rootless users in /run/user/<uid> (running)
 	if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
 		for _, dir := range userDirs {
 			uid := filepath.Base(dir)
@@ -1158,12 +1191,39 @@ func findNetBirdTarget() (string, []string) {
 				for _, line := range strings.Split(string(out), "\n") {
 					name := strings.TrimSpace(line)
 					if isMatch(name) {
-						return name, prefix
+						return name, prefix, true, true
 					}
 				}
 			}
 		}
 	}
 
-	return "allod-netbird", nil
+	// 3. Try root podman ps -a (exists but stopped)
+	if out, err := exec.Command("podman", "ps", "-a", "--format", "{{.Names}}").Output(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			name := strings.TrimSpace(line)
+			if isMatch(name) {
+				return name, nil, false, true
+			}
+		}
+	}
+
+	// 4. Try rootless users in /run/user/<uid> (exists but stopped)
+	if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
+		for _, dir := range userDirs {
+			uid := filepath.Base(dir)
+			prefix := []string{"runuser", "-u", "#" + uid, "--"}
+			args := append(prefix, "podman", "ps", "-a", "--format", "{{.Names}}")
+			if out, err := exec.Command(args[0], args[1:]...).Output(); err == nil {
+				for _, line := range strings.Split(string(out), "\n") {
+					name := strings.TrimSpace(line)
+					if isMatch(name) {
+						return name, prefix, false, true
+					}
+				}
+			}
+		}
+	}
+
+	return "allod-netbird", nil, false, false
 }
