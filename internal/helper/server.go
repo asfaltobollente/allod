@@ -31,10 +31,10 @@ var AllowedActions = []string{
 	"service.restart",
 	"storage.init",
 	"storage.diagnostics",
-	"network.headscale_cli",
-	"network.preauthkey_create",
-	"network.nodes_list",
-	"network.users_list",
+	"network.netbird_status",
+	"network.netbird_cli",
+	"network.netbird_up",
+	"network.netbird_down",
 }
 
 // AllowedServiceUnits defines systemd service units allowed to be restarted via service.restart.
@@ -44,8 +44,7 @@ var AllowedServiceUnits = []string{
 	"smbd",
 	"smb",
 	"network",
-	"network-headscale",
-	"network-cloudflared",
+	"network-netbird",
 	"cloud",
 	"cloud-postgres",
 	"photos",
@@ -848,31 +847,26 @@ func (s *Server) processRequest(req Request) Response {
 			},
 		}
 
-	case "network.headscale_cli", "network.preauthkey_create", "network.nodes_list", "network.users_list":
-		cmdType, _ := req.Args["command"].(string)
-		if req.Action == "network.preauthkey_create" {
-			cmdType = "preauthkey_create"
-		} else if req.Action == "network.nodes_list" {
-			cmdType = "nodes_list"
-		} else if req.Action == "network.users_list" {
-			cmdType = "users_list"
-		}
-
-		targetContainer, runuserPrefix := findHeadscaleTarget()
-
+	case "network.netbird_status", "network.netbird_cli", "network.netbird_up", "network.netbird_down":
+		targetContainer, runuserPrefix := findNetBirdTarget()
 		var podmanArgs []string
-		switch cmdType {
-		case "preauthkey_create":
-			// Assicura che l'utente 'default' esista in Headscale
-			ensureCmd := append(runuserPrefix, "podman", "exec", targetContainer, "headscale", "users", "create", "default")
-			_ = exec.Command(ensureCmd[0], ensureCmd[1:]...).Run()
-			podmanArgs = []string{"exec", targetContainer, "headscale", "preauthkeys", "create", "-u", "default", "--reusable=false", "--expiration", "1h"}
-		case "nodes_list":
-			podmanArgs = []string{"exec", targetContainer, "headscale", "nodes", "list", "--output", "json"}
-		case "users_list":
-			podmanArgs = []string{"exec", targetContainer, "headscale", "users", "list", "--output", "json"}
-		default:
-			return Response{Ok: false, Error: "Comando Headscale non consentito: " + cmdType}
+		switch req.Action {
+		case "network.netbird_status":
+			podmanArgs = []string{"exec", targetContainer, "netbird", "status", "--json"}
+		case "network.netbird_up":
+			podmanArgs = []string{"exec", targetContainer, "netbird", "up"}
+		case "network.netbird_down":
+			podmanArgs = []string{"exec", targetContainer, "netbird", "down"}
+		case "network.netbird_cli":
+			cmdType, _ := req.Args["command"].(string)
+			switch cmdType {
+			case "status":
+				podmanArgs = []string{"exec", targetContainer, "netbird", "status"}
+			case "status_detail":
+				podmanArgs = []string{"exec", targetContainer, "netbird", "status", "--detail"}
+			default:
+				podmanArgs = []string{"exec", targetContainer, "netbird", "status", "--json"}
+			}
 		}
 
 		fullCmd := append(runuserPrefix, "podman")
@@ -882,27 +876,15 @@ func (s *Server) processRequest(req Request) Response {
 		if !req.Plan {
 			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
 			if err != nil {
-				// Fallback su comando host se disponibile
 				if len(podmanArgs) > 3 {
 					directArgs := podmanArgs[3:]
-					if out2, err2 := exec.Command("headscale", directArgs...).CombinedOutput(); err2 == nil {
+					if out2, err2 := exec.Command("netbird", directArgs...).CombinedOutput(); err2 == nil {
 						return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out2)), Plan: plan}
 					}
 				}
-				return Response{Ok: false, Error: fmt.Sprintf("Errore esecuzione Headscale: %v (%s)", err, strings.TrimSpace(string(out)))}
+				return Response{Ok: false, Error: fmt.Sprintf("Errore esecuzione NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
 			}
-			raw := strings.TrimSpace(string(out))
-			if cmdType == "preauthkey_create" {
-				lines := strings.Split(raw, "\n")
-				for i := len(lines) - 1; i >= 0; i-- {
-					l := strings.TrimSpace(lines[i])
-					if l != "" {
-						raw = l
-						break
-					}
-				}
-			}
-			return Response{Ok: true, Applied: true, Output: raw, Plan: plan}
+			return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
@@ -912,15 +894,12 @@ func (s *Server) processRequest(req Request) Response {
 	}
 }
 
-// findHeadscaleTarget looks for a running Headscale container in root podman or in active user namespaces via runuser.
+// findNetBirdTarget looks for a running NetBird container in root podman or in active user namespaces via runuser.
 // Returns (containerName, runuserPrefix).
-func findHeadscaleTarget() (string, []string) {
+func findNetBirdTarget() (string, []string) {
 	isMatch := func(name string) bool {
-		if strings.Contains(name, "cloudflared") {
-			return false
-		}
 		return name == "network" || name == "systemd-network" ||
-			name == "network-headscale" || name == "systemd-network-headscale" ||
+			name == "network-netbird" || name == "systemd-network-netbird" ||
 			strings.HasPrefix(name, "network-") || strings.HasPrefix(name, "systemd-network-")
 	}
 

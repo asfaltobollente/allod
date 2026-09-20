@@ -27,10 +27,10 @@
             "service.restart",
             "storage.init",
             "storage.diagnostics",
-            "network.headscale_cli",
-            "network.preauthkey_create",
-            "network.nodes_list",
-            "network.users_list"
+            "network.netbird_status",
+            "network.netbird_cli",
+            "network.netbird_up",
+            "network.netbird_down"
           ]
         },
         "plan": {

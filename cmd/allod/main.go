@@ -352,7 +352,7 @@ var startCmd = &cobra.Command{
 				}
 				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-postgres").Run()
 				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-valkey").Run()
-				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-cloudflared").Run()
+				_ = exec.Command("systemctl", "--user", "start", "--no-block", modName+"-netbird").Run()
 				runCmd := exec.Command("systemctl", "--user", "start", "--no-block", modName)
 				if err := runCmd.Run(); err != nil {
 					fmt.Printf("  ✗ %-12s Errore avvio (systemd unit %s): %v\n", modName, modName, err)
@@ -363,7 +363,7 @@ var startCmd = &cobra.Command{
 		} else {
 			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-postgres").Run()
 			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-valkey").Run()
-			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-cloudflared").Run()
+			_ = exec.Command("systemctl", "--user", "start", "--no-block", target+"-netbird").Run()
 			runCmd := exec.Command("systemctl", "--user", "start", "--no-block", target)
 			if err := runCmd.Run(); err != nil {
 				fmt.Printf("✗ Errore avvio modulo '%s': %v\n", target, err)
@@ -1007,12 +1007,15 @@ var purgeCmd = &cobra.Command{
 		_ = exec.Command("systemctl", "--user", "stop", modName).Run()
 		_ = exec.Command("systemctl", "--user", "stop", modName+"-postgres").Run()
 		_ = exec.Command("systemctl", "--user", "stop", modName+"-valkey").Run()
+		_ = exec.Command("systemctl", "--user", "stop", modName+"-netbird").Run()
 
 		// 2. Remove Podman containers
 		_ = exec.Command("podman", "rm", "-f", "systemd-"+modName).Run()
 		_ = exec.Command("podman", "rm", "-f", "systemd-"+modName+"-postgres").Run()
 		_ = exec.Command("podman", "rm", "-f", "systemd-"+modName+"-valkey").Run()
+		_ = exec.Command("podman", "rm", "-f", "systemd-"+modName+"-netbird").Run()
 		_ = exec.Command("podman", "rm", "-f", modName).Run()
+		_ = exec.Command("podman", "rm", "-f", modName+"-netbird").Run()
 
 		// 3. Reset failed state
 		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
@@ -1024,6 +1027,7 @@ var purgeCmd = &cobra.Command{
 			_ = os.Remove(filepath.Join(quadDir, modName+".container"))
 			_ = os.Remove(filepath.Join(quadDir, modName+"-postgres.container"))
 			_ = os.Remove(filepath.Join(quadDir, modName+"-valkey.container"))
+			_ = os.Remove(filepath.Join(quadDir, modName+"-netbird.container"))
 			_ = os.Remove(filepath.Join(quadDir, modName+".service"))
 		}
 

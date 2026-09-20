@@ -1149,68 +1149,84 @@ sudo systemctl enable --now allod-helperd</pre>
     </div>
   </div>
 
-  <!-- NETWORK CONFIG MODAL (Headscale + Cloudflare Shield) -->
+  <!-- NETWORK CONFIG MODAL (NetBird Sovereign Mesh) -->
   <div id="network-config-modal" class="modal-overlay hidden">
     <div class="modal-card" style="max-width:580px;">
       <div class="modal-header">
-        <h3 data-i18n="network_modal_title">🛡️ Headscale + Cloudflare Shield Setup</h3>
+        <h3 data-i18n="network_modal_title">🛡️ Configurazione Rete Sovrana NetBird</h3>
         <button class="modal-close-btn" onclick="closeNetworkConfigModal()">&times;</button>
       </div>
       <div class="modal-body">
         <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;" data-i18n="network_modal_desc">
-          Configure your Cloudflare Tunnel to expose your private Headscale control plane with zero open router ports.
+          Collega il tuo nodo Allod a NetBird per accesso remoto sicuro WireGuard punto-punto senza aprire porte sul router.
         </p>
         <div class="form-group mb-3">
-          <label for="network-domain-input" style="font-size:12px; font-weight:600;" data-i18n="network_modal_domain_label">Public Domain (e.g. vpn.yourdomain.com):</label>
-          <input type="text" id="network-domain-input" class="form-control" placeholder="https://vpn.example.com" />
+          <label for="network-mode-select" style="font-size:12px; font-weight:600;" data-i18n="network_modal_mode_label">Modalità Operativa:</label>
+          <select id="network-mode-select" class="form-control" onchange="toggleNetworkModeUI()">
+            <option value="cloud" data-i18n="network_mode_cloud">🌐 NetBird Cloud (Europa - Francoforte, 100% GDPR, Zero Porte)</option>
+            <option value="selfhosted" data-i18n="network_mode_selfhosted">🏠 NetBird Self-Hosted (Server di Coordinamento Sovrano)</option>
+          </select>
         </div>
         <div class="form-group mb-3">
-          <label for="network-token-input" style="font-size:12px; font-weight:600;" data-i18n="network_modal_token_label">Cloudflare Tunnel Token:</label>
-          <textarea id="network-token-input" class="form-control" rows="3" placeholder="eyJhIjoi..." style="font-family:monospace; font-size:11.5px;"></textarea>
+          <label for="network-setup-key-input" style="font-size:12px; font-weight:600;" data-i18n="network_modal_key_label">NetBird Setup Key:</label>
+          <input type="password" id="network-setup-key-input" class="form-control" placeholder="es. 4A8B7C21-..." autocomplete="off" />
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;" data-i18n="network_modal_key_sub">
+            Genera una Setup Key dalla dashboard NetBird (Cloud o Self-Hosted) con permessi di registrazione peer.
+          </div>
+        </div>
+        <div class="form-group mb-3" id="network-mgmt-group" style="display:none;">
+          <label for="network-mgmt-url-input" style="font-size:12px; font-weight:600;" data-i18n="network_modal_mgmt_label">Management Server URL:</label>
+          <input type="text" id="network-mgmt-url-input" class="form-control" placeholder="https://mesh.tuodominio.it:443" />
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeNetworkConfigModal()" data-i18n="sweeper_close">Close</button>
+        <button class="btn btn-secondary" onclick="closeNetworkConfigModal()" data-i18n="sweeper_close">Chiudi</button>
         <button class="btn btn-primary" id="network-save-btn" onclick="saveNetworkConfig()" style="margin-left:8px;" data-i18n="network_modal_save">
-          Save & Restart Services
+          Salva e Riavvia NetBird
         </button>
       </div>
     </div>
   </div>
 
-  <!-- NETWORK PAIRING MODAL (Add Smartphone / PC with Pre-Auth Key) -->
+  <!-- NETWORK PAIRING MODAL (Connect Devices via NetBird) -->
   <div id="network-pairing-modal" class="modal-overlay hidden">
     <div class="modal-card" style="max-width:620px;">
       <div class="modal-header">
-        <h3 data-i18n="network_pairing_title">📱 Pair Device to Mesh Network</h3>
+        <h3 data-i18n="network_pairing_title">📱 Connetti Dispositivi alla Rete NetBird</h3>
         <button class="modal-close-btn" onclick="closeNetworkPairingModal()">&times;</button>
       </div>
       <div class="modal-body">
         <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;" data-i18n="network_pairing_desc">
-          Use this one-time key to connect your smartphone or PC to your private WireGuard mesh using the free official Tailscale app.
+          Connetti smartphone, computer e tablet alla tua rete mesh WireGuard privata con l'app ufficiale gratuita NetBird.
         </p>
 
         <div style="background:#0f172a; border-radius:8px; padding:14px; border:1px solid rgba(255,255,255,0.08); margin-bottom:16px;">
-          <div style="margin-bottom:10px;">
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_pairing_server_label">Headscale Server URL:</div>
-            <div id="pairing-server-url" style="font-size:14px; font-weight:700; color:var(--primary); font-family:monospace;">--</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:10px;">
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_status_mode_label">Modalità:</div>
+              <div id="pairing-mode-label" style="font-size:13px; font-weight:700; color:var(--primary);">NetBird Cloud (EU)</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_mesh_ip_label">IP Mesh Server Allod:</div>
+              <div id="pairing-mesh-ip" style="font-size:13px; font-weight:700; color:var(--success); font-family:monospace;">100.64.0.1</div>
+            </div>
           </div>
           <div>
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_pairing_key_label">Pre-Auth Key (valid 1 hour):</div>
-            <div id="pairing-auth-key" style="font-size:14px; font-weight:700; color:var(--success); font-family:monospace; word-break:break-all;">--</div>
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_status_mgmt_label">Management URL:</div>
+            <div id="pairing-server-url" style="font-size:12.5px; font-weight:600; color:var(--text-main); font-family:monospace; word-break:break-all;">https://api.netbird.io:443</div>
           </div>
         </div>
 
         <div style="background:#0b1120; border-radius:8px; padding:14px; border:1px solid rgba(56,189,248,0.2); font-size:12px; line-height:1.6;">
-          <div style="font-weight:700; color:var(--text-main); margin-bottom:6px;" data-i18n="network_pairing_steps_title">How to connect from your smartphone:</div>
-          <div data-i18n="network_step1">1. Install the official Tailscale app from Google Play or App Store.</div>
-          <div data-i18n="network_step2">2. Open Tailscale, tap the three dots in top right ➔ 'Change server'.</div>
-          <div data-i18n="network_step3">3. Enter your Headscale server URL and tap Connect.</div>
-          <div data-i18n="network_step4">4. Paste your Pre-Auth Key: you are connected in direct WireGuard P2P!</div>
+          <div style="font-weight:700; color:var(--text-main); margin-bottom:6px;" data-i18n="network_pairing_steps_title">Come collegarsi dal tuo smartphone o PC:</div>
+          <div data-i18n="network_step1">1. Scarica l'app ufficiale NetBird da Google Play, Apple App Store o netbird.io/install.</div>
+          <div data-i18n="network_step2">2. In caso di NetBird Self-Hosted: nelle impostazioni dell'app inserisci il Management Server URL.</div>
+          <div data-i18n="network_step3">3. Accedi al tuo account NetBird o registra il dispositivo con una Setup Key.</div>
+          <div data-i18n="network_step4">4. Attiva la connessione: il dispositivo accede a Immich, Jellyfin 4K, Samba e Allod Panel in P2P diretto!</div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeNetworkPairingModal()" data-i18n="sweeper_close">Close</button>
+        <button class="btn btn-secondary" onclick="closeNetworkPairingModal()" data-i18n="sweeper_close">Chiudi</button>
       </div>
     </div>
   </div>

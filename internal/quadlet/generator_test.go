@@ -99,70 +99,57 @@ func TestGenerateNetworkHybrid(t *testing.T) {
 		ID:   "network",
 		Tier: "recommended",
 		Levels: map[string]manifest.Level{
-			"hybrid": {
-				RAMMB: 120,
+			"cloud": {
+				RAMMB: 40,
 				Requires: manifest.Requires{
 					Modules: []string{"storage"},
 				},
 			},
 		},
-		Ports: []manifest.Port{
-			{N: 8085, Scope: "localhost"},
-		},
+		Ports: []manifest.Port{},
 		Privileges: manifest.Privileges{
-			Userns: "rootless",
-			Caps:   []string{"NET_ADMIN"},
+			Userns:  "rootless",
+			Caps:    []string{"NET_ADMIN"},
+			Devices: []string{"/dev/net/tun"},
 		},
 		Images: []manifest.Image{
-			{Ref: "docker.io/headscale/headscale", Tag: "0.25.1", Channel: "patch"},
-			{Ref: "docker.io/cloudflare/cloudflared", Tag: "2026.9.1", Channel: "patch"},
+			{Ref: "docker.io/netbirdio/netbird", Tag: "0.35.7", Channel: "patch"},
 		},
 	}
 
-	res, err := Generate("network", m, "hybrid")
+	res, err := Generate("network", m, "cloud")
 	if err != nil {
 		t.Fatalf("unexpected error generating network: %v", err)
 	}
 
-	if len(res.Files) != 2 {
-		t.Fatalf("expected 2 units (headscale + cloudflared), got %d", len(res.Files))
+	if len(res.Files) != 1 {
+		t.Fatalf("expected 1 unit (network.container), got %d", len(res.Files))
 	}
 
-	headscaleUnit, ok := res.Files["network.container"]
+	netbirdUnit, ok := res.Files["network.container"]
 	if !ok {
 		t.Fatalf("network.container not generated")
 	}
-	if !strings.Contains(headscaleUnit, "Image=docker.io/headscale/headscale:0.25.1") {
-		t.Errorf("expected headscale image in unit, got:\n%s", headscaleUnit)
+	if !strings.Contains(netbirdUnit, "Image=docker.io/netbirdio/netbird:0.35.7") {
+		t.Errorf("expected netbird image in unit, got:\n%s", netbirdUnit)
 	}
-	if !strings.Contains(headscaleUnit, "PublishPort=127.0.0.1:8085:8085") {
-		t.Errorf("expected 127.0.0.1:8085 localhost publish port, got:\n%s", headscaleUnit)
+	if !strings.Contains(netbirdUnit, "Network=host") {
+		t.Errorf("expected Network=host for netbird, got:\n%s", netbirdUnit)
 	}
-	if !strings.Contains(headscaleUnit, "MemoryMax=120M") {
-		t.Errorf("expected MemoryMax=120M, got:\n%s", headscaleUnit)
+	if !strings.Contains(netbirdUnit, "Volume=") || !strings.Contains(netbirdUnit, "network/netbird:/etc/netbird:Z") {
+		t.Errorf("expected Volume for /etc/netbird, got:\n%s", netbirdUnit)
 	}
-	if !strings.Contains(headscaleUnit, "AddCapability=NET_ADMIN") {
-		t.Errorf("expected AddCapability=NET_ADMIN, got:\n%s", headscaleUnit)
+	if !strings.Contains(netbirdUnit, "EnvironmentFile=") || !strings.Contains(netbirdUnit, "network/secrets/netbird.env") {
+		t.Errorf("expected EnvironmentFile pointing to netbird.env, got:\n%s", netbirdUnit)
 	}
-
-	cfUnit, ok := res.Files["network-cloudflared.container"]
-	if !ok {
-		t.Fatalf("network-cloudflared.container not generated")
+	if !strings.Contains(netbirdUnit, "AddCapability=NET_ADMIN") {
+		t.Errorf("expected AddCapability=NET_ADMIN, got:\n%s", netbirdUnit)
 	}
-	if !strings.Contains(cfUnit, "Image=docker.io/cloudflare/cloudflared:2026.9.1") {
-		t.Errorf("expected cloudflared image in unit, got:\n%s", cfUnit)
+	if !strings.Contains(netbirdUnit, "AddDevice=/dev/net/tun") {
+		t.Errorf("expected AddDevice=/dev/net/tun, got:\n%s", netbirdUnit)
 	}
-	if !strings.Contains(cfUnit, "Network=host") {
-		t.Errorf("expected Network=host for cloudflared, got:\n%s", cfUnit)
-	}
-	if !strings.Contains(cfUnit, "Exec=tunnel --no-autoupdate run") {
-		t.Errorf("expected tunnel run exec, got:\n%s", cfUnit)
-	}
-	if !strings.Contains(cfUnit, "EnvironmentFile=") || !strings.Contains(cfUnit, "secrets/cloudflared.env") {
-		t.Errorf("expected EnvironmentFile pointing to secrets/cloudflared.env, got:\n%s", cfUnit)
-	}
-	if strings.Contains(cfUnit, "Environment=TUNNEL_TOKEN=") {
-		t.Errorf("expected TUNNEL_TOKEN to NOT be inlined as Environment=, got:\n%s", cfUnit)
+	if !strings.Contains(netbirdUnit, "MemoryMax=40M") {
+		t.Errorf("expected MemoryMax=40M, got:\n%s", netbirdUnit)
 	}
 }
 

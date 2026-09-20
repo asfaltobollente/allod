@@ -212,59 +212,19 @@ func EnsureStorageDirectories(modID string) {
 			_ = os.Chmod(d, 0777)
 		}
 	case "network":
-		hsCfgDir := filepath.Join(baseDir, "network", "headscale", "config")
-		hsDataDir := filepath.Join(baseDir, "network", "headscale", "data")
+		nbCfgDir := filepath.Join(baseDir, "network", "netbird")
 		netSecretsDir := filepath.Join(baseDir, "network", "secrets")
 		dirs = []string{
-			hsCfgDir,
-			hsDataDir,
+			nbCfgDir,
 		}
 		for _, d := range dirs {
 			_ = os.MkdirAll(d, 0777)
 		}
 		_ = os.MkdirAll(netSecretsDir, 0700)
-		cfgFile := filepath.Join(hsCfgDir, "config.yaml")
-		if _, err := os.Stat(cfgFile); err != nil {
-			defaultHeadscaleYaml := `server_url: http://127.0.0.1:8085
-listen_addr: 0.0.0.0:8085
-metrics_listen_addr: 127.0.0.1:9095
-grpc_listen_addr: 0.0.0.0:50443
-grpc_allow_insecure: true
-
-noise:
-  private_key_path: /var/lib/headscale/noise_private.key
-
-prefixes:
-  v4: 100.64.0.0/10
-  v6: fd7a:115c:a1e0::/48
-  allocation: sequential
-
-derp:
-  server:
-    enabled: false
-  urls:
-    - https://controlplane.tailscale.com/derpmap/default
-  auto_update_enabled: true
-  update_frequency: 24h
-
-disable_check_updates: true
-ephemeral_node_inactivity_timeout: 30m
-
-database:
-  type: sqlite
-  sqlite:
-    path: /var/lib/headscale/db.sqlite
-
-dns:
-  magic_dns: true
-  base_domain: mesh.allod
-  nameservers:
-    split: {}
-    global:
-      - 1.1.1.1
-      - 8.8.8.8
-`
-			_ = os.WriteFile(cfgFile, []byte(defaultHeadscaleYaml), 0644)
+		netbirdEnv := filepath.Join(netSecretsDir, "netbird.env")
+		if _, err := os.Stat(netbirdEnv); err != nil {
+			defaultNetBirdEnv := "# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=\nNB_MANAGEMENT_URL=\n"
+			_ = os.WriteFile(netbirdEnv, []byte(defaultNetBirdEnv), 0600)
 		}
 	default:
 		dirs = []string{
@@ -341,7 +301,7 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	sb.WriteString("[Container]\n")
 	sb.WriteString(fmt.Sprintf("Image=%s:%s\n", img.Ref, img.Tag))
 	sb.WriteString(fmt.Sprintf("ContainerName=%s\n", unitName))
-	if strings.Contains(img.Ref, "cloudflared") {
+	if strings.Contains(img.Ref, "cloudflared") || strings.Contains(img.Ref, "netbird") || m.ID == "network" {
 		sb.WriteString("Network=host\n")
 	} else {
 		sb.WriteString("Network=allod\n")
@@ -402,33 +362,8 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/shares/public:z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z\n", baseDir))
 	case "network":
-		if strings.Contains(img.Ref, "headscale") {
-			sb.WriteString(fmt.Sprintf("Volume=%s/network/headscale/config:/etc/headscale:Z\n", baseDir))
-			sb.WriteString(fmt.Sprintf("Volume=%s/network/headscale/data:/var/lib/headscale:Z\n", baseDir))
-			sb.WriteString("Exec=serve\n")
-		} else if strings.Contains(img.Ref, "cloudflared") {
-			sb.WriteString("Exec=tunnel --no-autoupdate run\n")
-			resBaseDir := ResolvedStorageBaseDir()
-			secretsDir := filepath.Join(resBaseDir, "network", "secrets")
-			secretEnv := filepath.Join(secretsDir, "cloudflared.env")
-			tokenFile := filepath.Join(resBaseDir, "network", "cloudflared.token")
-			legacyEnvFile := filepath.Join(resBaseDir, "network", "cloudflared.env")
-
-			// If token file exists, ensure secrets dir (0700) and write secrets/cloudflared.env (0600)
-			if tokBytes, err := os.ReadFile(tokenFile); err == nil && len(strings.TrimSpace(string(tokBytes))) > 0 {
-				_ = os.MkdirAll(secretsDir, 0700)
-				_ = os.WriteFile(secretEnv, []byte(fmt.Sprintf("TUNNEL_TOKEN=%s\n", strings.TrimSpace(string(tokBytes)))), 0600)
-			}
-
-			// Point to EnvironmentFile in Quadlet container
-			if _, err := os.Stat(secretEnv); err == nil {
-				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/secrets/cloudflared.env\n", baseDir))
-			} else if _, err := os.Stat(legacyEnvFile); err == nil {
-				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/cloudflared.env\n", baseDir))
-			} else {
-				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/secrets/cloudflared.env\n", baseDir))
-			}
-		}
+		sb.WriteString(fmt.Sprintf("Volume=%s/network/netbird:/etc/netbird:Z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/secrets/netbird.env\n", baseDir))
 	default:
 		sb.WriteString(fmt.Sprintf("Volume=%s/%s:/data:Z\n", baseDir, m.ID))
 	}
@@ -437,7 +372,7 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString("UserNS=host\n")
 	}
 	for _, dev := range m.Privileges.Devices {
-		if _, err := os.Stat(dev); err == nil {
+		if _, err := os.Stat(dev); err == nil || dev == "/dev/net/tun" || strings.HasPrefix(dev, "/dev/net/") {
 			sb.WriteString(fmt.Sprintf("AddDevice=%s\n", dev))
 		}
 	}
@@ -557,6 +492,8 @@ func StopAndRemoveContainers(modID string, removeUnits bool) error {
 		"systemd-" + modID + "-postgres",
 		modID + "-valkey",
 		"systemd-" + modID + "-valkey",
+		modID + "-netbird",
+		"systemd-" + modID + "-netbird",
 		modID + "-headscale",
 		"systemd-" + modID + "-headscale",
 		modID + "-cloudflared",

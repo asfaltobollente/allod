@@ -23,7 +23,7 @@ modules:
     media:
         level: "off"
     network:
-        level: hybrid
+        level: cloud
     photos:
         level: standard
     shares:

@@ -21,7 +21,7 @@
 2. **Immutable Append-Only Backups**: Peer backups operate in strict append-only mode (`rest-server --append-only`). If your local server suffers a ransomware attack, the attacker cannot delete or tamper with historical backups stored on your peers' servers.
 3. **Decentralized 2-Replica Ring**: In a federation group of 3+ nodes, every critical dataset automatically maintains 2 distinct remote replicas with anti-affinity placement.
 4. **Strict Privilege Boundary**: The web dashboard is 100% rootless; administrative tasks are delegated over a local UNIX socket to a minimal root helper with a closed action whitelist (see [Root Helper Socket API](docs/en/reference/helper-api.md)).
-5. **No Open Firewall Ports**: Natively integrates with WireGuard overlay meshes (Headscale / Tailscale) with fine-grained per-port access control lists (ACLs).
+5. **No Open Firewall Ports**: Natively integrates with modern WireGuard overlay mesh networking ([NetBird](https://netbird.io)) with zero open ports, automated WebRTC NAT traversal, and granular per-port access control lists (ACLs).
 
 ---
 
@@ -68,7 +68,7 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **`shares`** | **[Samba (SMB/CIFS)](https://www.samba.org)** | High-speed LAN shared folders for Windows, Mac & Linux | `445` |
 | **`storage`** | **[Btrfs](https://btrfs.readthedocs.io)** + **smartmontools** | Hardware-safe RAID 1, instant snapshots & S.M.A.R.T. health | Native |
 | **`media`** | **[Jellyfin](https://jellyfin.org)** | Personal streaming server for movies, series & music | `8096` |
-| **`network`** | **[Headscale](https://headscale.net)** + **[Cloudflare Tunnel](https://github.com/cloudflare/cloudflared)** / **[WireGuard](https://www.wireguard.com)** | Sovereign remote access, peer-to-peer mesh & zero open router ports | `8085` (local) |
+| **`network`** | **[NetBird](https://netbird.io)** | Sovereign WireGuard mesh, remote access & zero open router ports (Cloud EU / Self-Hosted) | Mesh only |
 | **`watch`** | **Allod Watchdog** + **[WireGuard](https://www.wireguard.com)** | Encrypted peer heartbeat & federation quorum supervisor | Mesh only |
 
 ---
@@ -83,11 +83,10 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **Privileged Helper Daemon** | **Funzionante oggi** *(Working Today)* | Root socket at `/run/allod/helper.sock` with `allod` group ownership, strict 16-action whitelist, and full argument audit logging. |
 | **Multi-Tenancy & Storage** | **Funzionante oggi** *(Working Today)* | Multi-user Linux provisioning with nologin shells, Samba `0770`/`0777` shares, Btrfs RAID 1/Single pool detection and auto-healing. |
 | **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update, and Triad orchestration. |
-| **Hybrid Mesh Networking** | **Funzionante oggi** *(Working Today)* | Self-hosted Headscale control plane + Cloudflare outbound tunnel with zero router ports and CGNAT bypass. |
+| **NetBird Sovereign Mesh** | **Funzionante oggi** *(Working Today)* | Native WireGuard overlay mesh with automated WebRTC NAT traversal, zero open router ports, EU Cloud (Frankfurt) & Self-Hosted sovereign modes. |
 | **Media & Photos Modules** | **In sviluppo** *(In Development)* | Immich standard/full and Jellyfin container orchestration functional; automated mobile client integration in refinement. |
 | **Cloud Module (Nextcloud)** | **In sviluppo** *(In Development)* | Nextcloud 30 with dedicated PostgreSQL 16 Alpine and dynamic secret management; automated WebDAV setup in refinement. |
 | **Federated Backup Engine** | **In sviluppo** *(In Development)* | `rest-server` 0.12.1 rootless Quadlet provisioned; federated snapshot client orchestration, automated timer scheduling, and per-peer htpasswd auth in progress. |
-| **Tailscale Native Backend** | **Pianificato** *(Planned)* | Hosted Tailscale client mode alongside existing Headscale and WireGuard options. |
 | **Web Panel Auth Gate** | **Pianificato** *(Planned)* | Dedicated session authentication and optional 2FA for panel administration. |
 | **Release Cryptographic Signing** | **Pianificato** *(Planned)* | Cosign / Minisign keyless artifact and SBOM signing for production release binaries. |
 | **Automated Ring Snapshot & Restore** | **Pianificato** *(Planned)* | One-click snapshot scheduling across federated peers and interactive disaster recovery restore CLI. |
@@ -215,10 +214,8 @@ Allod abandons primitive binary switches in favor of **hardware-aware resource l
 | **`shares`** *(Samba)* | **`custom`** | **100 MB** | 4 GB System RAM | Granular multi-share permissions and independent user/group Access Control Lists (ACLs). |
 | **`media`** *(Jellyfin)* | **`basic`** | **500 MB** | 4 GB System RAM | 4K/1080p direct streaming of movies, TV shows, and music to Smart TVs, phones, and web browsers. |
 | **`media`** *(Jellyfin)* | **`full`** | **1000 MB** | 8 GB System RAM, GPU | Everything in `basic` + **Hardware Transcoding** via Intel QuickSync / AMD VA-API (`/dev/dri/renderD128`). |
-| **`cloud`** *(Nextcloud)* | **`basic`** | **1.0 GB** | 8 GB System RAM | Files sync, mobile file explorer, WebDAV, notes, and calendar. |
-| **`network`** *(Hybrid Shield)* | **`hybrid`** | **120 MB** | 4 GB System RAM | **Recommended**: Self-hosted Headscale control plane + Cloudflare Tunnel. Zero router ports, CGNAT/Starlink bypass. Video/sync data flows direct P2P outside Cloudflare. |
-| **`network`** *(Pure WireGuard)* | **`wireguard`** *(📋 planned)* | **50 MB** | 4 GB System RAM | 100% sovereign native kernel WireGuard with instant cryptographic QR pairing. Zero third-party cloud, zero accounts. Requires public IP or UDP port forward. |
-| **`network`** *(Zero-Click Cloud)* | **`tailscale`** *(📋 planned)* | **60 MB** | 4 GB System RAM | Tailscale client connected to hosted control plane (`tailscale.com`). 30-second zero-click setup for users without a domain. |
+| **`network`** *(NetBird Cloud)* | **`cloud`** | **40 MB** | 4 GB System RAM | **Recommended**: NetBird European Cloud (Frankfurt, Germany). 100% GDPR, zero open router ports, automated NAT traversal, direct P2P WireGuard. |
+| **`network`** *(NetBird Self-Hosted)* | **`selfhosted`** | **40 MB** | 4 GB System RAM | Connect to your private self-hosted NetBird management server. 100% control plane and signaling sovereignty. |
 
 ### 🛡️ What Happens When You Change a Level on an Active Service?
 
@@ -241,25 +238,25 @@ Allod enforces strict boundaries between internal service databases and user-acc
 
 ---
 
-## 🌐 Remote Access & Mobile Mesh: 3 Freedom-First Options (Zero Open Ports)
+### 🌐 Remote Access & Mobile Mesh: Sovereign NetBird (Zero Open Ports)
 
 Accessing your home cloud from outside the home usually presents an impossible dilemma:
-1. **The Dangerous Route**: Open ports (80/443/22) on your home router and expose your server to automated port-scanners, brute-force bots, and zero-day exploits.
+1. **The Dangerous Route**: Open ports on your home router and expose your server to automated port-scanners, brute-force bots, and zero-day exploits.
 2. **The Commercial Subscription Trap**: Pay monthly SaaS fees to proprietary cloud relays that track your traffic, enforce bandwidth caps, and require central corporate accounts.
 
-Allod solves this by offering **three distinct, freedom-first remote access options** built into the `network` module. You maintain complete sovereignty, keep all incoming router ports closed, bypass strict Carrier-Grade NAT (CGNAT), Starlink, and 4G/5G mobile carriers, and connect seamlessly from iOS, Android, macOS, Windows, and Linux.
+Allod solves this by integrating **[NetBird](https://netbird.io)**, the open-source WireGuard overlay mesh (BSD-3 licensed). NetBird combines native kernel WireGuard performance with automated WebRTC (ICE, STUN, TURN) NAT traversal — keeping all incoming router ports closed, bypassing strict Carrier-Grade NAT (CGNAT), Starlink, and 4G/5G mobile carriers, and connecting seamlessly from iOS, Android, macOS, Windows, and Linux.
 
 ```text
                ┌─────────────────────────────────────────────────────────┐
                │              ALLOD SERVER (At Home / Office)             │
                │                                                         │
-               │   ┌────────────────────────┐  ┌─────────────────────┐   │
-               │   │ Headscale (v0.25.x)    │  │ cloudflared         │   │
-               │   │ Private Control Plane  │◄─┤ Outbound Tunnel     │   │
-               │   │ (SQLite / No Limits)   │  │ (No Open Ports)     │   │
-               │   └───────────┬────────────┘  └──────────▲──────────┘   │
-               │               │                          │              │
-               │   ┌───────────▼──────────────────────────┴──────────┐   │
+               │   ┌─────────────────────────────────────────────────┐   │
+               │   │ NetBird Client Container (Network=host)         │   │
+               │   │ - Kernel WireGuard (wt0 interface)              │   │
+               │   │ - Automated WebRTC ICE / STUN / TURN            │   │
+               │   └────────────────────────┬────────────────────────┘   │
+               │                            │                            │
+               │   ┌────────────────────────▼────────────────────────┐   │
                │   │ Services: Immich, Jellyfin, Nextcloud, Samba    │   │
                │   └────────────────────────▲────────────────────────┘   │
                └────────────────────────────┼────────────────────────────┘
@@ -267,55 +264,49 @@ Allod solves this by offering **three distinct, freedom-first remote access opti
                CONTROL PLANE (Signaling)    │    DATA PLANE (P2P WireGuard)
                Zero router ports needed     │    Direct encrypted pipe:
                Bypasses CGNAT & Starlink    │    High-speed 4K streaming & photos
-                                            │    Completely outside Cloudflare!
+               100% Open-Source BSD-3       │    Native Samba (SMB TCP 445) support!
                                             │
                        ┌────────────────────┴───────────────────┐
                        ▼                                        ▼
              ┌──────────────────┐                     ┌──────────────────┐
-             │ Cloudflare Edge  │                     │ Remote Client    │
-             │ (Signaling Only) │                     │ (Phone / Laptop) │
-             └─────────▲────────┘                     │ Tailscale / WG   │
-                       │                              └────────▲─────────┘
+             │ NetBird Control  │                     │ Remote Client    │
+             │ Plane (EU Cloud  │                     │ (Phone / Laptop) │
+             │ or Self-Hosted)  │                     │ Official NetBird │
+             └─────────▲────────┘                     └────────▲─────────┘
+                       │                                       │
                        └───────────────────────────────────────┘
                               Signaling & Peer Discovery
 ```
 
-### The 3 Freedom-First Access Architectures
+### The 2 Sovereign NetBird Operational Levels
 
-#### 1. Option 1: Pure Sovereign WireGuard (`wireguard` level — 50 MB RAM — 📋 planned)
-* **100% Sovereign & Cloud-Free**: Zero third parties, zero external accounts, zero subscriptions. You depend on nobody.
-* **Native Kernel Performance**: Operates directly in the Linux kernel via WireGuard for minimum CPU overhead and maximum battery life on mobile devices.
-* **Instant QR Code Pairing**: The Allod Web Dashboard generates a cryptographic QR code. Scan it with the official, open-source WireGuard app on iOS or Android to connect in seconds.
-* **Requirements**: Requires a public IPv4/IPv6 address or a single UDP port forwarded on your router (default: `UDP 51820`).
+#### 1. Level: `cloud` (NetBird European Cloud — 40 MB RAM — ⭐ Recommended)
+* **Hosted in Frankfurt, Germany**: Fully compliant with European GDPR regulations. The control plane runs in ISO-certified German datacenters.
+* **Generous Free Tier**: Free for up to 100 connected peer devices and 5 users with zero credit card required.
+* **Zero Infrastructure Overhead**: No need to maintain a separate VPS or signaling server. Connects instantly with an ephemeral Setup Key (`NB_SETUP_KEY`).
+* **Direct Encrypted P2P**: The signaling server only handles peer discovery and cryptographic handshakes. Once paired, all data (4K Jellyfin streaming, Immich camera sync, Samba file transfers) travels direct peer-to-peer over WireGuard.
 
-#### 2. Option 2: Hybrid Sovereign Shield (`hybrid` level — 120 MB RAM — ⭐ Recommended)
-* **Private Self-Hosted Control Plane**: Runs [Headscale](https://headscale.net) locally on your Allod node with embedded SQLite. You own the user registry, cryptographic keys, and access lists (ACLs) with **unlimited nodes** and zero commercial tier paywalls.
-* **Zero Open Router Ports**: Uses an outbound Cloudflare Tunnel (`cloudflared`) to securely expose the Headscale coordination endpoint. Works flawlessly behind **CGNAT, Starlink, 4G/5G mobile routers, and campus firewalls**.
-* **Direct P2P Data Plane (Zero Cloudflare ToS Risk)**: Cloudflare is used *only* for lightweight signaling JSON (authentication and peer discovery). Heavy data streams — **4K Jellyfin streaming, bulk Immich photo backups, Nextcloud sync, and Samba transfers** — flow **directly peer-to-peer (P2P)** between your phone and your server over an end-to-end encrypted WireGuard tunnel, completely outside Cloudflare. No bandwidth throttling, no ToS streaming violations!
-* **Zero-Hassle Mobile Pairing**: Connects with the free, official Tailscale apps (iOS, Android, macOS, Windows). In the app, choose *"Change server"*, enter your coordination domain, and paste a 1-hour pre-auth key generated in 1 click from the Allod Dashboard.
-
-#### 3. Option 3: Zero-Click Cloud (`tailscale` level — 60 MB RAM — 📋 planned)
-* **30-Second Turnkey Setup**: Connects your node directly to Tailscale's hosted SaaS control plane (`tailscale.com`).
-* **No Domain or Tunnel Required**: Perfect for beginners who do not own a custom domain name or Cloudflare account and want immediate remote access with zero setup friction.
-* **Peer-to-Peer WireGuard**: Traffic remains direct and end-to-end encrypted between your devices.
+#### 2. Level: `selfhosted` (Sovereign Management Instance — 40 MB RAM)
+* **100% Data & Control Plane Sovereignty**: Connects to your own self-hosted NetBird management server running on a private VPS or bare-metal machine.
+* **Zero Reliance on External Infrastructure**: You own both the signaling control plane and the encrypted data plane.
+* **Enterprise Features**: Unlimited peers, custom identity providers (OIDC/SAML like Keycloak or Authentik), and fine-grained network routing rules.
 
 ---
 
-### ⚖️ Architectural & Privacy Comparison
+### ⚖️ NetBird Operational Modes Comparison
 
-| Feature / Metric | Option 1: `wireguard` *(📋 planned)* | Option 2: `hybrid` (Headscale Shield — ⭐ Recommended) | Option 3: `tailscale` *(📋 planned)* |
-| :--- | :---: | :---: | :---: |
-| **Control Plane** | Fully Local (Kernel WireGuard) | **Self-Hosted Headscale** (On Allod) | Hosted SaaS (`tailscale.com`) |
-| **Third-Party Dependency** | **0% (Pure Self-Hosted)** | Minimal (Cloudflare Tunnel for signaling) | Third-Party SaaS Account |
-| **Router Ports to Open** | 1 Port (`UDP 51820`) | **Zero (0) Open Ports** | **Zero (0) Open Ports** |
-| **CGNAT / Starlink / 4G** | Requires VPS/Relay if CGNAT | **Native Out-of-the-Box Support** | **Native Out-of-the-Box Support** |
-| **Data Plane (Traffic)** | Direct P2P Encrypted WireGuard | **Direct P2P Encrypted WireGuard** | Direct P2P Encrypted WireGuard |
-| **Bandwidth / Speeds** | Full Gigabit / Uncapped | **Full Gigabit / Uncapped** | Full Gigabit / Uncapped |
-| **Cloudflare ToS Compliant** | N/A | **100% Compliant** (Signaling only) | N/A |
-| **Device / User Limits** | Unlimited | **Unlimited** (Self-hosted SQLite) | Free Tier Restrictions |
-| **Client Application** | Official WireGuard App | **Official Tailscale App** ("Change server") | Official Tailscale App |
-| **Memory Footprint** | ~50 MB RAM | **~120 MB RAM** | ~60 MB RAM |
-| **Target User** | Network purists with public IP wanting 100% independence | **Anyone wanting zero-port setup with complete self-hosted control** | Beginners without a custom domain |
+| Feature / Metric | Option 1: `cloud` (⭐ Recommended) | Option 2: `selfhosted` (100% Sovereign) |
+| :--- | :---: | :---: |
+| **Control Plane Location** | NetBird Managed Cloud (Frankfurt, Germany) | Self-Hosted Server / VPS |
+| **Data Privacy & GDPR** | **100% GDPR Compliant (Germany)** | **100% Sovereign (Your Hardware)** |
+| **Router Ports to Open** | **Zero (0) Open Ports** | **Zero (0) Open Ports** (on Allod) |
+| **NAT Traversal (CGNAT/4G)** | **Automated WebRTC ICE/STUN/TURN** | **Automated WebRTC ICE/STUN/TURN** |
+| **Data Plane (Traffic)** | Direct P2P Encrypted WireGuard | Direct P2P Encrypted WireGuard |
+| **Samba (SMB TCP 445)** | **Full Native Support** | **Full Native Support** |
+| **Jellyfin 4K Direct Streaming**| **Full Native Support (Uncapped)** | **Full Native Support (Uncapped)** |
+| **Mobile Application** | Official NetBird App (iOS / Android) | Official NetBird App (iOS / Android) |
+| **Memory Footprint** | **~40 MB RAM** | **~40 MB RAM** |
+| **Setup Time** | **1 Minute (Paste Setup Key)** | 5 Minutes (Provide Management URL + Key) |
 
 ---
 
