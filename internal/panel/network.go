@@ -3,7 +3,6 @@ package panel
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -132,7 +131,15 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If container status was not reachable via JSON CLI, check config.json or fallback
+	// If container status was not reachable via JSON CLI, check wt0 interface directly
+	if meshIP == "--" {
+		if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
+			meshIP = ip
+			connected = true
+		}
+	}
+
+	// If container status was not reachable via JSON CLI or wt0, check config.json
 	if meshIP == "--" && hasKey && netLevel != "off" {
 		nbConfigFile := filepath.Join(baseDir, "network", "netbird", "config.json")
 		if cfgBytes, err := os.ReadFile(nbConfigFile); err == nil {
@@ -144,10 +151,6 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-	}
-
-	if meshIP == "--" && hasKey && netLevel != "off" {
-		meshIP = "100.64.0.1"
 	}
 
 	data := map[string]interface{}{
@@ -171,8 +174,13 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 func executeNetBirdStatus(client HelperClient) (string, error) {
 	if nbBin, err := exec.LookPath("netbird"); err == nil {
 		cmd := exec.Command(nbBin, "status", "--json")
-		if out, err := cmd.Output(); err == nil && len(out) > 0 && strings.HasPrefix(strings.TrimSpace(string(out)), "{") {
-			return strings.TrimSpace(string(out)), nil
+		if out, err := cmd.Output(); err == nil && len(out) > 0 {
+			strOut := strings.TrimSpace(string(out))
+			start := strings.Index(strOut, "{")
+			end := strings.LastIndex(strOut, "}")
+			if start >= 0 && end > start {
+				return strOut[start : end+1], nil
+			}
 		}
 	}
 
@@ -180,18 +188,18 @@ func executeNetBirdStatus(client HelperClient) (string, error) {
 		client = &helper.Client{SocketPath: "/run/allod/helper.sock"}
 	}
 	resp, err := client.Execute("network.netbird_status", nil, false)
-	if err == nil && resp.Ok && resp.Output != "" && strings.HasPrefix(strings.TrimSpace(resp.Output), "{") {
-		return strings.TrimSpace(resp.Output), nil
+	if err == nil && resp.Ok && resp.Output != "" {
+		strOut := strings.TrimSpace(resp.Output)
+		start := strings.Index(strOut, "{")
+		end := strings.LastIndex(strOut, "}")
+		if start >= 0 && end > start {
+			return strOut[start : end+1], nil
+		}
 	}
 
 	// Direct check for wt0 interface
-	if iface, errI := net.InterfaceByName("wt0"); errI == nil {
-		addrs, _ := iface.Addrs()
-		ipStr := ""
-		if len(addrs) > 0 {
-			ipStr = addrs[0].String()
-		}
-		return fmt.Sprintf(`{"netbirdIp":"%s","management":{"connected":true,"url":"https://api.netbird.io:443"},"signal":{"connected":true,"url":"https://signal.netbird.io:443"},"peers":{"total":0,"connected":0}}`, ipStr), nil
+	if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
+		return fmt.Sprintf(`{"netbirdIp":"%s","management":{"connected":true,"url":"https://api.netbird.io:443"},"signal":{"connected":true,"url":"https://signal.netbird.io:443"},"peers":{"total":0,"connected":0}}`, ip), nil
 	}
 
 	return "", fmt.Errorf("container NetBird non attivo")
@@ -334,11 +342,16 @@ func (h *NetworkHandler) handlePairingInfo(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	meshIP := "100.64.0.1"
+	meshIP := "--"
 	if out, err := executeNetBirdStatus(h.Helper); err == nil && out != "" {
 		var nbStatus netbirdStatusJSON
 		if jsonErr := json.Unmarshal([]byte(out), &nbStatus); jsonErr == nil && nbStatus.NetbirdIP != "" {
 			meshIP = strings.Split(nbStatus.NetbirdIP, "/")[0]
+		}
+	}
+	if meshIP == "--" {
+		if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
+			meshIP = ip
 		}
 	}
 

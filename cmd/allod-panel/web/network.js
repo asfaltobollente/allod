@@ -121,8 +121,14 @@ export async function openNetworkPairingModal() {
     if (data.status === 'ok' && data.data) {
       const isSelf = data.data.mode === 'selfhosted';
       if (modeEl) modeEl.textContent = isSelf ? 'NetBird Self-Hosted' : 'NetBird Cloud (EU)';
-      if (meshIpEl) meshIpEl.textContent = data.data.mesh_ip || '100.64.0.1';
+      const realMeshIp = (data.data.mesh_ip && data.data.mesh_ip !== '--') ? data.data.mesh_ip : '--';
+      if (meshIpEl) meshIpEl.textContent = realMeshIp;
       if (serverUrlEl) serverUrlEl.textContent = data.data.management_url || 'https://api.netbird.io:443';
+      const badgeEl = document.getElementById('network-mesh-ip-badge');
+      if (badgeEl && realMeshIp !== '--') badgeEl.textContent = realMeshIp;
+      if (window.currentMeshIP !== undefined && realMeshIp !== '--') {
+        window.currentMeshIP = realMeshIp;
+      }
     }
   } catch (err) {
     if (modeEl) modeEl.textContent = 'Errore di connessione';

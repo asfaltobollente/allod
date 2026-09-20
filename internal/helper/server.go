@@ -131,6 +131,31 @@ func resolveExecutable(preferred string, fallbacks ...string) string {
 	return preferred
 }
 
+// GetInterfaceIPv4 extracts the first non-loopback IPv4 address for a given network interface.
+func GetInterfaceIPv4(ifaceName string) string {
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		return ""
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return ""
+	}
+	for _, a := range addrs {
+		var ip net.IP
+		switch v := a.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip != nil && ip.To4() != nil && !ip.IsLoopback() {
+			return ip.String()
+		}
+	}
+	return ""
+}
+
 func ensureLinuxUser(username string) error {
 	if !validNameRegex.MatchString(username) {
 		return fmt.Errorf("invalid username '%s'", username)
@@ -855,8 +880,13 @@ func (s *Server) processRequest(req Request) Response {
 			plan := []string{strings.Join(fullCmd, " ")}
 			if !req.Plan {
 				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
-				if err == nil {
-					return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
+				strOut := strings.TrimSpace(string(out))
+				if err == nil && len(strOut) > 0 {
+					start := strings.Index(strOut, "{")
+					end := strings.LastIndex(strOut, "}")
+					if start >= 0 && end > start {
+						return Response{Ok: true, Applied: true, Output: strOut[start : end+1], Plan: plan}
+					}
 				}
 			} else {
 				return Response{Ok: true, Applied: false, Plan: plan}
@@ -873,17 +903,17 @@ func (s *Server) processRequest(req Request) Response {
 		plan := []string{strings.Join(fullCmd, " ")}
 		if !req.Plan {
 			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
-			if err == nil && len(out) > 0 && strings.HasPrefix(strings.TrimSpace(string(out)), "{") {
-				return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
-			}
-			// Fallback: check if wt0 interface exists on host
-			if iface, errI := net.InterfaceByName("wt0"); errI == nil {
-				addrs, _ := iface.Addrs()
-				ipStr := ""
-				if len(addrs) > 0 {
-					ipStr = addrs[0].String()
+			strOut := strings.TrimSpace(string(out))
+			if err == nil && len(strOut) > 0 {
+				start := strings.Index(strOut, "{")
+				end := strings.LastIndex(strOut, "}")
+				if start >= 0 && end > start {
+					return Response{Ok: true, Applied: true, Output: strOut[start : end+1], Plan: plan}
 				}
-				statusFallback := fmt.Sprintf(`{"netbirdIp":"%s","management":{"connected":true,"url":"https://api.netbird.io:443"},"signal":{"connected":true,"url":"https://signal.netbird.io:443"},"peers":{"total":0,"connected":0}}`, ipStr)
+			}
+			// Fallback: check if wt0 interface exists on host and extract clean IPv4
+			if ip := GetInterfaceIPv4("wt0"); ip != "" {
+				statusFallback := fmt.Sprintf(`{"netbirdIp":"%s","management":{"connected":true,"url":"https://api.netbird.io:443"},"signal":{"connected":true,"url":"https://signal.netbird.io:443"},"peers":{"total":0,"connected":0}}`, ip)
 				return Response{Ok: true, Applied: true, Output: statusFallback, Plan: plan}
 			}
 			return Response{Ok: false, Error: fmt.Sprintf("Errore status NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
