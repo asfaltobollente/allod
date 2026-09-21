@@ -929,6 +929,7 @@ func (s *Server) processRequest(req Request) Response {
 						startCmd = []string{"podman", "start", targetContainer}
 					}
 					if out, err := exec.Command(startCmd[0], startCmd[1:]...).CombinedOutput(); err == nil {
+						time.Sleep(1 * time.Second)
 						isRunning = true
 					} else {
 						return Response{Ok: false, Error: fmt.Sprintf("Container NetBird (%s) è arrestato (tentativo avvio: %s). Clicca 'Avvia' nel modulo Rete per riavviarlo.", targetContainer, strings.TrimSpace(string(out)))}
@@ -940,12 +941,15 @@ func (s *Server) processRequest(req Request) Response {
 
 			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
 			strOut := strings.TrimSpace(string(out))
+			if err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore status NetBird (%s): %v (%s)", targetContainer, err, strOut)}
+			}
 			start := strings.Index(strOut, "{")
 			end := strings.LastIndex(strOut, "}")
 			if start >= 0 && end > start {
 				return Response{Ok: true, Applied: true, Output: strOut[start : end+1], Plan: plan}
 			}
-			return Response{Ok: false, Error: fmt.Sprintf("Errore status NetBird: %v (%s)", err, strOut)}
+			return Response{Ok: false, Error: fmt.Sprintf("Errore status NetBird: %s", strOut)}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
@@ -1024,13 +1028,10 @@ func (s *Server) processRequest(req Request) Response {
 
 			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
 			trimmed := strings.TrimSpace(string(out))
-			if len(trimmed) > 0 {
-				return Response{Ok: true, Applied: true, Output: trimmed, Plan: plan}
-			}
 			if err != nil {
-				return Response{Ok: false, Error: fmt.Sprintf("Errore CLI NetBird: %v", err)}
+				return Response{Ok: false, Error: fmt.Sprintf("Errore CLI NetBird (%s): %v (%s)", targetContainer, err, trimmed)}
 			}
-			return Response{Ok: true, Applied: true, Output: "", Plan: plan}
+			return Response{Ok: true, Applied: true, Output: trimmed, Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
@@ -1060,10 +1061,10 @@ func (s *Server) processRequest(req Request) Response {
 			if mgmt == "" {
 				mgmt = "https://api.netbird.io:443"
 			}
-			envContent := fmt.Sprintf("# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=%s\nNB_MANAGEMENT_URL=%s\n", key, mgmt)
+			envContent := fmt.Sprintf("# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=%s\nNB_MANAGEMENT_URL=%s\nNB_DISABLE_DNS=true\n", key, mgmt)
 			_ = os.WriteFile(envFile, []byte(envContent), 0600)
 		} else if _, err := os.Stat(envFile); err != nil {
-			defaultEnv := "# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=\nNB_MANAGEMENT_URL=\n"
+			defaultEnv := "# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=\nNB_MANAGEMENT_URL=\nNB_DISABLE_DNS=true\n"
 			_ = os.WriteFile(envFile, []byte(defaultEnv), 0600)
 		}
 
@@ -1103,6 +1104,11 @@ func (s *Server) processRequest(req Request) Response {
 		// Stop and remove any prior root container to restart cleanly
 		_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
 
+		// Clean up stale socket and lock files from prior runs in dataDir so new container doesn't fail on bind
+		_ = os.Remove(filepath.Join(dataDir, "netbird.sock"))
+		_ = os.Remove(filepath.Join(dataDir, "default.sock"))
+		_ = os.Remove(filepath.Join(dataDir, "netbird.sock.lock"))
+
 		// Enable podman-restart service so containers with --restart=always restart on boot
 		_ = exec.Command("systemctl", "enable", "--now", "podman-restart.service").Run()
 
@@ -1115,8 +1121,8 @@ func (s *Server) processRequest(req Request) Response {
 			"--network=host",
 			"--device=/dev/net/tun",
 			"-v", fmt.Sprintf("%s:/var/lib/netbird:Z", dataDir),
-			"-v", fmt.Sprintf("%s:/etc/netbird:Z", dataDir),
 			"--env-file", envFile,
+			"--env", "NB_DISABLE_DNS=true",
 			"docker.io/netbirdio/netbird:0.79.0",
 		}
 		plan := []string{strings.Join(fullCmd, " ")}

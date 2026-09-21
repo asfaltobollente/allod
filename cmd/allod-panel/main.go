@@ -2566,13 +2566,17 @@ WantedBy=default.target
 				client.SocketPath = "allod-helper.sock"
 				statusRes, errS = client.Execute("network.netbird_cli", map[string]interface{}{"command": "status_detail"}, false)
 			}
-			if errS == nil && statusRes.Ok && len(statusRes.Output) > 0 {
+			if errS == nil && statusRes.Ok && len(statusRes.Output) > 0 && !strings.Contains(statusRes.Output, "cannot exec in a stopped container") {
 				statusOut = []byte(statusRes.Output)
 			} else {
 				if iface, err := net.InterfaceByName("wt0"); err == nil {
 					statusOut = []byte(fmt.Sprintf("✓ Interfaccia kernel wt0 attiva (MTU: %d, Flags: %v)\nNetBird WireGuard mesh attivo a livello host.", iface.MTU, iface.Flags))
 				} else {
-					statusOut = []byte("NetBird non attivo o in attesa di configurazione chiave.\n" + statusRes.Error)
+					errMsg := statusRes.Error
+					if errMsg == "" && len(statusRes.Output) > 0 {
+						errMsg = statusRes.Output
+					}
+					statusOut = []byte("NetBird non attivo o in attesa di avvio.\n" + errMsg)
 				}
 			}
 
