@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -308,14 +309,20 @@ func (c *Client) Execute(action string, args map[string]interface{}, plan bool) 
 		sock = "/run/allod/helper.sock"
 	}
 
-	conn, err := net.Dial("unix", sock)
+	conn, err := net.DialTimeout("unix", sock, 3*time.Second)
 	if err != nil {
-		conn, err = net.Dial("unix", "allod-helper.sock")
+		conn, err = net.DialTimeout("unix", "allod-helper.sock", 3*time.Second)
 		if err != nil {
 			return Response{Ok: false, Error: fmt.Sprintf("cannot connect to helper socket %s: %v", sock, err)}, err
 		}
 	}
 	defer conn.Close()
+
+	timeout := 15 * time.Second
+	if action == "network.install_native" || action == "storage.init" || action == "system.update" {
+		timeout = 60 * time.Second
+	}
+	_ = conn.SetDeadline(time.Now().Add(timeout))
 
 	req := Request{
 		Action: action,
@@ -902,7 +909,9 @@ func (s *Server) processRequest(req Request) Response {
 			fullCmd := []string{nbBin, "status", "--json"}
 			plan := []string{strings.Join(fullCmd, " ")}
 			if !req.Plan {
-				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+				out, err := exec.CommandContext(ctx, fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				cancel()
 				strOut := strings.TrimSpace(string(out))
 				if err == nil && len(strOut) > 0 {
 					start := strings.Index(strOut, "{")
@@ -911,6 +920,7 @@ func (s *Server) processRequest(req Request) Response {
 						return Response{Ok: true, Applied: true, Output: strOut[start : end+1], Plan: plan}
 					}
 				}
+				return Response{Ok: false, Error: fmt.Sprintf("NetBird nativo non risponde allo status JSON: %s", strOut)}
 			} else {
 				return Response{Ok: true, Applied: false, Plan: plan}
 			}
@@ -933,7 +943,10 @@ func (s *Server) processRequest(req Request) Response {
 					} else {
 						startCmd = []string{"podman", "start", targetContainer}
 					}
-					if out, err := exec.Command(startCmd[0], startCmd[1:]...).CombinedOutput(); err == nil {
+					ctxS, cancelS := context.WithTimeout(context.Background(), 4*time.Second)
+					out, err := exec.CommandContext(ctxS, startCmd[0], startCmd[1:]...).CombinedOutput()
+					cancelS()
+					if err == nil {
 						time.Sleep(1 * time.Second)
 						isRunning = true
 					} else {
@@ -944,7 +957,9 @@ func (s *Server) processRequest(req Request) Response {
 				}
 			}
 
-			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+			ctxE, cancelE := context.WithTimeout(context.Background(), 4*time.Second)
+			out, err := exec.CommandContext(ctxE, fullCmd[0], fullCmd[1:]...).CombinedOutput()
+			cancelE()
 			strOut := strings.TrimSpace(string(out))
 			if err != nil {
 				return Response{Ok: false, Error: fmt.Sprintf("Errore status NetBird (%s): %v (%s)", targetContainer, err, strOut)}
@@ -960,15 +975,30 @@ func (s *Server) processRequest(req Request) Response {
 
 	case "network.netbird_cli":
 		cmdType, _ := req.Args["command"].(string)
-		targetContainer, runuserPrefix, isRunning, exists := findNetBirdTarget()
+		nbBin, nbErr := exec.LookPath("netbird")
+		isNative := (nbErr == nil)
 
 		if cmdType == "logs" {
+			// If native NetBird binary is installed on the host, prioritize journalctl logs
+			if isNative {
+				ctxJ, cancelJ := context.WithTimeout(context.Background(), 4*time.Second)
+				outJ, errJ := exec.CommandContext(ctxJ, "journalctl", "-u", "netbird", "-n", "30", "--no-pager").CombinedOutput()
+				cancelJ()
+				strJ := strings.TrimSpace(string(outJ))
+				if errJ == nil && len(strJ) > 0 && !strings.Contains(strJ, "No entries") {
+					return Response{Ok: true, Applied: true, Output: strJ, Plan: []string{"journalctl -u netbird"}}
+				}
+			}
+
+			targetContainer, runuserPrefix, isRunning, exists := findNetBirdTarget()
 			if !exists {
-				outJ, errJ := exec.Command("journalctl", "-u", "netbird", "-n", "30", "--no-pager").CombinedOutput()
-				if errJ == nil && len(outJ) > 0 {
+				if isNative {
+					ctxJ, cancelJ := context.WithTimeout(context.Background(), 4*time.Second)
+					outJ, _ := exec.CommandContext(ctxJ, "journalctl", "-u", "netbird", "-n", "30", "--no-pager").CombinedOutput()
+					cancelJ()
 					return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(outJ)), Plan: []string{"journalctl -u netbird"}}
 				}
-				return Response{Ok: true, Applied: true, Output: "Nessun container NetBird trovato. Avvia il modulo Rete dal pannello.", Plan: nil}
+				return Response{Ok: true, Applied: true, Output: "Nessun container o servizio NetBird trovato. Avvia il modulo Rete dal pannello.", Plan: nil}
 			}
 			var logCmd []string
 			if len(runuserPrefix) > 0 {
@@ -978,7 +1008,9 @@ func (s *Server) processRequest(req Request) Response {
 			}
 			plan := []string{strings.Join(logCmd, " ")}
 			if !req.Plan {
-				out, err := exec.Command(logCmd[0], logCmd[1:]...).CombinedOutput()
+				ctxL, cancelL := context.WithTimeout(context.Background(), 4*time.Second)
+				out, err := exec.CommandContext(ctxL, logCmd[0], logCmd[1:]...).CombinedOutput()
+				cancelL()
 				strLogs := strings.TrimSpace(string(out))
 				if !isRunning && strLogs != "" {
 					strLogs = fmt.Sprintf("[ATTENZIONE: Il container %s è attualmente ARRESTATO]\n%s", targetContainer, strLogs)
@@ -1001,20 +1033,38 @@ func (s *Server) processRequest(req Request) Response {
 			args = []string{"status", "--json"}
 		}
 
-		if nbBin, err := exec.LookPath("netbird"); err == nil {
+		if isNative {
 			fullCmd := append([]string{nbBin}, args...)
 			plan := []string{strings.Join(fullCmd, " ")}
 			if !req.Plan {
-				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+				out, err := exec.CommandContext(ctx, fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				cancel()
 				trimmed := strings.TrimSpace(string(out))
-				if err == nil || len(trimmed) > 0 {
+				if err == nil && len(trimmed) > 0 {
 					return Response{Ok: true, Applied: true, Output: trimmed, Plan: plan}
 				}
+				// If status detail failed or daemon is stopped, query systemctl status netbird for actionable diagnostics
+				ctxS, cancelS := context.WithTimeout(context.Background(), 3*time.Second)
+				outS, _ := exec.CommandContext(ctxS, "systemctl", "status", "netbird").CombinedOutput()
+				cancelS()
+				sysStatus := strings.TrimSpace(string(outS))
+				if len(sysStatus) > 0 {
+					if len(trimmed) > 0 {
+						return Response{Ok: true, Applied: true, Output: fmt.Sprintf("%s\n\n--- systemctl status netbird ---\n%s", trimmed, sysStatus), Plan: plan}
+					}
+					return Response{Ok: true, Applied: true, Output: sysStatus, Plan: plan}
+				}
+				if len(trimmed) > 0 {
+					return Response{Ok: true, Applied: true, Output: trimmed, Plan: plan}
+				}
+				return Response{Ok: false, Error: "NetBird nativo non risponde alla CLI. Verifica lo stato con 'systemctl status netbird'."}
 			} else {
 				return Response{Ok: true, Applied: false, Plan: plan}
 			}
 		}
 
+		targetContainer, runuserPrefix, isRunning, exists := findNetBirdTarget()
 		var fullCmd []string
 		if len(runuserPrefix) > 0 {
 			fullCmd = append(runuserPrefix, "podman", "exec", targetContainer, "netbird")
@@ -1031,7 +1081,9 @@ func (s *Server) processRequest(req Request) Response {
 				return Response{Ok: false, Error: "Nessun container NetBird configurato. Clicca su 'Avvia' nel modulo Rete per configurare e avviare."}
 			}
 
-			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+			ctxE, cancelE := context.WithTimeout(context.Background(), 4*time.Second)
+			out, err := exec.CommandContext(ctxE, fullCmd[0], fullCmd[1:]...).CombinedOutput()
+			cancelE()
 			trimmed := strings.TrimSpace(string(out))
 			if err != nil {
 				return Response{Ok: false, Error: fmt.Sprintf("Errore CLI NetBird (%s): %v (%s)", targetContainer, err, trimmed)}
@@ -1075,7 +1127,7 @@ func (s *Server) processRequest(req Request) Response {
 
 		if nbBin, err := exec.LookPath("netbird"); err == nil {
 			var cmdArgs []string
-			cmdArgs = append(cmdArgs, "up")
+			cmdArgs = append(cmdArgs, "up", "--disable-dns")
 			if key, ok := req.Args["setup_key"].(string); ok && key != "" {
 				cmdArgs = append(cmdArgs, "--setup-key", key)
 			}
@@ -1085,7 +1137,16 @@ func (s *Server) processRequest(req Request) Response {
 			fullCmd := append([]string{nbBin}, cmdArgs...)
 			plan := []string{strings.Join(fullCmd, " ")}
 			if !req.Plan {
-				out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				// Clean up any lingering container client now that host binary is active
+				_ = exec.Command("podman", "stop", "allod-netbird").Run()
+				_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
+
+				// Ensure netbird systemd service is enabled and running
+				_ = exec.Command("systemctl", "enable", "--now", "netbird").Run()
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				out, err := exec.CommandContext(ctx, fullCmd[0], fullCmd[1:]...).CombinedOutput()
 				if err != nil {
 					return Response{Ok: false, Error: fmt.Sprintf("Errore netbird up nativo: %v (%s)", err, strings.TrimSpace(string(out)))}
 				}
@@ -1178,11 +1239,14 @@ func (s *Server) processRequest(req Request) Response {
 			}
 			if setupKey != "" {
 				if nbBin, err := exec.LookPath("netbird"); err == nil {
-					cmdArgs := []string{"up", "--setup-key", setupKey}
+					_ = exec.Command("systemctl", "enable", "--now", "netbird").Run()
+					cmdArgs := []string{"up", "--disable-dns", "--setup-key", setupKey}
 					if mgmtURL != "" && mgmtURL != "https://api.netbird.io:443" {
 						cmdArgs = append(cmdArgs, "--management-url", mgmtURL)
 					}
-					_ = exec.Command(nbBin, cmdArgs...).Run()
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					_ = exec.CommandContext(ctx, nbBin, cmdArgs...).Run()
+					cancel()
 				}
 			}
 			return Response{Ok: true, Applied: true, Output: string(out), Plan: plan}

@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/asfaltobollente/allod/internal/config"
 	"github.com/asfaltobollente/allod/internal/helper"
@@ -218,7 +220,9 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 // executeNetBirdStatus queries status from the running NetBird container or helper daemon.
 func executeNetBirdStatus(client HelperClient) (string, error) {
 	if nbBin, err := exec.LookPath("netbird"); err == nil {
-		cmd := exec.Command(nbBin, "status", "--json")
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, nbBin, "status", "--json")
 		if out, err := cmd.Output(); err == nil && len(out) > 0 {
 			strOut := strings.TrimSpace(string(out))
 			start := strings.Index(strOut, "{")
@@ -242,7 +246,7 @@ func executeNetBirdStatus(client HelperClient) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("container NetBird non attivo")
+	return "", fmt.Errorf("container o demone NetBird non attivo")
 }
 
 func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request) {
