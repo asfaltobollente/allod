@@ -1769,6 +1769,16 @@ async function showModuleDiagnostics(modId) {
       return;
     }
     const d = json.data;
+    const statusTitle = (d.module === 'network')
+      ? '⚙️ Stato NetBird & WireGuard Mesh (netbird status --detail):'
+      : `⚙️ Stato Systemd (systemctl status ${d.module}):`;
+
+    const logsTitle = (d.module === 'network')
+      ? '📜 Ultimi Log Servizio Host Nativo (journalctl -u netbird -n 30):'
+      : (d.module === 'shares')
+      ? '📜 Ultimi Log Servizio Samba (journalctl -u smbd -n 30):'
+      : `📜 Ultimi Log Container Podman (tail -30):`;
+
     body.innerHTML = `
       <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
         <div><strong>Modulo:</strong> <code>${d.module}</code></div>
@@ -1776,7 +1786,7 @@ async function showModuleDiagnostics(modId) {
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 6px 0;">
-        <h4 style="font-size:13px; color:var(--primary); margin:0;">⚙️ Stato Systemd (systemctl status ${d.module}):</h4>
+        <h4 style="font-size:13px; color:var(--primary); margin:0;">${statusTitle}</h4>
         <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-box-systemd', this)" style="padding:2px 8px; font-size:11px;">
           📋 ${t('btn_copy', 'Copia')}
         </button>
@@ -1784,7 +1794,7 @@ async function showModuleDiagnostics(modId) {
       <div id="diag-box-systemd" class="diag-code-box">${escapeHtml(d.status_text || 'Nessun output')}</div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin:16px 0 6px 0;">
-        <h4 style="font-size:13px; color:var(--primary); margin:0;">📜 Ultimi Log Container Podman (tail -30):</h4>
+        <h4 style="font-size:13px; color:var(--primary); margin:0;">${logsTitle}</h4>
         <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-box-logs', this)" style="padding:2px 8px; font-size:11px;">
           📋 ${t('btn_copy', 'Copia')}
         </button>
