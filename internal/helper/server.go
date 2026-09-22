@@ -43,6 +43,7 @@ var AllowedActions = []string{
 	"network.server_up",
 	"network.server_down",
 	"network.server_status",
+	"containers.prune",
 }
 
 // AllowedServiceUnits defines systemd service units allowed to be restarted via service.restart.
@@ -1445,6 +1446,31 @@ server:
 			_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
 			_ = exec.Command("ip", "link", "delete", "wt0").Run()
 			return Response{Ok: true, Applied: true, Output: "allod-netbird fermato", Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "containers.prune":
+		plan := []string{
+			"podman container prune -f",
+			"podman image prune -f",
+			"systemctl reset-failed",
+		}
+		if !req.Plan {
+			ctxC, cancelC := context.WithTimeout(context.Background(), 10*time.Second)
+			cntOut, _ := exec.CommandContext(ctxC, "podman", "container", "prune", "-f").CombinedOutput()
+			cancelC()
+
+			ctxI, cancelI := context.WithTimeout(context.Background(), 15*time.Second)
+			imgOut, _ := exec.CommandContext(ctxI, "podman", "image", "prune", "-f").CombinedOutput()
+			cancelI()
+
+			_ = exec.Command("systemctl", "reset-failed").Run()
+
+			resPayload, _ := json.Marshal(map[string]string{
+				"containers_pruned": strings.TrimSpace(string(cntOut)),
+				"images_pruned":     strings.TrimSpace(string(imgOut)),
+			})
+			return Response{Ok: true, Applied: true, Output: string(resPayload), Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 

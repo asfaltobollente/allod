@@ -2065,11 +2065,19 @@ async function executePodmanSweep() {
       const d = data.data || {};
       let report = `=== RISULTATO SWEEPER PODMAN (${d.timestamp || new Date().toLocaleString()}) ===\n\n`;
       
-      report += `📦 Container Morti/Arrestati Rimossi:\n`;
-      report += (d.containers_pruned && d.containers_pruned.length > 0) ? `${d.containers_pruned}\n\n` : `Nessun container morto da rimuovere (Sistema pulito).\n\n`;
+      report += `📦 Container Utente Morti/Arrestati Rimossi:\n`;
+      report += (d.containers_pruned && d.containers_pruned.length > 0) ? `${d.containers_pruned}\n\n` : `Nessun container utente morto da rimuovere.\n\n`;
+
+      if (d.root_containers_pruned !== undefined && d.root_containers_pruned !== '') {
+        report += `🛡️ Container Root/Sistema Rimossi:\n${d.root_containers_pruned}\n\n`;
+      }
 
       report += `🖼️ Layer Immagini Orfane Rimossi:\n`;
-      report += (d.images_pruned && d.images_pruned.length > 0) ? `${d.images_pruned}\n\n` : `Nessun layer orfano da rimuovere.\n\n`;
+      report += (d.images_pruned && d.images_pruned.length > 0) ? `${d.images_pruned}\n\n` : `Nessun layer utente orfano da rimuovere.\n\n`;
+
+      if (d.root_images_pruned !== undefined && d.root_images_pruned !== '') {
+        report += `🖼️ Immagini Root Orfane Rimosse:\n${d.root_images_pruned}\n\n`;
+      }
 
       report += `🧹 File di Lock (.cid) Ripuliti: ${Array.isArray(d.cleaned_cids) ? d.cleaned_cids.length : 0}\n`;
       report += `\n✓ Stato Systemd azzerato (reset-failed eseguito con successo).`;

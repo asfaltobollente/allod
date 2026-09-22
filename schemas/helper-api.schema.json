@@ -34,7 +34,8 @@
             "network.install_native",
             "network.server_up",
             "network.server_down",
-            "network.server_status"
+            "network.server_status",
+            "containers.prune"
           ]
         },
         "plan": {
