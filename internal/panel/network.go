@@ -49,6 +49,7 @@ func RegisterNetworkRoutes(mux *http.ServeMux, h *NetworkHandler) {
 	mux.HandleFunc("/api/network/preauth-key", h.handlePairingInfo)
 	mux.HandleFunc("/api/network/pairing-info", h.handlePairingInfo)
 	mux.HandleFunc("/api/network/install-native", h.handleInstallNative)
+	mux.HandleFunc("/api/network/restart", h.handleRestart)
 	mux.HandleFunc("/api/network/server/start", h.handleServerStart)
 	mux.HandleFunc("/api/network/server/stop", h.handleServerStop)
 }
@@ -368,12 +369,16 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Trigger NetBird via privileged helper (running with root network capabilities)
-	if mode != "off" && setupKey != "" {
+	if mode != "off" {
 		if h.Helper != nil {
-			_, _ = h.Helper.Execute("network.netbird_up", map[string]interface{}{
-				"setup_key":      setupKey,
-				"management_url": mgmtURL,
-			}, false)
+			args := map[string]interface{}{}
+			if setupKey != "" {
+				args["setup_key"] = setupKey
+			}
+			if mgmtURL != "" {
+				args["management_url"] = mgmtURL
+			}
+			_, _ = h.Helper.Execute("network.netbird_up", args, false)
 		}
 	} else if mode == "off" {
 		if h.Helper != nil {
@@ -572,3 +577,25 @@ func (h *NetworkHandler) handleServerStop(w http.ResponseWriter, r *http.Request
 		Message: "Server NetBird gestito arrestato con successo",
 	})
 }
+
+func (h *NetworkHandler) handleRestart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		_ = exec.Command("ufw", "allow", "51820/udp").Run()
+		if h.Helper != nil {
+			_, _ = h.Helper.Execute("service.restart", map[string]interface{}{"unit": "netbird"}, false)
+		}
+	}()
+
+	json.NewEncoder(w).Encode(PanelResponse{
+		Status:  "ok",
+		Message: "Riavvio di NetBird avviato. Il tunnel si ricollegherà in pochi istanti!",
+	})
+}
+

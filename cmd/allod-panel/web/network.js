@@ -340,6 +340,25 @@ export function closeNetworkPairingModal() {
   if (modal) modal.classList.add('hidden');
 }
 
+export async function restartNetworkModule() {
+  if (!confirm('Vuoi riavviare il servizio NetBird? La connessione VPN si interromperà per 2-3 secondi per poi ricollegarsi automaticamente con le nuove impostazioni UPnP.')) {
+    return;
+  }
+  if (typeof showAlert === 'function') showAlert('Riavvio NetBird in corso...', 'info');
+  try {
+    const res = await fetch('/api/network/restart', { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      if (typeof showAlert === 'function') showAlert(data.message, 'success');
+    }
+  } catch (err) {
+    if (typeof showAlert === 'function') showAlert('Comando inviato al server! Riconnessione in corso...', 'info');
+  }
+  setTimeout(() => {
+    if (typeof refreshData === 'function') refreshData();
+  }, 4000);
+}
+
 // Bind to window object for inline HTML onclick handlers
 window.toggleNetworkModeUI = toggleNetworkModeUI;
 window.openNetworkConfigModal = openNetworkConfigModal;
@@ -350,3 +369,4 @@ window.closeNetworkPairingModal = closeNetworkPairingModal;
 window.installNativeNetBird = installNativeNetBird;
 window.startManagedServer = startManagedServer;
 window.stopManagedServer = stopManagedServer;
+window.restartNetworkModule = restartNetworkModule;

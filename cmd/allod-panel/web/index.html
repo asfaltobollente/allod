@@ -1256,11 +1256,16 @@ sudo systemctl enable --now allod-helperd</pre>
         </div>
 
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeNetworkConfigModal()" data-i18n="sweeper_close">Chiudi</button>
-        <button class="btn btn-primary" id="network-save-btn" onclick="saveNetworkConfig()" style="margin-left:8px;" data-i18n="network_modal_save">
-          Salva e Riavvia NetBird
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn btn-outline-warning" type="button" onclick="restartNetworkModule()" title="Riavvia il servizio NetBird per rinegoziare UPnP e tunnel diretto">
+          🔄 Riavvia Servizio
         </button>
+        <div>
+          <button class="btn btn-secondary" onclick="closeNetworkConfigModal()" data-i18n="sweeper_close">Chiudi</button>
+          <button class="btn btn-primary" id="network-save-btn" onclick="saveNetworkConfig()" style="margin-left:8px;" data-i18n="network_modal_save">
+            Salva e Riavvia NetBird
+          </button>
+        </div>
       </div>
     </div>
   </div>

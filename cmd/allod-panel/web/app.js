@@ -1139,6 +1139,9 @@ function createModuleCard(mod) {
             </div>
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-sm btn-outline-warning" onclick="restartNetworkModule()" style="padding:4px 10px; font-size:11px; font-weight:600;" title="Riavvia il servizio NetBird per rinegoziare UPnP e tunnel diretto">
+              🔄 ${t('btn_restart', 'Riavvia')}
+            </button>
             <button class="btn btn-sm btn-info" onclick="openNetworkConfigModal()" style="padding:4px 10px; font-size:11px; font-weight:600;">
               ⚙️ ${t('network_config_btn')}
             </button>
