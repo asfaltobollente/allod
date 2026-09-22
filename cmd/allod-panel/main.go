@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -2569,7 +2570,12 @@ WantedBy=default.target
 			if errS == nil && statusRes.Ok && len(statusRes.Output) > 0 && !strings.Contains(statusRes.Output, "cannot exec in a stopped container") {
 				statusOut = []byte(statusRes.Output)
 			} else {
-				if iface, err := net.InterfaceByName("wt0"); err == nil {
+				ctxSys, cancelSys := context.WithTimeout(r.Context(), 3*time.Second)
+				sysOut, _ := exec.CommandContext(ctxSys, "systemctl", "status", "netbird").CombinedOutput()
+				cancelSys()
+				if len(sysOut) > 0 {
+					statusOut = sysOut
+				} else if iface, err := net.InterfaceByName("wt0"); err == nil {
 					statusOut = []byte(fmt.Sprintf("✓ Interfaccia kernel wt0 attiva (MTU: %d, Flags: %v)\nNetBird WireGuard mesh attivo a livello host.", iface.MTU, iface.Flags))
 				} else {
 					errMsg := statusRes.Error
@@ -2588,9 +2594,13 @@ WantedBy=default.target
 			if errL == nil && logsRes.Ok && len(logsRes.Output) > 0 {
 				logsOut = []byte(logsRes.Output)
 			} else {
-				logsOut, _ = exec.Command("podman", "logs", "--tail", "30", "allod-netbird").CombinedOutput()
-				if len(logsOut) == 0 {
-					logsOut, _ = exec.Command("journalctl", "-u", "netbird", "-n", "30", "--no-pager").CombinedOutput()
+				ctxJ, cancelJ := context.WithTimeout(r.Context(), 3*time.Second)
+				logsOut, _ = exec.CommandContext(ctxJ, "journalctl", "-u", "netbird", "-n", "30", "--no-pager").CombinedOutput()
+				cancelJ()
+				if len(logsOut) == 0 || strings.Contains(string(logsOut), "No entries") {
+					ctxP, cancelP := context.WithTimeout(r.Context(), 3*time.Second)
+					logsOut, _ = exec.CommandContext(ctxP, "podman", "logs", "--tail", "30", "allod-netbird").CombinedOutput()
+					cancelP()
 				}
 			}
 		} else {
