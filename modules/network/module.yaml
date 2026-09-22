@@ -16,9 +16,25 @@ levels:
     ram_mb: 40
     requires:
       modules: [storage]
-    grants: [Accesso remoto sicuro WireGuard tramite NetBird Server Self-Hosted sovrano]
+    grants: [Accesso remoto sicuro WireGuard tramite NetBird Server Self-Hosted remoto/VPS]
+  selfhosted_remote:
+    ram_mb: 40
+    requires:
+      modules: [storage]
+    grants: [Accesso remoto sicuro WireGuard tramite NetBird Server Self-Hosted remoto/VPS]
+  selfhosted_managed:
+    ram_mb: 250
+    requires:
+      modules: [storage]
+    grants: [Server di coordinamento NetBird sovrano locale in container gestito Allod + Client mesh]
 
-ports: []
+ports:
+  - n: 33073
+    scope: lan
+  - n: 8088
+    scope: lan
+  - n: 3478
+    scope: lan
 
 privileges:
   userns: rootless
@@ -28,6 +44,12 @@ privileges:
 images:
   - ref: docker.io/netbirdio/netbird
     tag: "0.79.0"
+    channel: patch
+  - ref: docker.io/netbirdio/netbird-server
+    tag: "0.79.0"
+    channel: patch
+  - ref: docker.io/netbirdio/dashboard
+    tag: "latest"
     channel: patch
 
 update:
@@ -41,6 +63,18 @@ transitions:
   selfhosted -> off: safe
   cloud -> selfhosted: safe
   selfhosted -> cloud: safe
+  off -> selfhosted_remote: safe
+  selfhosted_remote -> off: safe
+  cloud -> selfhosted_remote: safe
+  selfhosted_remote -> cloud: safe
+  off -> selfhosted_managed: safe
+  selfhosted_managed -> off: safe
+  cloud -> selfhosted_managed: safe
+  selfhosted_managed -> cloud: safe
+  selfhosted -> selfhosted_managed: safe
+  selfhosted_managed -> selfhosted: safe
+  selfhosted_remote -> selfhosted_managed: safe
+  selfhosted_managed -> selfhosted_remote: safe
 
 datasets:
   - id: network

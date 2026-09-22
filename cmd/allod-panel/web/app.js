@@ -65,9 +65,14 @@ async function refreshData() {
 
     try {
       const netRes = await fetch('/api/network/status').then(r => r.json());
-      if (netRes && netRes.status === 'ok' && netRes.data && netRes.data.mesh_ip && netRes.data.mesh_ip !== '--') {
-        currentMeshIP = netRes.data.mesh_ip;
-        window.currentMeshIP = currentMeshIP;
+      if (netRes && netRes.status === 'ok' && netRes.data) {
+        if (netRes.data.mesh_ip && netRes.data.mesh_ip !== '--') {
+          currentMeshIP = netRes.data.mesh_ip;
+          window.currentMeshIP = currentMeshIP;
+        }
+        if (netRes.data.client_runtime) {
+          window.currentClientRuntime = netRes.data.client_runtime;
+        }
       }
     } catch (_) {}
 
@@ -1117,12 +1122,19 @@ function createModuleCard(mod) {
   let networkBoxHtml = '';
   if (mod.id === 'network') {
     const displayMeshIp = (currentMeshIP && currentMeshIP !== '--') ? currentMeshIP : '--';
+    const isNative = window.currentClientRuntime === 'native';
+    const runtimeBadge = isNative
+      ? `<span class="badge" style="background:#10b981; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px;">⚡ NATIVO</span>`
+      : `<span class="badge" style="background:#38bdf8; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px;">📦 CONTAINER</span>`;
     networkBoxHtml = `
       <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
           <div>
-            <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🌐 ${t('network_module_title')}</div>
-            <div style="font-size:10.5px; color:var(--text-muted);">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:11.5px; font-weight:600; color:var(--text-main);">🌐 ${t('network_module_title')}</span>
+              ${runtimeBadge}
+            </div>
+            <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">
               ${t('network_mesh_ip_label')} <code id="network-mesh-ip-badge">${displayMeshIp}</code>
             </div>
           </div>

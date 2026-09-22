@@ -60,6 +60,10 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 | `network.netbird_cli` | Execute controlled NetBird CLI query | `command` (`status`\|`status_detail`) | `podman exec <container> netbird status ...` |
 | `network.netbird_up` | Connect node to NetBird overlay mesh | *(none)* | `podman exec <container> netbird up` |
 | `network.netbird_down` | Disconnect node from NetBird overlay mesh | *(none)* | `podman exec <container> netbird down` |
+| `network.install_native` | Install official native NetBird package on host | *(none)* | `curl -fsSL https://pkgs.netbird.io/install.sh \| sh` |
+| `network.server_up` | Start local managed NetBird control plane container | `domain` (FQDN or IP), `port` (int), `dash_port` (int) | Runs `netbirdio/netbird-server` & `netbirdio/dashboard` |
+| `network.server_down` | Stop local managed NetBird control plane container | *(none)* | Stops and removes managed NetBird server & dashboard |
+| `network.server_status` | Query status of local managed NetBird control plane | *(none)* | Inspects managed server containers and port bindings |
 
 ---
 
@@ -142,9 +146,9 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 * **Idempotency**: Yes (read-only).
 * **Support for `plan: true`**: Yes.
 
-### 13. `network.netbird_status`, 14. `network.netbird_cli`, 15. `network.netbird_up`, 16. `network.netbird_down`
-* **Input & Validation**: `command` (for `network.netbird_cli`) is strictly restricted to an enum: `"status"`, `"status_detail"`. Direct actions require no arguments.
-* **Compromised Panel Impact**: Could query NetBird overlay network status, list connected peers, or trigger a disconnect/reconnect of the mesh client.
-* **Mitigations**: Read-only queries for status. Setup keys and tokens are not accepted over the socket (they are managed in `0600` secret files).
-* **Idempotency**: Status queries are read-only. Connect/disconnect actions are idempotent state changes.
+### 13. `network.netbird_status`, 14. `network.netbird_cli`, 15. `network.netbird_up`, 16. `network.netbird_down`, 17. `network.install_native`, 18. `network.server_up`, 19. `network.server_down`, 20. `network.server_status`
+* **Input & Validation**: `command` (for `network.netbird_cli`) is strictly restricted to an enum: `"status"`, `"status_detail"`. `domain` for `network.server_up` is sanitized. Ports are constrained to valid ranges. Direct actions require no arguments.
+* **Compromised Panel Impact**: Could query NetBird overlay network status, list connected peers, trigger a disconnect/reconnect of the mesh client, or control the local managed NetBird server containers.
+* **Mitigations**: Read-only queries for status. Setup keys and tokens are not accepted over the socket (they are managed in `0600` secret files). Managed server configuration is confined to `/mnt/allod-storage/network/server`.
+* **Idempotency**: Status queries are read-only. Connect/disconnect and server start/stop actions are idempotent state changes.
 * **Support for `plan: true`**: Yes.

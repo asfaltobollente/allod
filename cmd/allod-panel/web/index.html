@@ -1167,8 +1167,9 @@ sudo systemctl enable --now allod-helperd</pre>
   </div>
 
   <!-- NETWORK CONFIG MODAL (NetBird Sovereign Mesh) -->
+  <!-- NETWORK CONFIGURATION MODAL -->
   <div id="network-config-modal" class="modal-overlay hidden">
-    <div class="modal-card" style="max-width:580px;">
+    <div class="modal-card" style="max-width:620px;">
       <div class="modal-header">
         <h3 data-i18n="network_modal_title">🛡️ Configurazione Rete Sovrana NetBird</h3>
         <button class="modal-close-btn" onclick="closeNetworkConfigModal()">&times;</button>
@@ -1177,24 +1178,83 @@ sudo systemctl enable --now allod-helperd</pre>
         <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;" data-i18n="network_modal_desc">
           Collega il tuo nodo Allod a NetBird per accesso remoto sicuro WireGuard punto-punto senza aprire porte sul router.
         </p>
+
+        <!-- Runtime Client NetBird Box -->
+        <div id="network-client-runtime-box" style="background:#0f172a; border-radius:8px; padding:12px 14px; border:1px solid rgba(255,255,255,0.08); margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Client NetBird Runtime:</div>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:2px;">
+                <span id="network-runtime-badge" class="badge" style="background:#38bdf8; color:#0f172a; font-weight:700;">Verifica...</span>
+                <span id="network-runtime-desc" style="font-size:11.5px; color:var(--text-muted);">Controllo installazione...</span>
+              </div>
+            </div>
+            <div>
+              <button id="network-install-native-btn" class="btn btn-sm btn-primary" onclick="installNativeNetBird()" style="display:none; padding:4px 10px; font-size:11px; font-weight:600;">
+                🚀 Passa a Nativo (1-click)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selezione Modalità Operativa -->
         <div class="form-group mb-3">
           <label for="network-mode-select" style="font-size:12px; font-weight:600;" data-i18n="network_modal_mode_label">Modalità Operativa:</label>
           <select id="network-mode-select" class="form-control" onchange="toggleNetworkModeUI()">
-            <option value="cloud" data-i18n="network_mode_cloud">🌐 NetBird Cloud (Europa - Francoforte, 100% GDPR, Zero Porte)</option>
-            <option value="selfhosted" data-i18n="network_mode_selfhosted">🏠 NetBird Self-Hosted (Server di Coordinamento Sovrano)</option>
+            <option value="cloud">🌐 NetBird Cloud (Predefinito - Server UE Francoforte, 100% GDPR, Zero Porte)</option>
+            <option value="selfhosted_remote">☁️ NetBird Self-Hosted Remoto (Server su VPS autonoma del cliente)</option>
+            <option value="selfhosted_managed">🏠 NetBird Server Gestito Locale (Container Allod Sovrano su questo Server)</option>
           </select>
         </div>
-        <div class="form-group mb-3">
+
+        <!-- Setup Key Group (Cloud & Selfhosted Remote) -->
+        <div class="form-group mb-3" id="network-setup-key-group">
           <label for="network-setup-key-input" style="font-size:12px; font-weight:600;" data-i18n="network_modal_key_label">NetBird Setup Key:</label>
           <input type="password" id="network-setup-key-input" class="form-control" placeholder="es. 4A8B7C21-..." autocomplete="off" />
           <div style="font-size:11px; color:var(--text-muted); margin-top:4px;" data-i18n="network_modal_key_sub">
-            Genera una Setup Key dalla dashboard NetBird (Cloud o Self-Hosted) con permessi di registrazione peer.
+            Genera una Setup Key dalla dashboard NetBird con permessi di registrazione peer.
           </div>
         </div>
+
+        <!-- Remote Management URL Group -->
         <div class="form-group mb-3" id="network-mgmt-group" style="display:none;">
           <label for="network-mgmt-url-input" style="font-size:12px; font-weight:600;" data-i18n="network_modal_mgmt_label">Management Server URL:</label>
           <input type="text" id="network-mgmt-url-input" class="form-control" placeholder="https://mesh.tuodominio.it:443" />
         </div>
+
+        <!-- Managed Local Server Controls Group -->
+        <div id="network-managed-server-group" style="display:none; background:#0b1120; border-radius:8px; padding:14px; border:1px solid rgba(56,189,248,0.25); margin-bottom:14px;">
+          <div style="font-size:12px; font-weight:700; color:var(--primary); margin-bottom:8px;">⚙️ Parametri Server di Coordinamento Locale</div>
+          <p style="font-size:11.5px; color:var(--text-muted); line-height:1.4; margin-bottom:10px;">
+            Allod avvierà il container <code>allod-netbird-server</code> con storage isolato e database SQLite sovrano.
+          </p>
+          <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:8px; margin-bottom:10px;">
+            <div>
+              <label for="network-server-domain-input" style="font-size:11px; font-weight:600;">Dominio / Host:</label>
+              <input type="text" id="network-server-domain-input" class="form-control" placeholder="es. mesh.miodominio.it o IP" value="127.0.0.1" />
+            </div>
+            <div>
+              <label for="network-server-port-input" style="font-size:11px; font-weight:600;">Porta API:</label>
+              <input type="number" id="network-server-port-input" class="form-control" value="33073" min="1" max="65535" />
+            </div>
+            <div>
+              <label for="network-server-dashport-input" style="font-size:11px; font-weight:600;">Porta Web UI:</label>
+              <input type="number" id="network-server-dashport-input" class="form-control" value="8088" min="1" max="65535" />
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:11px; color:var(--text-muted);">Stato Server Locale:</span>
+              <span id="network-server-status-badge" class="badge" style="background:#64748b; color:#fff; font-size:10px;">Inattivo</span>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn btn-sm btn-success" type="button" onclick="startManagedServer()" style="padding:3px 8px; font-size:11px;">▶️ Avvia Server</button>
+              <button class="btn btn-sm btn-secondary" type="button" onclick="stopManagedServer()" style="padding:3px 8px; font-size:11px;">⏹️ Arresta</button>
+              <a id="network-server-dash-link" href="#" target="_blank" class="btn btn-sm btn-info" style="display:none; padding:3px 8px; font-size:11px; text-decoration:none;">🖥️ Dashboard</a>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeNetworkConfigModal()" data-i18n="sweeper_close">Chiudi</button>
@@ -1232,12 +1292,16 @@ sudo systemctl enable --now allod-helperd</pre>
             <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_status_mgmt_label">Management URL:</div>
             <div id="pairing-server-url" style="font-size:12.5px; font-weight:600; color:var(--text-main); font-family:monospace; word-break:break-all;">https://api.netbird.io:443</div>
           </div>
+          <div id="pairing-dash-url-row" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Dashboard Web NetBird Locale:</div>
+            <a id="pairing-dash-url-link" href="#" target="_blank" style="font-size:12px; font-weight:600; color:var(--primary); font-family:monospace; word-break:break-all;">http://127.0.0.1:8088</a>
+          </div>
         </div>
 
         <div style="background:#0b1120; border-radius:8px; padding:14px; border:1px solid rgba(56,189,248,0.2); font-size:12px; line-height:1.6;">
           <div style="font-weight:700; color:var(--text-main); margin-bottom:6px;" data-i18n="network_pairing_steps_title">Come collegarsi dal tuo smartphone o PC:</div>
           <div data-i18n="network_step1">1. Scarica l'app ufficiale NetBird da Google Play, Apple App Store o netbird.io/install.</div>
-          <div data-i18n="network_step2">2. In caso di NetBird Self-Hosted: nelle impostazioni dell'app inserisci il Management Server URL.</div>
+          <div id="pairing-step2-text" data-i18n="network_step2">2. In caso di NetBird Self-Hosted: nelle impostazioni dell'app inserisci il Management Server URL indicato sopra.</div>
           <div data-i18n="network_step3">3. Accedi al tuo account NetBird o registra il dispositivo con una Setup Key.</div>
           <div data-i18n="network_step4">4. Attiva la connessione: il dispositivo accede a Immich, Jellyfin 4K, Samba e Allod Panel in P2P diretto!</div>
         </div>
