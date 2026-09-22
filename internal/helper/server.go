@@ -1128,7 +1128,7 @@ func (s *Server) processRequest(req Request) Response {
 
 		if nbBin, err := exec.LookPath("netbird"); err == nil {
 			var cmdArgs []string
-			cmdArgs = append(cmdArgs, "up", "--disable-dns")
+			cmdArgs = append(cmdArgs, "up", "--disable-dns", "--wireguard-port", "51820")
 			if key, ok := req.Args["setup_key"].(string); ok && key != "" {
 				cmdArgs = append(cmdArgs, "--setup-key", key)
 			}
@@ -1138,6 +1138,9 @@ func (s *Server) processRequest(req Request) Response {
 			fullCmd := append([]string{nbBin}, cmdArgs...)
 			plan := []string{strings.Join(fullCmd, " ")}
 			if !req.Plan {
+				// Ensure host firewall permits WireGuard UDP port
+				_ = exec.Command("ufw", "allow", "51820/udp").Run()
+
 				// Clean up any lingering container client now that host binary is active
 				_ = exec.Command("podman", "stop", "allod-netbird").Run()
 				_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
@@ -1240,8 +1243,9 @@ func (s *Server) processRequest(req Request) Response {
 			}
 			if setupKey != "" {
 				if nbBin, err := exec.LookPath("netbird"); err == nil {
+					_ = exec.Command("ufw", "allow", "51820/udp").Run()
 					_ = exec.Command("systemctl", "enable", "--now", "netbird").Run()
-					cmdArgs := []string{"up", "--disable-dns", "--setup-key", setupKey}
+					cmdArgs := []string{"up", "--disable-dns", "--wireguard-port", "51820", "--setup-key", setupKey}
 					if mgmtURL != "" && mgmtURL != "https://api.netbird.io:443" {
 						cmdArgs = append(cmdArgs, "--management-url", mgmtURL)
 					}
