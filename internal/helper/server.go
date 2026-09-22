@@ -1,7 +1,9 @@
 package helper
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -37,6 +39,9 @@ var AllowedActions = []string{
 	"network.netbird_up",
 	"network.netbird_down",
 	"network.install_native",
+	"network.server_up",
+	"network.server_down",
+	"network.server_status",
 }
 
 // AllowedServiceUnits defines systemd service units allowed to be restarted via service.restart.
@@ -1136,13 +1141,224 @@ func (s *Server) processRequest(req Request) Response {
 		return Response{Ok: true, Applied: false, Plan: plan}
 
 	case "network.install_native":
-		plan := []string{"curl -fsSL https://pkgs.netbird.io/install.sh | sh"}
+		plan := []string{
+			"curl -fsSL https://pkgs.netbird.io/install.sh | sh",
+			"podman rm -f allod-netbird",
+		}
 		if !req.Plan {
 			out, err := exec.Command("sh", "-c", "curl -fsSL https://pkgs.netbird.io/install.sh | sh").CombinedOutput()
 			if err != nil {
 				return Response{Ok: false, Error: fmt.Sprintf("Errore installazione NetBird nativo: %v (%s)", err, strings.TrimSpace(string(out)))}
 			}
+			// Stop and remove any prior container client now that host binary is installed
+			_ = exec.Command("podman", "stop", "allod-netbird").Run()
+			_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
+			_ = exec.Command("ip", "link", "delete", "wt0").Run()
+
+			// Auto-connect native NetBird if setup key is configured
+			baseDir := "/mnt/allod-storage"
+			if envBase := os.Getenv("ALLOD_STORAGE_DIR"); envBase != "" {
+				baseDir = envBase
+			}
+			envFile := filepath.Join(baseDir, "network", "secrets", "netbird.env")
+			setupKey := ""
+			mgmtURL := "https://api.netbird.io:443"
+			if envBytes, err := os.ReadFile(envFile); err == nil {
+				for _, line := range strings.Split(string(envBytes), "\n") {
+					trimmed := strings.TrimSpace(line)
+					if strings.HasPrefix(trimmed, "NB_SETUP_KEY=") {
+						setupKey = strings.Trim(strings.TrimPrefix(trimmed, "NB_SETUP_KEY="), `"'`)
+					} else if strings.HasPrefix(trimmed, "NB_MANAGEMENT_URL=") {
+						val := strings.Trim(strings.TrimPrefix(trimmed, "NB_MANAGEMENT_URL="), `"'`)
+						if val != "" {
+							mgmtURL = val
+						}
+					}
+				}
+			}
+			if setupKey != "" {
+				if nbBin, err := exec.LookPath("netbird"); err == nil {
+					cmdArgs := []string{"up", "--setup-key", setupKey}
+					if mgmtURL != "" && mgmtURL != "https://api.netbird.io:443" {
+						cmdArgs = append(cmdArgs, "--management-url", mgmtURL)
+					}
+					_ = exec.Command(nbBin, cmdArgs...).Run()
+				}
+			}
 			return Response{Ok: true, Applied: true, Output: string(out), Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "network.server_up":
+		baseDir := "/mnt/allod-storage"
+		if envBase := os.Getenv("ALLOD_STORAGE_DIR"); envBase != "" {
+			baseDir = envBase
+		}
+		srvDir := filepath.Join(baseDir, "network", "server")
+		dataDir := filepath.Join(srvDir, "data")
+		cfgDir := filepath.Join(srvDir, "config")
+		_ = os.MkdirAll(dataDir, 0755)
+		_ = os.MkdirAll(cfgDir, 0755)
+
+		domain := "127.0.0.1"
+		if d, ok := req.Args["domain"].(string); ok && strings.TrimSpace(d) != "" {
+			domain = strings.TrimSpace(d)
+		}
+		port := 33073
+		if p, ok := req.Args["port"].(float64); ok && p > 0 && p <= 65535 {
+			port = int(p)
+		} else if p, ok := req.Args["port"].(int); ok && p > 0 && p <= 65535 {
+			port = p
+		}
+		dashPort := 8088
+		if dp, ok := req.Args["dash_port"].(float64); ok && dp > 0 && dp <= 65535 {
+			dashPort = int(dp)
+		} else if dp, ok := req.Args["dash_port"].(int); ok && dp > 0 && dp <= 65535 {
+			dashPort = dp
+		}
+		stunPort := 3478
+		if sp, ok := req.Args["stun_port"].(float64); ok && sp > 0 && sp <= 65535 {
+			stunPort = int(sp)
+		} else if sp, ok := req.Args["stun_port"].(int); ok && sp > 0 && sp <= 65535 {
+			stunPort = sp
+		}
+
+		exposedURL := fmt.Sprintf("http://%s:%d", domain, port)
+		if strings.HasPrefix(domain, "http://") || strings.HasPrefix(domain, "https://") {
+			exposedURL = domain
+		} else if strings.Contains(domain, ".") && !strings.Contains(domain, "192.168.") && !strings.Contains(domain, "10.") && !strings.Contains(domain, "127.0.") {
+			exposedURL = fmt.Sprintf("https://%s:%d", domain, port)
+		}
+
+		cfgFile := filepath.Join(cfgDir, "config.yaml")
+		if _, err := os.Stat(cfgFile); os.IsNotExist(err) {
+			authSecret := generateRandomKeyString(32)
+			sessionKey := generateRandomKeyString(32)
+			dataKey := generateRandomKeyString(32)
+
+			cfgContent := fmt.Sprintf(`# NetBird Managed Server Configuration (Allod)
+server:
+  listenAddress: ":80"
+  exposedAddress: "%s"
+  stunPorts:
+    - %d
+  metricsPort: 9090
+  healthcheckAddress: ":9000"
+  logLevel: "info"
+  logFile: "console"
+  authSecret: "%s"
+  dataDir: "/var/lib/netbird"
+  auth:
+    issuer: "%s/oauth2"
+    signKeyRefreshEnabled: true
+    sessionCookieEncryptionKey: "%s"
+    dashboardRedirectURIs:
+      - "http://%s:%d/nb-auth"
+      - "http://%s:%d/nb-silent-auth"
+    cliRedirectURIs:
+      - "http://localhost:53000/"
+  store:
+    engine: "sqlite"
+    encryptionKey: "%s"
+`, exposedURL, stunPort, authSecret, exposedURL, sessionKey, domain, dashPort, domain, dashPort, dataKey)
+			_ = os.WriteFile(cfgFile, []byte(cfgContent), 0600)
+		}
+
+		serverCmd := []string{
+			"podman", "run", "-d",
+			"--name", "allod-netbird-server",
+			"--replace",
+			"--restart=always",
+			"-v", fmt.Sprintf("%s:/var/lib/netbird:Z", dataDir),
+			"-v", fmt.Sprintf("%s:/etc/netbird/config.yaml:Z", cfgFile),
+			"-p", fmt.Sprintf("%d:80", port),
+			"-p", fmt.Sprintf("%d:%d/udp", stunPort, stunPort),
+			"docker.io/netbirdio/netbird-server:0.79.0",
+			"--config", "/etc/netbird/config.yaml",
+		}
+
+		dashCmd := []string{
+			"podman", "run", "-d",
+			"--name", "allod-netbird-dashboard",
+			"--replace",
+			"--restart=always",
+			"-p", fmt.Sprintf("%d:80", dashPort),
+			"--env", fmt.Sprintf("NETBIRD_MGMT_API_ENDPOINT=%s", exposedURL),
+			"--env", fmt.Sprintf("NETBIRD_MGMT_GRPC_API_ENDPOINT=%s", exposedURL),
+			"--env", "AUTH_AUDIENCE=netbird-dashboard",
+			"--env", "AUTH_CLIENT_ID=netbird-dashboard",
+			"--env", fmt.Sprintf("AUTH_AUTHORITY=%s/oauth2", exposedURL),
+			"--env", "USE_AUTH0=false",
+			"--env", "AUTH_SUPPORTED_SCOPES=openid profile email groups",
+			"--env", "AUTH_REDIRECT_URI=/nb-auth",
+			"--env", "AUTH_SILENT_REDIRECT_URI=/nb-silent-auth",
+			"docker.io/netbirdio/dashboard:latest",
+		}
+
+		plan := []string{
+			strings.Join(serverCmd, " "),
+			strings.Join(dashCmd, " "),
+		}
+
+		if !req.Plan {
+			_ = exec.Command("podman", "rm", "-f", "allod-netbird-server").Run()
+			_ = exec.Command("podman", "rm", "-f", "allod-netbird-dashboard").Run()
+
+			outSrv, errSrv := exec.Command(serverCmd[0], serverCmd[1:]...).CombinedOutput()
+			if errSrv != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore avvio allod-netbird-server: %v (%s)", errSrv, strings.TrimSpace(string(outSrv)))}
+			}
+			outDash, errDash := exec.Command(dashCmd[0], dashCmd[1:]...).CombinedOutput()
+			if errDash != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore avvio allod-netbird-dashboard: %v (%s)", errDash, strings.TrimSpace(string(outDash)))}
+			}
+			return Response{
+				Ok:      true,
+				Applied: true,
+				Output:  fmt.Sprintf("Server NetBird gestito avviato con successo!\nManagement URL: %s\nDashboard: http://%s:%d", exposedURL, domain, dashPort),
+				Plan:    plan,
+			}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "network.server_down":
+		plan := []string{
+			"podman rm -f allod-netbird-server",
+			"podman rm -f allod-netbird-dashboard",
+		}
+		if !req.Plan {
+			_ = exec.Command("podman", "stop", "allod-netbird-server").Run()
+			_ = exec.Command("podman", "rm", "-f", "allod-netbird-server").Run()
+			_ = exec.Command("podman", "stop", "allod-netbird-dashboard").Run()
+			_ = exec.Command("podman", "rm", "-f", "allod-netbird-dashboard").Run()
+			return Response{Ok: true, Applied: true, Output: "Server NetBird gestito e Dashboard rimossi con successo", Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "network.server_status":
+		plan := []string{
+			"podman ps --filter name=allod-netbird-server --format {{.Names}}",
+			"podman ps --filter name=allod-netbird-dashboard --format {{.Names}}",
+		}
+		if !req.Plan {
+			srvRunning := false
+			dashRunning := false
+			if out, err := exec.Command("podman", "ps", "--filter", "name=allod-netbird-server", "--format", "{{.Names}}").Output(); err == nil {
+				if strings.Contains(string(out), "allod-netbird-server") {
+					srvRunning = true
+				}
+			}
+			if out, err := exec.Command("podman", "ps", "--filter", "name=allod-netbird-dashboard", "--format", "{{.Names}}").Output(); err == nil {
+				if strings.Contains(string(out), "allod-netbird-dashboard") {
+					dashRunning = true
+				}
+			}
+			statusPayload, _ := json.Marshal(map[string]interface{}{
+				"server_running":    srvRunning,
+				"dashboard_running": dashRunning,
+				"running":           srvRunning && dashRunning,
+			})
+			return Response{Ok: true, Applied: true, Output: string(statusPayload), Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
@@ -1361,4 +1577,11 @@ func AutoHealSambaConfig() error {
 		_ = exec.Command(systemctlBin, "restart", "smbd").Run()
 	}
 	return nil
+}
+
+// generateRandomKeyString generates a cryptographically secure random base64 string.
+func generateRandomKeyString(numBytes int) string {
+	b := make([]byte, numBytes)
+	_, _ = rand.Read(b)
+	return base64.StdEncoding.EncodeToString(b)
 }

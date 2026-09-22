@@ -458,6 +458,53 @@ func TestHelperNetBirdPlan(t *testing.T) {
 	if !resUp.Ok {
 		t.Fatalf("expected network.netbird_up plan to succeed, got error: %s", resUp.Error)
 	}
+
+	reqNative := Request{
+		Action: "network.install_native",
+		Plan:   true,
+		Args:   map[string]interface{}{},
+	}
+	resNative := s.processRequest(reqNative)
+	if !resNative.Ok {
+		t.Fatalf("expected network.install_native plan to succeed, got error: %s", resNative.Error)
+	}
+
+	reqSrvUp := Request{
+		Action: "network.server_up",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"domain":    "mesh.example.com",
+			"port":      33073,
+			"dash_port": 8088,
+		},
+	}
+	resSrvUp := s.processRequest(reqSrvUp)
+	if !resSrvUp.Ok {
+		t.Fatalf("expected network.server_up plan to succeed, got error: %s", resSrvUp.Error)
+	}
+	if len(resSrvUp.Plan) != 2 {
+		t.Errorf("expected 2 plan items (server + dashboard), got %d", len(resSrvUp.Plan))
+	}
+
+	reqSrvDown := Request{
+		Action: "network.server_down",
+		Plan:   true,
+		Args:   map[string]interface{}{},
+	}
+	resSrvDown := s.processRequest(reqSrvDown)
+	if !resSrvDown.Ok {
+		t.Fatalf("expected network.server_down plan to succeed, got error: %s", resSrvDown.Error)
+	}
+
+	reqSrvStatus := Request{
+		Action: "network.server_status",
+		Plan:   true,
+		Args:   map[string]interface{}{},
+	}
+	resSrvStatus := s.processRequest(reqSrvStatus)
+	if !resSrvStatus.Ok {
+		t.Fatalf("expected network.server_status plan to succeed, got error: %s", resSrvStatus.Error)
+	}
 }
 
 func TestPatchSambaConfig(t *testing.T) {

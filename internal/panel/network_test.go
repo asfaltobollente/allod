@@ -178,3 +178,112 @@ func TestNetworkPairingInfo(t *testing.T) {
 		t.Errorf("expected management_url https://mesh.test.lan, got %v", data["management_url"])
 	}
 }
+
+func TestNetworkConfigureManaged(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+
+	serverUpCalled := false
+	mock := &mockHelperClient{
+		executeFn: func(action string, args map[string]interface{}, plan bool) (helper.Response, error) {
+			if action == "network.server_up" {
+				serverUpCalled = true
+				return helper.Response{Ok: true, Applied: true, Output: "server started"}, nil
+			}
+			return helper.Response{Ok: true}, nil
+		},
+	}
+	mux := http.NewServeMux()
+	RegisterNetworkRoutes(mux, &NetworkHandler{
+		Helper: mock,
+	})
+
+	body := []byte(`{"mode":"selfhosted_managed","setup_key":"local-setup-key","server_domain":"mesh.local","server_port":33073,"server_dash_port":8088}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/network/configure", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if !serverUpCalled {
+		t.Errorf("expected network.server_up to be called for selfhosted_managed mode")
+	}
+}
+
+func TestNetworkInstallNative(t *testing.T) {
+	nativeCalled := false
+	mock := &mockHelperClient{
+		executeFn: func(action string, args map[string]interface{}, plan bool) (helper.Response, error) {
+			if action == "network.install_native" {
+				nativeCalled = true
+				return helper.Response{Ok: true, Applied: true, Output: "installed netbird 0.79.0"}, nil
+			}
+			return helper.Response{Ok: false, Error: "unexpected action"}, nil
+		},
+	}
+	mux := http.NewServeMux()
+	RegisterNetworkRoutes(mux, &NetworkHandler{
+		Helper: mock,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/network/install-native", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if !nativeCalled {
+		t.Errorf("expected network.install_native to be called")
+	}
+}
+
+func TestNetworkServerEndpoints(t *testing.T) {
+	serverUpCalled := false
+	serverDownCalled := false
+	mock := &mockHelperClient{
+		executeFn: func(action string, args map[string]interface{}, plan bool) (helper.Response, error) {
+			if action == "network.server_up" {
+				serverUpCalled = true
+				return helper.Response{Ok: true, Applied: true, Output: "Server NetBird avviato"}, nil
+			}
+			if action == "network.server_down" {
+				serverDownCalled = true
+				return helper.Response{Ok: true, Applied: true, Output: "Server NetBird fermato"}, nil
+			}
+			return helper.Response{Ok: true}, nil
+		},
+	}
+	mux := http.NewServeMux()
+	RegisterNetworkRoutes(mux, &NetworkHandler{
+		Helper: mock,
+	})
+
+	// Test start
+	bodyStart := []byte(`{"domain":"192.168.1.100","port":33073,"dash_port":8088}`)
+	reqStart := httptest.NewRequest(http.MethodPost, "/api/network/server/start", bytes.NewReader(bodyStart))
+	recStart := httptest.NewRecorder()
+	mux.ServeHTTP(recStart, reqStart)
+	if recStart.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recStart.Code)
+	}
+	if !serverUpCalled {
+		t.Errorf("expected server_up to be called")
+	}
+
+	// Test stop
+	reqStop := httptest.NewRequest(http.MethodPost, "/api/network/server/stop", nil)
+	recStop := httptest.NewRecorder()
+	mux.ServeHTTP(recStop, reqStop)
+	if recStop.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recStop.Code)
+	}
+	if !serverDownCalled {
+		t.Errorf("expected server_down to be called")
+	}
+}
+

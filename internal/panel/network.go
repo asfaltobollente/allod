@@ -46,6 +46,9 @@ func RegisterNetworkRoutes(mux *http.ServeMux, h *NetworkHandler) {
 	mux.HandleFunc("/api/network/configure", h.handleConfigure)
 	mux.HandleFunc("/api/network/preauth-key", h.handlePairingInfo)
 	mux.HandleFunc("/api/network/pairing-info", h.handlePairingInfo)
+	mux.HandleFunc("/api/network/install-native", h.handleInstallNative)
+	mux.HandleFunc("/api/network/server/start", h.handleServerStart)
+	mux.HandleFunc("/api/network/server/stop", h.handleServerStop)
 }
 
 type netbirdStatusJSON struct {
@@ -104,7 +107,10 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mode := netLevel
-	if mode != "selfhosted" {
+	if mode == "selfhosted" {
+		mode = "selfhosted_remote"
+	}
+	if mode != "selfhosted_remote" && mode != "selfhosted_managed" {
 		mode = "cloud"
 	}
 	hasKey := len(setupKey) > 0
@@ -151,18 +157,59 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Detect client runtime: native host binary vs podman container
+	nativeInstalled := false
+	if _, err := exec.LookPath("netbird"); err == nil {
+		nativeInstalled = true
+	} else if _, err := os.Stat("/usr/bin/netbird"); err == nil {
+		nativeInstalled = true
+	}
+
+	clientRuntime := "container"
+	if netLevel == "off" {
+		clientRuntime = "stopped"
+	} else if nativeInstalled {
+		clientRuntime = "native"
+	}
+
+	// Managed server state
+	serverManaged := map[string]interface{}{
+		"running":           false,
+		"server_running":    false,
+		"dashboard_running": false,
+		"domain":            "127.0.0.1",
+		"port":              33073,
+		"dashboard_port":    8088,
+		"dashboard_url":     "http://127.0.0.1:8088",
+		"management_url":    "http://127.0.0.1:33073",
+	}
+
+	if h.Helper != nil {
+		if resp, err := h.Helper.Execute("network.server_status", nil, false); err == nil && resp.Ok && resp.Output != "" {
+			var srvMap map[string]interface{}
+			if err := json.Unmarshal([]byte(resp.Output), &srvMap); err == nil {
+				for k, v := range srvMap {
+					serverManaged[k] = v
+				}
+			}
+		}
+	}
+
 	data := map[string]interface{}{
-		"level":          netLevel,
-		"enabled":        netLevel != "off",
-		"mode":           mode,
-		"has_key":        hasKey,
-		"management_url": managementURL,
-		"mesh_ip":        meshIP,
-		"connected":      connected,
-		"peers_count":    peersCount,
-		"nodes_count":    peersCount,
-		"peers":          peersList,
-		"nodes":          peersList,
+		"level":            netLevel,
+		"enabled":          netLevel != "off",
+		"mode":             mode,
+		"client_runtime":   clientRuntime,
+		"native_installed": nativeInstalled,
+		"has_key":          hasKey,
+		"management_url":   managementURL,
+		"mesh_ip":          meshIP,
+		"connected":        connected,
+		"peers_count":      peersCount,
+		"nodes_count":      peersCount,
+		"peers":            peersList,
+		"nodes":            peersList,
+		"server_managed":   serverManaged,
 	}
 
 	json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
@@ -206,9 +253,12 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		Mode          string `json:"mode"`
-		SetupKey      string `json:"setup_key"`
-		ManagementURL string `json:"management_url"`
+		Mode           string `json:"mode"`
+		SetupKey       string `json:"setup_key"`
+		ManagementURL  string `json:"management_url"`
+		ServerDomain   string `json:"server_domain"`
+		ServerPort     int    `json:"server_port"`
+		ServerDashPort int    `json:"server_dash_port"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -217,16 +267,42 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 	}
 
 	mode := strings.TrimSpace(req.Mode)
-	if mode == "" || (mode != "cloud" && mode != "selfhosted") {
+	if mode == "selfhosted" {
+		mode = "selfhosted_remote"
+	}
+	if mode == "" || (mode != "cloud" && mode != "selfhosted_remote" && mode != "selfhosted_managed" && mode != "off") {
 		mode = "cloud"
 	}
 
 	setupKey := strings.TrimSpace(req.SetupKey)
 	mgmtURL := strings.TrimSpace(req.ManagementURL)
+	serverDomain := strings.TrimSpace(req.ServerDomain)
+	if serverDomain == "" {
+		serverDomain = "127.0.0.1"
+	}
+	serverPort := req.ServerPort
+	if serverPort <= 0 {
+		serverPort = 33073
+	}
+	serverDashPort := req.ServerDashPort
+	if serverDashPort <= 0 {
+		serverDashPort = 8088
+	}
+
 	if mode == "cloud" {
 		mgmtURL = "https://api.netbird.io:443"
-	} else if mgmtURL != "" && !strings.HasPrefix(mgmtURL, "http://") && !strings.HasPrefix(mgmtURL, "https://") {
-		mgmtURL = "https://" + mgmtURL
+	} else if mode == "selfhosted_managed" {
+		if strings.HasPrefix(serverDomain, "http://") || strings.HasPrefix(serverDomain, "https://") {
+			mgmtURL = serverDomain
+		} else if strings.Contains(serverDomain, ".") && !strings.Contains(serverDomain, "192.168.") && !strings.Contains(serverDomain, "10.") && !strings.Contains(serverDomain, "127.0.") {
+			mgmtURL = fmt.Sprintf("https://%s:%d", serverDomain, serverPort)
+		} else {
+			mgmtURL = fmt.Sprintf("http://%s:%d", serverDomain, serverPort)
+		}
+	} else if mode == "selfhosted_remote" {
+		if mgmtURL != "" && !strings.HasPrefix(mgmtURL, "http://") && !strings.HasPrefix(mgmtURL, "https://") {
+			mgmtURL = "https://" + mgmtURL
+		}
 	}
 
 	baseDir := quadlet.ResolvedStorageBaseDir()
@@ -278,6 +354,15 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 	// Clean up any legacy rootless user Quadlet units and containers for network
 	_ = quadlet.StopAndRemoveContainers("network", true)
 
+	// If self-hosted managed, launch or restart the managed server container
+	if mode == "selfhosted_managed" && h.Helper != nil {
+		_, _ = h.Helper.Execute("network.server_up", map[string]interface{}{
+			"domain":    serverDomain,
+			"port":      serverPort,
+			"dash_port": serverDashPort,
+		}, false)
+	}
+
 	// Trigger NetBird via privileged helper (running with root network capabilities)
 	if mode != "off" && setupKey != "" {
 		if h.Helper != nil {
@@ -289,6 +374,7 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 	} else if mode == "off" {
 		if h.Helper != nil {
 			_, _ = h.Helper.Execute("network.netbird_down", nil, false)
+			_, _ = h.Helper.Execute("network.server_down", nil, false)
 		}
 	}
 
@@ -348,15 +434,137 @@ func (h *NetworkHandler) handlePairingInfo(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	modeLabel := "NetBird Cloud (EU)"
+	dashURL := ""
+	if netLevel == "selfhosted_remote" || netLevel == "selfhosted" {
+		modeLabel = "NetBird Self-Hosted (Remoto)"
+	} else if netLevel == "selfhosted_managed" {
+		modeLabel = "NetBird Server Gestito (Allod)"
+		dashURL = "http://127.0.0.1:8088"
+	}
+
 	json.NewEncoder(w).Encode(PanelResponse{
 		Status: "ok",
 		Data: map[string]interface{}{
 			"mode":           netLevel,
+			"mode_label":     modeLabel,
 			"management_url": managementURL,
+			"dashboard_url":  dashURL,
 			"mesh_ip":        meshIP,
 			"has_key":        len(setupKey) > 0,
 			"key":            setupKey,
 			"server_url":     managementURL,
 		},
+	})
+}
+
+func (h *NetworkHandler) handleInstallNative(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.Helper == nil {
+		h.Helper = &helper.Client{SocketPath: "/run/allod/helper.sock"}
+	}
+
+	resp, err := h.Helper.Execute("network.install_native", nil, false)
+	if err != nil || !resp.Ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		errMsg := "Errore installazione NetBird nativo"
+		if resp.Error != "" {
+			errMsg = resp.Error
+		} else if err != nil {
+			errMsg = err.Error()
+		}
+		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+		return
+	}
+
+	json.NewEncoder(w).Encode(PanelResponse{
+		Status:  "ok",
+		Message: "NetBird nativo installato con successo sul server! Rete mesh attiva.",
+		Data: map[string]interface{}{
+			"output": resp.Output,
+		},
+	})
+}
+
+func (h *NetworkHandler) handleServerStart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Domain   string `json:"domain"`
+		Port     int    `json:"port"`
+		DashPort int    `json:"dash_port"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	if h.Helper == nil {
+		h.Helper = &helper.Client{SocketPath: "/run/allod/helper.sock"}
+	}
+
+	args := map[string]interface{}{}
+	if req.Domain != "" {
+		args["domain"] = req.Domain
+	}
+	if req.Port > 0 {
+		args["port"] = req.Port
+	}
+	if req.DashPort > 0 {
+		args["dash_port"] = req.DashPort
+	}
+
+	resp, err := h.Helper.Execute("network.server_up", args, false)
+	if err != nil || !resp.Ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		errMsg := "Errore avvio server NetBird gestito"
+		if resp.Error != "" {
+			errMsg = resp.Error
+		} else if err != nil {
+			errMsg = err.Error()
+		}
+		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+		return
+	}
+
+	json.NewEncoder(w).Encode(PanelResponse{
+		Status:  "ok",
+		Message: resp.Output,
+	})
+}
+
+func (h *NetworkHandler) handleServerStop(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.Helper == nil {
+		h.Helper = &helper.Client{SocketPath: "/run/allod/helper.sock"}
+	}
+
+	resp, err := h.Helper.Execute("network.server_down", nil, false)
+	if err != nil || !resp.Ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		errMsg := "Errore arresto server NetBird gestito"
+		if resp.Error != "" {
+			errMsg = resp.Error
+		} else if err != nil {
+			errMsg = err.Error()
+		}
+		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+		return
+	}
+
+	json.NewEncoder(w).Encode(PanelResponse{
+		Status:  "ok",
+		Message: "Server NetBird gestito arrestato con successo",
 	})
 }
