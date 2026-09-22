@@ -64,6 +64,7 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 | `network.server_up` | Start local managed NetBird control plane container | `domain` (FQDN or IP), `port` (int), `dash_port` (int) | Runs `netbirdio/netbird-server` & `netbirdio/dashboard` |
 | `network.server_down` | Stop local managed NetBird control plane container | *(none)* | Stops and removes managed NetBird server & dashboard |
 | `network.server_status` | Query status of local managed NetBird control plane | *(none)* | Inspects managed server containers and port bindings |
+| `containers.prune` | Safely prune exited root containers and dangling images | *(none)* | `podman container prune -f`, `podman image prune -f` |
 
 ---
 

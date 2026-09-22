@@ -720,13 +720,25 @@ func main() {
 			return
 		}
 
-		// 1. Prune dead / exited containers
+		// 1. Prune dead / exited user containers
 		cntPruneOut, _ := exec.Command("podman", "container", "prune", "-f").CombinedOutput()
 
-		// 2. Prune dangling unused images
+		// 2. Prune dangling unused user images
 		imgPruneOut, _ := exec.Command("podman", "image", "prune", "-f").CombinedOutput()
 
-		// 3. Remove stale .cid files
+		// 3. Prune root containers and dangling images via privileged helper
+		rootCntPruned := ""
+		rootImgPruned := ""
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		if resp, err := client.Execute("containers.prune", nil, false); err == nil && resp.Ok && resp.Output != "" {
+			var rootRes map[string]string
+			if err := json.Unmarshal([]byte(resp.Output), &rootRes); err == nil {
+				rootCntPruned = rootRes["containers_pruned"]
+				rootImgPruned = rootRes["images_pruned"]
+			}
+		}
+
+		// 4. Remove stale .cid files
 		uid := os.Getuid()
 		cidDir := fmt.Sprintf("/run/user/%d", uid)
 		var cleanedCids []string
@@ -740,7 +752,7 @@ func main() {
 			}
 		}
 
-		// 4. Terminate any orphan containers for modules configured as 'off'
+		// 5. Terminate any orphan containers for modules configured as 'off'
 		var orphansCleaned []string
 		cfg, _ := config.LoadConfig(getConfigPath())
 		if cfg != nil {
@@ -754,15 +766,17 @@ func main() {
 			}
 		}
 
-		// 5. Reset failed systemd units
+		// 6. Reset failed systemd units
 		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
 
 		data := map[string]interface{}{
-			"containers_pruned": strings.TrimSpace(string(cntPruneOut)),
-			"images_pruned":     strings.TrimSpace(string(imgPruneOut)),
-			"cleaned_cids":      cleanedCids,
-			"orphans_cleaned":   orphansCleaned,
-			"timestamp":         time.Now().Format("2006-01-02 15:04:05"),
+			"containers_pruned":      strings.TrimSpace(string(cntPruneOut)),
+			"images_pruned":          strings.TrimSpace(string(imgPruneOut)),
+			"root_containers_pruned": rootCntPruned,
+			"root_images_pruned":     rootImgPruned,
+			"cleaned_cids":           cleanedCids,
+			"orphans_cleaned":        orphansCleaned,
+			"timestamp":              time.Now().Format("2006-01-02 15:04:05"),
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{
