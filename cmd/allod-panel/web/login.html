@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Allod — Accesso Amministratore</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      const saved = localStorage.getItem('allod_theme');
+      if (saved && saved !== 'default') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
+  <style>
+    body {
+      background-color: var(--bg-dark, #0f172a);
+      color: var(--text-main, #f8fafc);
+      font-family: var(--font-main, 'Inter', sans-serif);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      margin: 0;
+    }
+    .auth-container {
+      width: 100%;
+      max-width: 440px;
+    }
+    .auth-brand {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .auth-logo-icon {
+      font-size: 42px;
+      display: inline-block;
+      margin-bottom: 8px;
+      filter: drop-shadow(0 4px 12px rgba(56, 189, 248, 0.3));
+    }
+    .auth-brand-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin: 0;
+      color: var(--text-main, #f8fafc);
+    }
+    .auth-brand-sub {
+      font-size: 13px;
+      color: var(--text-muted, #94a3b8);
+      margin-top: 4px;
+    }
+    .auth-card {
+      background: var(--card-bg, #1e293b);
+      border: 1px solid var(--card-border, #334155);
+      border-radius: var(--radius, 14px);
+      padding: 32px 28px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+      position: relative;
+    }
+    .card-header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .badge-primary {
+      background: var(--primary-light, rgba(56, 189, 248, 0.15));
+      color: var(--primary, #38bdf8);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .badge-setup {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning, #f59e0b);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .auth-card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text-main, #f8fafc);
+    }
+    .auth-card-desc {
+      font-size: 12.5px;
+      color: var(--text-muted, #94a3b8);
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+    .form-group {
+      margin-bottom: 18px;
+      position: relative;
+    }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main, #f8fafc);
+      margin-bottom: 6px;
+    }
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .form-input {
+      width: 100%;
+      padding: 11px 40px 11px 14px;
+      background: var(--input-bg, #0f172a);
+      border: 1px solid var(--card-border, #334155);
+      border-radius: 8px;
+      color: var(--text-main, #f8fafc);
+      font-size: 13.5px;
+      outline: none;
+      transition: var(--transition, all 0.2s);
+    }
+    .form-input:focus {
+      border-color: var(--primary, #38bdf8);
+      box-shadow: 0 0 0 3px var(--primary-light, rgba(56, 189, 248, 0.15));
+    }
+    .btn-toggle-eye {
+      position: absolute;
+      right: 12px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted, #94a3b8);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+    }
+    .btn-toggle-eye:hover {
+      color: var(--text-main, #f8fafc);
+    }
+    .auth-alert {
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .auth-alert-danger {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+    }
+    .auth-alert-success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #6ee7b7;
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 12px 18px;
+      background: var(--primary-gradient, linear-gradient(135deg, #38bdf8 0%, #0284c7 100%));
+      color: var(--primary-text, #0f172a);
+      border: none;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: var(--transition, all 0.2s);
+      margin-top: 10px;
+    }
+    .btn-submit:hover {
+      filter: brightness(1.1);
+      box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35);
+    }
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .portal-link-box {
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted, #94a3b8);
+    }
+    .portal-link-box a {
+      color: var(--primary, #38bdf8);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .portal-link-box a:hover {
+      text-decoration: underline;
+    }
+    .cli-note {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 11px;
+      color: var(--text-muted, #94a3b8);
+      line-height: 1.5;
+    }
+    .cli-note code {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--primary, #38bdf8);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .hidden { display: none !important; }
+    .loading-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: currentColor;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="auth-container">
+    <!-- Brand Header -->
+    <div class="auth-brand">
+      <div class="auth-logo-icon">🛡️</div>
+      <h1 class="auth-brand-title">Allod Sovereign Cloud</h1>
+      <p class="auth-brand-sub">Pannello di Amministrazione Server & Rete Mesh</p>
+    </div>
+
+    <!-- Alert Message -->
+    <div id="auth-alert" class="auth-alert hidden"></div>
+
+    <!-- 1. LOGIN CARD (Existing Setup) -->
+    <div id="view-login" class="auth-card hidden">
+      <div class="card-header-badge badge-primary">
+        <span>🔒</span> <span>Area Riservata</span>
+      </div>
+      <h2 class="auth-card-title">Accesso Amministratore</h2>
+      <p class="auth-card-desc">
+        Inserisci la password di amministrazione per gestire nodi, storage, container e moduli della rete locale.
+      </p>
+
+      <form id="form-login" onsubmit="event.preventDefault(); submitLogin();">
+        <div class="form-group">
+          <label class="form-label" for="login-username">Nome Utente:</label>
+          <div class="input-wrapper">
+            <input type="text" id="login-username" class="form-input" value="admin" autocomplete="username" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="login-password">Password Amministratore:</label>
+          <div class="input-wrapper">
+            <input type="password" id="login-password" class="form-input" placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" class="btn-toggle-eye" onclick="togglePassVisibility('login-password', this)">👁️</button>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-login" class="btn-submit">
+          <span>Accedi al Pannello</span>
+        </button>
+      </form>
+
+      <div class="portal-link-box">
+        Sei un membro della famiglia?
+        <br>
+        <a href="/portal">🏰 Accedi al tuo Portale Personale →</a>
+      </div>
+
+      <div class="cli-note">
+        Password persa o dimenticata? Ripristinala da SSH con:
+        <br>
+        <code>allod admin-password reset</code>
+      </div>
+    </div>
+
+    <!-- 2. SETUP CARD (First Run) -->
+    <div id="view-setup" class="auth-card hidden">
+      <div class="card-header-badge badge-setup">
+        <span>✨</span> <span>Primo Avvio Allod</span>
+      </div>
+      <h2 class="auth-card-title">Configurazione Iniziale</h2>
+      <p class="auth-card-desc">
+        Crea la password principale per proteggere il tuo server e abilitare la gestione di storage, utenti e moduli.
+      </p>
+
+      <form id="form-setup" onsubmit="event.preventDefault(); submitSetup();">
+        <div class="form-group">
+          <label class="form-label" for="setup-password">Nuova Password Amministratore:</label>
+          <div class="input-wrapper">
+            <input type="password" id="setup-password" class="form-input" placeholder="Minimo 6 caratteri" minlength="6" required>
+            <button type="button" class="btn-toggle-eye" onclick="togglePassVisibility('setup-password', this)">👁️</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="setup-confirm">Conferma Password:</label>
+          <div class="input-wrapper">
+            <input type="password" id="setup-confirm" class="form-input" placeholder="Ripeti la password" minlength="6" required>
+            <button type="button" class="btn-toggle-eye" onclick="togglePassVisibility('setup-confirm', this)">👁️</button>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-setup" class="btn-submit">
+          <span>🚀 Attiva Server & Entra nella Dashboard</span>
+        </button>
+      </form>
+
+      <div class="cli-note">
+        La password sarà protetta con derivazione crittografica e salt univoco salvato nel database locale <code>state.db</code>.
+      </div>
+    </div>
+
+    <!-- 3. LOADING CARD -->
+    <div id="view-loading" class="auth-card" style="text-align: center; padding: 48px 24px;">
+      <div class="loading-spinner" style="width: 28px; height: 28px; border-width: 3px; color: var(--primary, #38bdf8); margin-bottom: 12px;"></div>
+      <div style="font-size: 13.5px; color: var(--text-muted, #94a3b8);">Verifica stato sicurezza server...</div>
+    </div>
+
+  </div>
+
+  <script>
+    function showAlert(msg, isError = true) {
+      const el = document.getElementById('auth-alert');
+      el.className = 'auth-alert ' + (isError ? 'auth-alert-danger' : 'auth-alert-success');
+      el.innerHTML = (isError ? '⚠️ ' : '✓ ') + msg;
+      el.classList.remove('hidden');
+    }
+
+    function hideAlert() {
+      document.getElementById('auth-alert').classList.add('hidden');
+    }
+
+    function togglePassVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.innerText = '🙈';
+      } else {
+        input.type = 'password';
+        btn.innerText = '👁️';
+      }
+    }
+
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+
+        document.getElementById('view-loading').classList.add('hidden');
+
+        if (data.status === 'ok') {
+          const authData = data.data || {};
+          if (authData.authenticated) {
+            // Already logged in as admin, go straight to dashboard
+            window.location.href = '/';
+            return;
+          }
+
+          if (authData.configured) {
+            document.getElementById('view-login').classList.remove('hidden');
+            setTimeout(() => document.getElementById('login-password').focus(), 100);
+          } else {
+            document.getElementById('view-setup').classList.remove('hidden');
+            setTimeout(() => document.getElementById('setup-password').focus(), 100);
+          }
+        } else {
+          showAlert('Errore verifica stato server: ' + (data.message || 'sconosciuto'));
+          document.getElementById('view-login').classList.remove('hidden');
+        }
+      } catch (err) {
+        document.getElementById('view-loading').classList.add('hidden');
+        showAlert('Impossibile contattare il server Allod: ' + err.message);
+        document.getElementById('view-login').classList.remove('hidden');
+      }
+    }
+
+    async function submitLogin() {
+      hideAlert();
+      const btn = document.getElementById('btn-login');
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading-spinner"></span> <span>Accesso in corso...</span>';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+          btn.innerHTML = '<span>✓ Accesso Riuscito!</span>';
+          window.location.href = '/';
+        } else {
+          showAlert(data.message || 'Credenziali non valide');
+          btn.disabled = false;
+          btn.innerHTML = '<span>Accedi al Pannello</span>';
+          document.getElementById('login-password').focus();
+        }
+      } catch (err) {
+        showAlert('Errore di connessione: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<span>Accedi al Pannello</span>';
+      }
+    }
+
+    async function submitSetup() {
+      hideAlert();
+      const btn = document.getElementById('btn-setup');
+      const p1 = document.getElementById('setup-password').value;
+      const p2 = document.getElementById('setup-confirm').value;
+
+      if (p1.length < 6) {
+        showAlert('La password deve contenere almeno 6 caratteri');
+        return;
+      }
+      if (p1 !== p2) {
+        showAlert('Le password inserite non coincidono');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading-spinner"></span> <span>Salvataggio e attivazione...</span>';
+
+      try {
+        const res = await fetch('/api/auth/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: p1 })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+          showAlert('Password salvata con successo! Reindirizzamento...', false);
+          btn.innerHTML = '<span>✓ Attivato!</span>';
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 600);
+        } else {
+          showAlert(data.message || 'Errore durante la configurazione');
+          btn.disabled = false;
+          btn.innerHTML = '<span>🚀 Attiva Server & Entra nella Dashboard</span>';
+        }
+      } catch (err) {
+        showAlert('Errore di rete: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<span>🚀 Attiva Server & Entra nella Dashboard</span>';
+      }
+    }
+
+    checkStatus();
+  </script>
+</body>
+</html>

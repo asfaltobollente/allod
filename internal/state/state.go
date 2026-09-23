@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -28,10 +29,20 @@ type FamilyMember struct {
 	Notes             string     `json:"notes"`
 	SmbActive         bool       `json:"smb_active"`
 	PhotosLinked      bool       `json:"photos_linked"`
+	PasswordHash      string     `json:"-"`
+	PasswordSalt      string     `json:"-"`
 	OnboardingToken   string     `json:"onboarding_token,omitempty"`
 	OnboardingExpires *time.Time `json:"onboarding_expires,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+type Session struct {
+	Token     string    `json:"token"`
+	UserType  string    `json:"user_type"` // "admin" or "family"
+	Username  string    `json:"username"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Store struct {
@@ -70,16 +81,30 @@ func Open(dbPath string) (*Store, error) {
 		notes TEXT DEFAULT '',
 		smb_active BOOLEAN DEFAULT 1,
 		photos_linked BOOLEAN DEFAULT 1,
+		password_hash TEXT DEFAULT '',
+		password_salt TEXT DEFAULT '',
 		onboarding_token TEXT DEFAULT '',
 		onboarding_expires DATETIME,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS sessions (
+		token TEXT PRIMARY KEY,
+		user_type TEXT NOT NULL,
+		username TEXT NOT NULL,
+		expires_at DATETIME NOT NULL,
+		created_at DATETIME NOT NULL
 	);
 	`
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
+
+	// Safe column additions for existing databases
+	_, _ = db.Exec("ALTER TABLE family_members ADD COLUMN password_hash TEXT DEFAULT ''")
+	_, _ = db.Exec("ALTER TABLE family_members ADD COLUMN password_salt TEXT DEFAULT ''")
 
 	return &Store{db: db}, nil
 }
@@ -188,10 +213,10 @@ func (s *Store) CreateFamilyMember(m *FamilyMember) error {
 	}
 
 	query := `
-	INSERT INTO family_members (username, first_name, last_name, email, role, avatar_color, notes, smb_active, photos_linked, onboarding_token, onboarding_expires, created_at, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO family_members (username, first_name, last_name, email, role, avatar_color, notes, smb_active, photos_linked, password_hash, password_salt, onboarding_token, onboarding_expires, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	res, err := s.db.Exec(query, m.Username, m.FirstName, m.LastName, m.Email, m.Role, m.AvatarColor, m.Notes, m.SmbActive, m.PhotosLinked, m.OnboardingToken, expiresStr, m.CreatedAt.Format(time.RFC3339), m.UpdatedAt.Format(time.RFC3339))
+	res, err := s.db.Exec(query, m.Username, m.FirstName, m.LastName, m.Email, m.Role, m.AvatarColor, m.Notes, m.SmbActive, m.PhotosLinked, m.PasswordHash, m.PasswordSalt, m.OnboardingToken, expiresStr, m.CreatedAt.Format(time.RFC3339), m.UpdatedAt.Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
@@ -202,14 +227,14 @@ func (s *Store) CreateFamilyMember(m *FamilyMember) error {
 
 func (s *Store) GetFamilyMember(username string) (*FamilyMember, error) {
 	query := `
-	SELECT id, username, first_name, last_name, email, role, avatar_color, notes, smb_active, photos_linked, onboarding_token, onboarding_expires, created_at, updated_at
+	SELECT id, username, first_name, last_name, email, role, avatar_color, notes, smb_active, photos_linked, password_hash, password_salt, onboarding_token, onboarding_expires, created_at, updated_at
 	FROM family_members WHERE username = ?
 	`
 	row := s.db.QueryRow(query, username)
 	var m FamilyMember
 	var expiresStr sql.NullString
 	var createdStr, updatedStr string
-	err := row.Scan(&m.ID, &m.Username, &m.FirstName, &m.LastName, &m.Email, &m.Role, &m.AvatarColor, &m.Notes, &m.SmbActive, &m.PhotosLinked, &m.OnboardingToken, &expiresStr, &createdStr, &updatedStr)
+	err := row.Scan(&m.ID, &m.Username, &m.FirstName, &m.LastName, &m.Email, &m.Role, &m.AvatarColor, &m.Notes, &m.SmbActive, &m.PhotosLinked, &m.PasswordHash, &m.PasswordSalt, &m.OnboardingToken, &expiresStr, &createdStr, &updatedStr)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -227,7 +252,7 @@ func (s *Store) GetFamilyMember(username string) (*FamilyMember, error) {
 
 func (s *Store) ListFamilyMembers() ([]FamilyMember, error) {
 	query := `
-	SELECT id, username, first_name, last_name, email, role, avatar_color, notes, smb_active, photos_linked, onboarding_token, onboarding_expires, created_at, updated_at
+	SELECT id, username, first_name, last_name, email, role, avatar_color, notes, smb_active, photos_linked, password_hash, password_salt, onboarding_token, onboarding_expires, created_at, updated_at
 	FROM family_members ORDER BY id ASC
 	`
 	rows, err := s.db.Query(query)
@@ -241,7 +266,7 @@ func (s *Store) ListFamilyMembers() ([]FamilyMember, error) {
 		var m FamilyMember
 		var expiresStr sql.NullString
 		var createdStr, updatedStr string
-		if err := rows.Scan(&m.ID, &m.Username, &m.FirstName, &m.LastName, &m.Email, &m.Role, &m.AvatarColor, &m.Notes, &m.SmbActive, &m.PhotosLinked, &m.OnboardingToken, &expiresStr, &createdStr, &updatedStr); err != nil {
+		if err := rows.Scan(&m.ID, &m.Username, &m.FirstName, &m.LastName, &m.Email, &m.Role, &m.AvatarColor, &m.Notes, &m.SmbActive, &m.PhotosLinked, &m.PasswordHash, &m.PasswordSalt, &m.OnboardingToken, &expiresStr, &createdStr, &updatedStr); err != nil {
 			return nil, err
 		}
 		if expiresStr.Valid && expiresStr.String != "" {
@@ -265,10 +290,11 @@ func (s *Store) UpdateFamilyMember(m *FamilyMember) error {
 	query := `
 	UPDATE family_members SET
 		first_name = ?, last_name = ?, email = ?, role = ?, avatar_color = ?, notes = ?,
-		smb_active = ?, photos_linked = ?, onboarding_token = ?, onboarding_expires = ?, updated_at = ?
+		smb_active = ?, photos_linked = ?, password_hash = ?, password_salt = ?,
+		onboarding_token = ?, onboarding_expires = ?, updated_at = ?
 	WHERE username = ?
 	`
-	_, err := s.db.Exec(query, m.FirstName, m.LastName, m.Email, m.Role, m.AvatarColor, m.Notes, m.SmbActive, m.PhotosLinked, m.OnboardingToken, expiresStr, m.UpdatedAt.Format(time.RFC3339), m.Username)
+	_, err := s.db.Exec(query, m.FirstName, m.LastName, m.Email, m.Role, m.AvatarColor, m.Notes, m.SmbActive, m.PhotosLinked, m.PasswordHash, m.PasswordSalt, m.OnboardingToken, expiresStr, m.UpdatedAt.Format(time.RFC3339), m.Username)
 	return err
 }
 
@@ -306,14 +332,14 @@ func (s *Store) ValidateResetToken(token string) (*FamilyMember, error) {
 		return nil, fmt.Errorf("token non valido o mancante")
 	}
 	query := `
-	SELECT id, username, first_name, last_name, email, role, avatar_color, notes, smb_active, photos_linked, onboarding_token, onboarding_expires, created_at, updated_at
+	SELECT id, username, first_name, last_name, email, role, avatar_color, notes, smb_active, photos_linked, password_hash, password_salt, onboarding_token, onboarding_expires, created_at, updated_at
 	FROM family_members WHERE onboarding_token = ?
 	`
 	row := s.db.QueryRow(query, token)
 	var m FamilyMember
 	var expiresStr sql.NullString
 	var createdStr, updatedStr string
-	err := row.Scan(&m.ID, &m.Username, &m.FirstName, &m.LastName, &m.Email, &m.Role, &m.AvatarColor, &m.Notes, &m.SmbActive, &m.PhotosLinked, &m.OnboardingToken, &expiresStr, &createdStr, &updatedStr)
+	err := row.Scan(&m.ID, &m.Username, &m.FirstName, &m.LastName, &m.Email, &m.Role, &m.AvatarColor, &m.Notes, &m.SmbActive, &m.PhotosLinked, &m.PasswordHash, &m.PasswordSalt, &m.OnboardingToken, &expiresStr, &createdStr, &updatedStr)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("token non valido o già utilizzato")
@@ -341,4 +367,121 @@ func (s *Store) ConsumeResetToken(token string) error {
 	`
 	_, err := s.db.Exec(query, time.Now().Format(time.RFC3339), token)
 	return err
+}
+
+func (s *Store) SetFamilyMemberPassword(username, passwordHash, passwordSalt string) error {
+	now := time.Now().Format(time.RFC3339)
+	query := `
+	UPDATE family_members SET password_hash = ?, password_salt = ?, updated_at = ?
+	WHERE username = ?
+	`
+	res, err := s.db.Exec(query, passwordHash, passwordSalt, now, username)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("utente '%s' non trovato", username)
+	}
+	return nil
+}
+
+func (s *Store) CreateSession(userType, username string, duration time.Duration) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(b)
+	now := time.Now()
+	expires := now.Add(duration)
+
+	query := `
+	INSERT INTO sessions (token, user_type, username, expires_at, created_at)
+	VALUES (?, ?, ?, ?, ?)
+	`
+	_, err := s.db.Exec(query, token, userType, username, expires.Format(time.RFC3339), now.Format(time.RFC3339))
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func (s *Store) GetSession(token string) (*Session, error) {
+	if token == "" {
+		return nil, fmt.Errorf("token sessione mancante")
+	}
+	query := `
+	SELECT token, user_type, username, expires_at, created_at
+	FROM sessions WHERE token = ?
+	`
+	row := s.db.QueryRow(query, token)
+	var sess Session
+	var expStr, creStr string
+	err := row.Scan(&sess.Token, &sess.UserType, &sess.Username, &expStr, &creStr)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	exp, _ := time.Parse(time.RFC3339, expStr)
+	cre, _ := time.Parse(time.RFC3339, creStr)
+	sess.ExpiresAt = exp
+	sess.CreatedAt = cre
+
+	if time.Now().After(sess.ExpiresAt) {
+		_ = s.DeleteSession(token)
+		return nil, nil
+	}
+	return &sess, nil
+}
+
+func (s *Store) DeleteSession(token string) error {
+	_, err := s.db.Exec("DELETE FROM sessions WHERE token = ?", token)
+	return err
+}
+
+func (s *Store) DeleteSessionsForUser(userType, username string) error {
+	_, err := s.db.Exec("DELETE FROM sessions WHERE user_type = ? AND username = ?", userType, username)
+	return err
+}
+
+func (s *Store) CleanupExpiredSessions() error {
+	now := time.Now().Format(time.RFC3339)
+	_, err := s.db.Exec("DELETE FROM sessions WHERE expires_at < ?", now)
+	return err
+}
+
+func (s *Store) SetAdminAuth(hash, salt string) error {
+	if err := s.SetMeta("admin_password_hash", hash); err != nil {
+		return err
+	}
+	return s.SetMeta("admin_password_salt", salt)
+}
+
+func (s *Store) GetAdminAuth() (string, string, error) {
+	hash, err := s.GetMeta("admin_password_hash")
+	if err != nil {
+		return "", "", err
+	}
+	salt, err := s.GetMeta("admin_password_salt")
+	if err != nil {
+		return "", "", err
+	}
+	return hash, salt, nil
+}
+
+func (s *Store) HasAdminAuth() (bool, error) {
+	hash, err := s.GetMeta("admin_password_hash")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(hash) != "", nil
+}
+
+func (s *Store) ClearAdminAuth() error {
+	if err := s.SetMeta("admin_password_hash", ""); err != nil {
+		return err
+	}
+	return s.SetMeta("admin_password_salt", "")
 }

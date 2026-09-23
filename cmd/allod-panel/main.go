@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -359,6 +360,52 @@ func getTriadStatus() (allActive bool, sharesOk bool, photosOk bool, mediaOk boo
 	return
 }
 
+func linuxUserExists(username string) bool {
+	if username == "" {
+		return false
+	}
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		idBin := "id"
+		if p, errP := exec.LookPath("id"); errP == nil {
+			idBin = p
+		}
+		return exec.Command(idBin, "-u", username).Run() == nil
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		parts := strings.Split(line, ":")
+		if len(parts) > 0 && parts[0] == username {
+			return true
+		}
+	}
+	return false
+}
+
+func ensureSystemUser(client *helper.Client, username string) error {
+	if username == "" || !validTriadUserRegex.MatchString(username) {
+		return fmt.Errorf("invalid username '%s'", username)
+	}
+
+	// 1. Quick check: does user already exist in Linux (/etc/passwd)?
+	if linuxUserExists(username) {
+		return nil
+	}
+
+	// 2. Authoritative creation via privileged root helper
+	if client == nil {
+		return fmt.Errorf("helper daemon is not connected")
+	}
+
+	if err := client.CreateUser(username); err != nil {
+		return fmt.Errorf("failed to create Linux user '%s': %w", username, err)
+	}
+
+	if linuxUserExists(username) {
+		return nil
+	}
+	return fmt.Errorf("user '%s' was not found in /etc/passwd after creation", username)
+}
+
 func main() {
 	port := 8080
 	cfgPath := getConfigPath()
@@ -374,6 +421,39 @@ func main() {
 	}
 	fileServer := http.FileServer(http.FS(subFS))
 	mux.Handle("/", fileServer)
+
+	// Auth Handler & Routes
+	authHandler := panel.NewAuthHandler(dbPath, &helper.Client{SocketPath: "/run/allod/helper.sock"})
+	authHandler.EnsureSystemUser = func(client panel.HelperClient, username string) error {
+		hc, ok := client.(*helper.Client)
+		if !ok {
+			return nil
+		}
+		return ensureSystemUser(hc, username)
+	}
+	authHandler.SetSambaPassword = func(client panel.HelperClient, username, password string) error {
+		hc, ok := client.(*helper.Client)
+		if !ok {
+			return nil
+		}
+		return hc.SetSambaPassword(username, password)
+	}
+	authHandler.RegisterAuthRoutes(mux)
+
+	// Login and Setup Routes
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		f, err := subFS.Open("login.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.Copy(w, f)
+	})
+	mux.HandleFunc("/setup", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+	})
 
 	// Portal and Welcome Routes for Family Members
 	mux.HandleFunc("/portal", func(w http.ResponseWriter, r *http.Request) {
@@ -963,51 +1043,6 @@ func main() {
 		})
 	})
 
-	linuxUserExists := func(username string) bool {
-		if username == "" {
-			return false
-		}
-		data, err := os.ReadFile("/etc/passwd")
-		if err != nil {
-			idBin := "id"
-			if p, errP := exec.LookPath("id"); errP == nil {
-				idBin = p
-			}
-			return exec.Command(idBin, "-u", username).Run() == nil
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			parts := strings.Split(line, ":")
-			if len(parts) > 0 && parts[0] == username {
-				return true
-			}
-		}
-		return false
-	}
-
-	ensureSystemUser := func(client *helper.Client, username string) error {
-		if username == "" || !validTriadUserRegex.MatchString(username) {
-			return fmt.Errorf("invalid username '%s'", username)
-		}
-
-		// 1. Quick check: does user already exist in Linux (/etc/passwd)?
-		if linuxUserExists(username) {
-			return nil
-		}
-
-		// 2. Authoritative creation via privileged root helper
-		if client == nil {
-			return fmt.Errorf("helper daemon is not connected")
-		}
-
-		if err := client.CreateUser(username); err != nil {
-			return fmt.Errorf("failed to create Linux user '%s': %w", username, err)
-		}
-
-		if linuxUserExists(username) {
-			return nil
-		}
-		return fmt.Errorf("user '%s' was not found in /etc/passwd after creation", username)
-	}
 
 	upgradeAndRestartHelper := func(client *helper.Client, logReport *strings.Builder) error {
 		cwd, _ := os.Getwd()
@@ -2485,6 +2520,18 @@ WantedBy=default.target
 			return
 		}
 
+		// Save password hash into family member record in state.db
+		if salt, errSalt := panel.GenerateSalt(); errSalt == nil {
+			hash := panel.HashPassword(req.NewPassword, salt)
+			_ = st.SetFamilyMemberPassword(targetUser, hash, hex.EncodeToString(salt))
+		}
+
+		// Create session cookie so the user is immediately authenticated in the portal
+		token, errSess := st.CreateSession("family", targetUser, panel.SessionDuration)
+		if errSess == nil {
+			panel.SetSessionCookie(w, panel.FamilyCookieName, token, int(panel.SessionDuration.Seconds()))
+		}
+
 		// Consume token if one was used
 		if req.Token != "" {
 			_ = st.ConsumeResetToken(req.Token)
@@ -3026,9 +3073,84 @@ WantedBy=default.target
 		})
 	})
 
+	adminProtectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// Whitelist public static and auth/portal routes
+		if path == "/login" || path == "/setup" || path == "/portal" || path == "/welcome" ||
+			strings.HasPrefix(path, "/api/auth/") ||
+			strings.HasPrefix(path, "/api/portal/") ||
+			strings.HasPrefix(path, "/assets/") ||
+			path == "/style.css" || path == "/app.js" || path == "/i18n.js" || path == "/favicon.ico" {
+			mux.ServeHTTP(w, r)
+			return
+		}
+
+		// Root and index.html: require admin authentication
+		if path == "/" || path == "/index.html" {
+			st, err := state.Open(dbPath)
+			if err != nil {
+				http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer st.Close()
+
+			hasAdmin, _ := st.HasAdminAuth()
+			if !hasAdmin {
+				http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+				return
+			}
+			token := panel.GetSessionToken(r, panel.AdminCookieName)
+			sess, _ := st.GetSession(token)
+			if sess == nil || sess.UserType != "admin" {
+				http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+				return
+			}
+			mux.ServeHTTP(w, r)
+			return
+		}
+
+		// All other API endpoints (/api/*) require active admin authentication
+		if strings.HasPrefix(path, "/api/") {
+			st, err := state.Open(dbPath)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Database error: " + err.Error()})
+				return
+			}
+			defer st.Close()
+
+			hasAdmin, _ := st.HasAdminAuth()
+			if !hasAdmin {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(PanelResponse{
+					Status:  "error",
+					Message: "Primo setup richiesto: configura la password amministratore su /login",
+				})
+				return
+			}
+
+			token := panel.GetSessionToken(r, panel.AdminCookieName)
+			sess, _ := st.GetSession(token)
+			if sess == nil || sess.UserType != "admin" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(PanelResponse{
+					Status:  "error",
+					Message: "Autenticazione amministratore richiesta",
+				})
+				return
+			}
+		}
+
+		mux.ServeHTTP(w, r)
+	})
+
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      mux,
+		Handler:      adminProtectedHandler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  30 * time.Second,

@@ -1370,6 +1370,8 @@ body {
 .btn-outline-info:hover { background: #38bdf8; color: #0f172a; }
 .btn-outline-warning { background: transparent; border: 1px solid var(--warning); color: var(--warning); }
 .btn-outline-warning:hover { background: var(--warning); color: #000; }
+.btn-outline-danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+.btn-outline-danger:hover { background: var(--danger); color: #fff; }
 
 .btn-group-2 {
   display: grid;
