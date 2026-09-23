@@ -437,9 +437,17 @@ func main() {
 			"uid":                      uid,
 			"current_user":             currentUser,
 			"storage":                  storageTopo,
+			"vitals":                   preflight.GetServerVitals(),
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
+	})
+
+	// 2b. API System Vitals (lightweight live sensors query)
+	mux.HandleFunc("/api/system/vitals", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vitals := preflight.GetServerVitals()
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: vitals})
 	})
 
 	// 3. API Modules list

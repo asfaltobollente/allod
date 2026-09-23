@@ -43,6 +43,21 @@ const i18n = {
     helper_eacces_session_note: "Note: Group membership requires a session reload to take effect (with linger active: loginctl terminate-user $USER or reboot).",
     hint_username_rules: "Lowercase letters and numbers only (e.g. mario, anna, luca).",
 
+    // Server Vitals & Health
+    vitals_title: "Server Health & Hardware Sensors",
+    vitals_subtitle: "Real-time thermal monitoring, CPU load, and system stability",
+    vitals_cpu_temp: "CPU Temperature",
+    vitals_cpu_load: "CPU Utilization",
+    vitals_uptime: "System Uptime",
+    vitals_sensors_title: "Detected Hardware Sensors",
+    vitals_status_normal: "Normal",
+    vitals_status_warm: "Under Load",
+    vitals_status_hot: "High Temp",
+    vitals_status_critical: "Critical Throttling",
+    vitals_loadavg: "Load Avg (1m, 5m, 15m)",
+    vitals_cores: "Cores",
+    vitals_no_sensors: "No dedicated thermal sensors detected (virtualized or containerized environment)",
+
     // Metrics
     metric_ram: "RAM Memory",
     metric_ram_footer: "Core reserved: 600 MB",
@@ -300,6 +315,21 @@ const i18n = {
     helper_status_eacces_desc: "L'utente del pannello web non appartiene al gruppo 'allod'. Aggiungi l'utente al gruppo ed esegui un nuovo login:",
     helper_eacces_session_note: "Nota: L'appartenenza al gruppo diventa effettiva solo dopo un nuovo login della sessione (con linger attivo: loginctl terminate-user $USER oppure riavvio).",
     hint_username_rules: "Solo lettere minuscole e numeri (es. mario, anna, luca).",
+
+    // Server Vitals & Health
+    vitals_title: "Salute Server & Sensori Hardware",
+    vitals_subtitle: "Monitoraggio termico in tempo reale, carico processore e stabilità di sistema",
+    vitals_cpu_temp: "Temperatura CPU",
+    vitals_cpu_load: "Utilizzo CPU",
+    vitals_uptime: "Tempo di Attività (Uptime)",
+    vitals_sensors_title: "Sensori Hardware Rilevati",
+    vitals_status_normal: "Normale",
+    vitals_status_warm: "Sotto Carico",
+    vitals_status_hot: "Alta Temperatura",
+    vitals_status_critical: "Throttling Critico",
+    vitals_loadavg: "Media Carico (1m, 5m, 15m)",
+    vitals_cores: "Core",
+    vitals_no_sensors: "Nessun sensore termico dedicato rilevato (ambiente virtualizzato o container)",
 
     // Metrics
     metric_ram: "Memoria RAM",
