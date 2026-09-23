@@ -29,6 +29,7 @@ import (
 	"github.com/asfaltobollente/allod/internal/state"
 	"github.com/asfaltobollente/allod/internal/updater"
 	"github.com/asfaltobollente/allod/internal/version"
+	"github.com/asfaltobollente/allod/internal/watch"
 )
 
 //go:embed web/*
@@ -528,6 +529,53 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		vitals := preflight.GetServerVitals()
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: vitals})
+	})
+
+	// 2c. API Health (sentinel prober endpoint for external watchdog)
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		cfg, _ := config.LoadConfig(getConfigPath())
+		nodeName := "allod-node"
+		if cfg != nil && cfg.Node.Name != "" {
+			nodeName = cfg.Node.Name
+		}
+
+		vitals := preflight.GetServerVitals()
+		ram := preflight.GetRealRAMStats()
+		storageTopo := preflight.DetectStorageTopology()
+
+		storageOK := !storageTopo.HasWarning
+		storageUsed := storageTopo.ModeSummary
+		storageFree := ""
+		freePct := 100
+		if !storageTopo.IsMounted && len(storageTopo.DataDisks) > 0 {
+			storageOK = false
+		}
+
+		var activeMods []string
+		if cfg != nil {
+			for name, m := range cfg.Modules {
+				if m.Level != "off" && m.Level != "" {
+					activeMods = append(activeMods, name)
+				}
+			}
+		}
+
+		payload := watch.NodeHealthPayload{
+			Status:         "ok",
+			NodeName:       nodeName,
+			UptimeSeconds:  vitals.UptimeSeconds,
+			StorageOK:      storageOK,
+			StorageUsed:    storageUsed,
+			StorageFree:    storageFree,
+			StorageFreePct: freePct,
+			CPULoad:        vitals.LoadAvg1,
+			MemoryUsedMB:   ram.UsedMB,
+			MemoryTotalMB:  ram.TotalMB,
+			ActiveModules:  activeMods,
+		}
+
+		json.NewEncoder(w).Encode(payload)
 	})
 
 	// 3. API Modules list
@@ -3076,8 +3124,9 @@ WantedBy=default.target
 	adminProtectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// Whitelist public static and auth/portal routes
+		// Whitelist public static, health prober and auth/portal routes
 		if path == "/login" || path == "/setup" || path == "/portal" || path == "/welcome" ||
+			path == "/api/health" ||
 			strings.HasPrefix(path, "/api/auth/") ||
 			strings.HasPrefix(path, "/api/portal/") ||
 			strings.HasPrefix(path, "/assets/") ||
