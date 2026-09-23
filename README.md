@@ -82,14 +82,16 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **Allod CLI Orchestrator** | **Funzionante oggi** *(Working Today)* | Full declarative lifecycle (`plan`, `apply`, `destroy`, `doctor`, `preflight`, `sbom`, `ring`, `purge`, `version`). Rootless Quadlet generation. |
 | **Privileged Helper Daemon** | **Funzionante oggi** *(Working Today)* | Root socket at `/run/allod/helper.sock` with `allod` group ownership, strict 16-action whitelist, and full argument audit logging. |
 | **Multi-Tenancy & Storage** | **Funzionante oggi** *(Working Today)* | Multi-user Linux provisioning with nologin shells, Samba `0770`/`0777` shares, Btrfs RAID 1/Single pool detection and auto-healing. |
-| **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update, and Triad orchestration. |
+| **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update, hardware telemetry vitals pill, and streamlined navigation. |
+| **Web Panel Auth Gate** | **Funzionante oggi** *(Working Today)* | Dedicated session authentication (`/login`, `/setup`), PBKDF2-SHA256, cryptographically secure memory session tokens, and CLI emergency recovery. |
+| **Family User Self-Service Portal** | **Funzionante oggi** *(Working Today)* | Dedicated family dashboard (`/portal`) with private Samba paths (`\\allod\<user>`), personal app launchpad, and autonomous password change synced via `allod-helperd`. |
 | **NetBird Sovereign Mesh** | **Funzionante oggi** *(Working Today)* | Native WireGuard overlay mesh with automated WebRTC NAT traversal, zero open router ports, EU Cloud (Frankfurt) & Self-Hosted sovereign modes. |
 | **Media & Photos Modules** | **In sviluppo** *(In Development)* | Immich standard/full and Jellyfin container orchestration functional; automated mobile client integration in refinement. |
 | **Cloud Module (Nextcloud)** | **In sviluppo** *(In Development)* | Nextcloud 30 with dedicated PostgreSQL 16 Alpine and dynamic secret management; automated WebDAV setup in refinement. |
 | **Federated Backup Engine** | **In sviluppo** *(In Development)* | `rest-server` 0.12.1 rootless Quadlet provisioned; federated snapshot client orchestration, automated timer scheduling, and per-peer htpasswd auth in progress. |
-| **Web Panel Auth Gate** | **Pianificato** *(Planned)* | Dedicated session authentication and optional 2FA for panel administration. |
 | **Release Cryptographic Signing** | **Pianificato** *(Planned)* | Cosign / Minisign keyless artifact and SBOM signing for production release binaries. |
 | **Automated Ring Snapshot & Restore** | **Pianificato** *(Planned)* | One-click snapshot scheduling across federated peers and interactive disaster recovery restore CLI. |
+
 
 ---
 
@@ -321,7 +323,17 @@ When you leave home, open the Allod Dashboard over WireGuard, toggle the switch 
 
 ---
 
+### 🛰️ Starlink, CGNAT & IPv6 Direct Peering
+
+When using residential internet providers behind **Carrier-Grade NAT (CGNAT)** — such as **Starlink**, cellular 4G/5G, or fixed-wireless access:
+* **Why UPnP Fails**: Routers report `No valid IGD` because the WAN port receives a private `100.64.0.0/10` address rather than a public IPv4. Manual IPv4 port forwarding is similarly blocked upstream by the ISP.
+* **Relayed Fallback**: When both ends are behind symmetric CGNAT, NetBird routes traffic through European public relays, capping throughput to ~10 Mbps with ~90 ms latency.
+* **The IPv6 Solution**: Starlink provides a `/56` public IPv6 delegation natively to every dish. By enabling **DHCPv6 Prefix Delegation (`/56`)** on your router (e.g. UniFi Dream Machine) and SLAAC on your LAN, Allod acquires a global IPv6. NetBird automatically establishes an **uncapped Direct WireGuard P2P connection** over IPv6 with zero open ports! (See [How-to Guide](docs/en/howto/remote-access-hybrid.md)).
+
+---
+
 ## ⚡ Prerequisites & Requirements
+
 
 * **Operating System**: Ubuntu Server 24.04 LTS (recommended) or any Debian 12+ system (x86-64 or ARM64 / Raspberry Pi 5).
 * **Hardware**: Minimum 4 GB RAM (8 GB recommended for AI photo indexing), 1x or 2x disks for storage.
@@ -439,6 +451,7 @@ In case of issues or configuration updates, you can inspect logs and restart ser
 | `allod ring add <id> <ip>` | Connects a friend's node to the encrypted federation Ring. |
 | `allod ring simulate --remove <id>` | Calculates emergency rebalance plan if a peer leaves the ring. |
 | `allod sbom` | Generates CycloneDX JSON Software Bill of Materials (CRA compliant). |
+| `allod admin-password reset [password]` | Emergency reset or initialization of Web Panel administrator password. |
 | `allod install <hostname>` | Generates zero-touch cloud-init deployment configuration. |
 
 ---
@@ -450,11 +463,13 @@ Complete documentation according to the official project structure is available 
 * **Tutorials**:
   * [Your First Allod Node in 15 Minutes](docs/en/tutorial/first-node.md)
 * **How-to Guides**:
+  * [Sovereign Remote Access via NetBird Mesh](docs/en/howto/remote-access-hybrid.md) / [🇮🇹 Accesso Remoto Sovrano NetBird](docs/it/howto/accesso-remoto-netbird.md)
   * [Storage Profiles Guide (Nextcloud vs Samba + Immich vs Hybrid)](docs/en/howto/storage-profiles-guide.md) / [🇮🇹 Guida Profili Storage](docs/it/howto/guida-profili-storage.md)
   * [Physical Disk Management & Btrfs RAID 1](docs/en/howto/disk-management.md) / [🇮🇹 Gestione Dischi](docs/it/howto/gestione-dischi.md)
   * [Invite a Friend to your Ring](docs/en/howto/invite-peer.md)
   * [Disaster Recovery & Ransomware Protection](docs/en/howto/disaster-recovery.md)
   * [Replace a Failed Disk in btrfs RAID 1](docs/en/howto/replace-disk.md)
+
 * **Reference**:
   * [Module Manifest Specification](docs/en/reference/manifest-spec.md)
   * [CLI Command Reference](docs/en/reference/cli.md)

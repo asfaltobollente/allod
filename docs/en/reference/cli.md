@@ -60,6 +60,14 @@ Formats disks (single, raid0, raid1) and mounts a dedicated Btrfs pool on `/mnt/
 * Flags:
   * `-m, --mount <path>`: Custom mount directory (default: `/mnt/allod-storage`).
 
+### `allod status`
+Displays the real-time operational status (running, stopped, failed, unmanaged) of all configured modules and their underlying Quadlet units or host daemons.
+
+### `allod admin-password reset [password]`
+Emergency CLI recovery tool to reset or initialize the Web Panel administrator password in `state.db`.
+* If `[password]` is omitted, the command interactively prompts for a password via stdin (minimum 6 characters).
+* Computes a fresh cryptographic salt, hashes the password using PBKDF2 with SHA-256 (600,000 iterations), stores the record securely in SQLite `state.db`, and invalidates existing admin session tokens.
+
 ### `allod version`
 Prints the current dynamic version of the Allod binary (resolved from build-time ldflags or VCS revision).
 
@@ -71,3 +79,4 @@ Simulates member departure, identifying lost datasets, degraded replicas, and au
 
 ### `allod sbom`
 Generates a complete Software Bill of Materials in standard CycloneDX JSON format for Cyber Resilience Act compliance.
+
