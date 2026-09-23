@@ -14,6 +14,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   switchToTab('launchpad');
   refreshData();
+  // Live vitals polling every 10 seconds for real-time temperature and CPU stats
+  setInterval(() => {
+    if (typeof fetchLiveVitals === 'function') {
+      fetchLiveVitals();
+    }
+  }, 10000);
 });
 
 function switchToTab(tab) {
@@ -326,8 +332,153 @@ function renderLaunchpad() {
   });
 }
 
+function goToOverviewHealth() {
+  switchToTab('overview');
+  setTimeout(() => {
+    const el = document.getElementById('card-server-vitals');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 100);
+}
+window.goToOverviewHealth = goToOverviewHealth;
+
+async function fetchLiveVitals() {
+  try {
+    const res = await fetch('/api/system/vitals');
+    const data = await res.json();
+    if (data && data.status === 'ok' && data.data) {
+      renderServerVitals(data.data);
+    }
+  } catch (err) {
+    // Silent fail for polling
+  }
+}
+window.fetchLiveVitals = fetchLiveVitals;
+
+function renderServerVitals(v) {
+  if (!v) return;
+
+  const tempVal = v.cpu_temp_c ? v.cpu_temp_c.toFixed(1) : '--';
+  const cpuVal = v.cpu_usage_percent !== undefined ? v.cpu_usage_percent.toFixed(1) : '--';
+  const uptimeVal = v.uptime_formatted || '--';
+  const status = v.temp_status || 'normal';
+
+  // 1. Topbar Pill Updates
+  const topbarTemp = document.getElementById('topbar-temp-val');
+  if (topbarTemp) topbarTemp.textContent = v.cpu_temp_c ? `${tempVal}°C` : '--°C';
+
+  const topbarBadge = document.getElementById('topbar-temp-badge');
+  if (topbarBadge) {
+    topbarBadge.className = `vitals-temp-badge temp-${status}`;
+  }
+
+  const topbarCpu = document.getElementById('topbar-cpu-val');
+  if (topbarCpu) topbarCpu.textContent = `${cpuVal}%`;
+
+  const topbarUptime = document.getElementById('topbar-uptime-val');
+  if (topbarUptime) topbarUptime.textContent = uptimeVal;
+
+  // 2. Overview Card Updates
+  const cardTemp = document.getElementById('vitals-cpu-temp-val');
+  if (cardTemp) cardTemp.textContent = v.cpu_temp_c ? `${tempVal}°C` : '--°C';
+
+  const cardProg = document.getElementById('vitals-temp-progress');
+  if (cardProg) {
+    const pct = v.cpu_temp_c ? Math.min(100, Math.max(5, (v.cpu_temp_c / 90) * 100)) : 0;
+    cardProg.style.width = `${pct}%`;
+    if (status === 'normal') cardProg.style.background = '#10b981';
+    else if (status === 'warm') cardProg.style.background = '#f59e0b';
+    else if (status === 'hot') cardProg.style.background = '#ef4444';
+    else cardProg.style.background = '#dc2626';
+  }
+
+  const overallBadge = document.getElementById('vitals-temp-overall-badge');
+  if (overallBadge) {
+    if (status === 'normal') {
+      overallBadge.className = 'badge badge-success';
+      overallBadge.textContent = (currentLang === 'it') ? '🟢 Normale (< 60°C)' : '🟢 Normal (< 60°C)';
+    } else if (status === 'warm') {
+      overallBadge.className = 'badge badge-warning';
+      overallBadge.textContent = (currentLang === 'it') ? '🟡 Sotto Carico (60-75°C)' : '🟡 Under Load (60-75°C)';
+    } else if (status === 'hot') {
+      overallBadge.className = 'badge badge-danger';
+      overallBadge.textContent = (currentLang === 'it') ? '🔴 Caldo (> 75°C)' : '🔴 High Temp (> 75°C)';
+    } else {
+      overallBadge.className = 'badge badge-danger';
+      overallBadge.style.background = '#dc2626';
+      overallBadge.textContent = (currentLang === 'it') ? '🔥 Throttling Critico' : '🔥 Critical Throttling';
+    }
+  }
+
+  const cardCpu = document.getElementById('vitals-cpu-load-val');
+  if (cardCpu) cardCpu.textContent = `${cpuVal}%`;
+
+  const cpuProg = document.getElementById('vitals-cpu-progress');
+  if (cpuProg) {
+    const cPct = Math.min(100, Math.max(0, v.cpu_usage_percent || 0));
+    cpuProg.style.width = `${cPct}%`;
+    if (cPct > 80) cpuProg.style.background = '#ef4444';
+    else if (cPct > 50) cpuProg.style.background = '#f59e0b';
+    else cpuProg.style.background = '#38bdf8';
+  }
+
+  const loadFooter = document.getElementById('vitals-loadavg-footer');
+  if (loadFooter) {
+    const l1 = (v.load_avg_1 !== undefined) ? v.load_avg_1.toFixed(2) : '--';
+    const l5 = (v.load_avg_5 !== undefined) ? v.load_avg_5.toFixed(2) : '--';
+    const l15 = (v.load_avg_15 !== undefined) ? v.load_avg_15.toFixed(2) : '--';
+    loadFooter.textContent = `Load Avg: ${l1}, ${l5}, ${l15}`;
+  }
+
+  const cardUptime = document.getElementById('vitals-uptime-val');
+  if (cardUptime) cardUptime.textContent = uptimeVal;
+
+  const cardCores = document.getElementById('vitals-cores-val');
+  if (cardCores) {
+    const coreCount = v.cpu_cores || 1;
+    cardCores.textContent = (currentLang === 'it')
+      ? `${coreCount} Core logici rilevati`
+      : `${coreCount} Logical cores detected`;
+  }
+
+  // 3. Dynamic Sensors List
+  const sensorsList = document.getElementById('vitals-sensors-list');
+  if (sensorsList) {
+    if (Array.isArray(v.sensors) && v.sensors.length > 0) {
+      sensorsList.innerHTML = v.sensors.map(s => {
+        let icon = '🌡️';
+        if (s.type === 'cpu') icon = '⚡';
+        else if (s.type === 'disk') icon = '💾';
+        else if (s.type === 'ambient') icon = '🏠';
+
+        const sTemp = s.temp_c ? s.temp_c.toFixed(1) : '--';
+        const sStatus = s.temp_c ? (s.temp_c < 60 ? 'temp-normal' : (s.temp_c < 75 ? 'temp-warm' : 'temp-hot')) : '';
+
+        return `
+          <div class="vitals-sensor-card">
+            <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+              <span>${icon}</span>
+              <span class="vitals-sensor-label" title="${s.label}">${s.label}</span>
+            </div>
+            <span class="vitals-sensor-temp ${sStatus}">${sTemp}°C</span>
+          </div>
+        `;
+      }).join('');
+    } else {
+      sensorsList.innerHTML = `
+        <div style="grid-column: 1 / -1; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 6px; font-size: 12px; color: var(--text-muted);">
+          ℹ️ ${t('vitals_no_sensors', 'Nessun sensore termico dedicato rilevato (ambiente virtualizzato o container)')}
+        </div>
+      `;
+    }
+  }
+}
+
 function renderOverview() {
   if (!currentStatus) return;
+
+  if (currentStatus.vitals) {
+    renderServerVitals(currentStatus.vitals);
+  }
 
   // Helper Permission Denied banner (EACCES migration)
   const eaccesBanner = document.getElementById('helper-eacces-banner');

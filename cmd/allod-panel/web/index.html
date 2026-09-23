@@ -95,6 +95,14 @@
           <button class="btn btn-outline-secondary" onclick="openThemeSelector()" id="btn-topbar-theme" style="padding:4px 10px; font-size:11.5px; margin-right:6px;" title="Cambia tema interfaccia">
             <span class="icon">🎨</span> <span id="topbar-theme-name" data-i18n="btn_theme">Tema</span>
           </button>
+          <!-- Live Vitals Pill (Server Health) -->
+          <div class="vitals-pill" id="topbar-vitals-pill" onclick="goToOverviewHealth()" style="cursor:pointer;" title="Salute Server: Clicca per visualizzare temperature e dettagli hardware">
+            <span class="vitals-temp-badge temp-normal" id="topbar-temp-badge">🌡️ <span id="topbar-temp-val">--°C</span></span>
+            <span class="vitals-divider">|</span>
+            <span class="vitals-metric" id="topbar-cpu-text">⚡ <span id="topbar-cpu-val">--%</span></span>
+            <span class="vitals-divider">|</span>
+            <span class="vitals-metric" id="topbar-uptime-text">⏱️ <span id="topbar-uptime-val">--</span></span>
+          </div>
           <button class="btn btn-outline-primary" onclick="openSpeedtestModal()" title="Run LAN/Wi-Fi speedtest and verify 4K Jellyfin streaming">
             <span class="icon">⚡</span> <span data-i18n="btn_speedtest">LAN Speedtest</span>
           </button>
@@ -259,6 +267,76 @@ systemctl --user enable --now allod-panel</pre>
             </div>
             <div class="metric-value text-success" id="security-status-badge">Rootless Safe</div>
             <div class="metric-subtext" id="security-status-subtext">Unprivileged Panel</div>
+          </div>
+        </div>
+
+        <!-- Server Health & Hardware Sensors Card -->
+        <div class="card mt-4" id="card-server-vitals">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:20px;">🩺</span>
+              <div>
+                <h3 data-i18n="vitals_title" style="margin:0;">Salute Server & Sensori Hardware</h3>
+                <p class="text-muted" data-i18n="vitals_subtitle" style="margin:2px 0 0 0; font-size:12px;">Monitoraggio termico in tempo reale, carico processore e stabilità di sistema</p>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge badge-success" id="vitals-temp-overall-badge">🟢 Normale</span>
+              <button class="btn btn-sm btn-outline-secondary" onclick="fetchLiveVitals()" style="padding:2px 8px; font-size:11px;" title="Aggiorna sensori istantaneamente">
+                🔄 Aggiorna Sensori
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <!-- 3 Main Indicator Boxes -->
+            <div class="vitals-dashboard-grid">
+              <!-- CPU Temp Box -->
+              <div class="vitals-stat-box">
+                <div class="vitals-stat-header">
+                  <span class="vitals-stat-title" data-i18n="vitals_cpu_temp">Temperatura CPU</span>
+                  <span class="icon">🌡️</span>
+                </div>
+                <div class="vitals-stat-value" id="vitals-cpu-temp-val">--°C</div>
+                <div class="progress-bar-bg" style="margin:8px 0;">
+                  <div class="progress-bar-fill" id="vitals-temp-progress" style="width: 0%; background: #10b981;"></div>
+                </div>
+                <div class="vitals-stat-footer" id="vitals-temp-footer">Soglia normale: &lt; 60°C | Critica: 85°C</div>
+              </div>
+
+              <!-- CPU Utilization Box -->
+              <div class="vitals-stat-box">
+                <div class="vitals-stat-header">
+                  <span class="vitals-stat-title" data-i18n="vitals_cpu_load">Utilizzo CPU</span>
+                  <span class="icon">⚡</span>
+                </div>
+                <div class="vitals-stat-value" id="vitals-cpu-load-val">--%</div>
+                <div class="progress-bar-bg" style="margin:8px 0;">
+                  <div class="progress-bar-fill" id="vitals-cpu-progress" style="width: 0%; background: #38bdf8;"></div>
+                </div>
+                <div class="vitals-stat-footer" id="vitals-loadavg-footer">Load: --, --, --</div>
+              </div>
+
+              <!-- Uptime Box -->
+              <div class="vitals-stat-box">
+                <div class="vitals-stat-header">
+                  <span class="vitals-stat-title" data-i18n="vitals_uptime">Tempo di Attività (Uptime)</span>
+                  <span class="icon">⏱️</span>
+                </div>
+                <div class="vitals-stat-value" id="vitals-uptime-val" style="font-size:18px;">--</div>
+                <div style="font-size:11.5px; color:var(--text-muted); margin-top:8px;" id="vitals-cores-val">Core rilevati: --</div>
+                <div class="vitals-stat-footer" id="vitals-system-status">Kernel Linux nativo OK</div>
+              </div>
+            </div>
+
+            <!-- Dynamic Sensors Grid -->
+            <div style="margin-top:16px;">
+              <h4 style="font-size:12.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;" data-i18n="vitals_sensors_title">
+                Sensori Hardware Rilevati
+              </h4>
+              <div id="vitals-sensors-list" class="vitals-sensors-grid">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
           </div>
         </div>
 
