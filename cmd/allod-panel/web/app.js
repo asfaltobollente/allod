@@ -1379,7 +1379,8 @@ async function startModule(modID) {
   renderModules();
 
   try {
-    showAlert(`Richiesta avvio per '${modID}' inviata a Podman in background...`, 'info');
+    const targetRunner = (modID === 'network' || modID === 'shares') ? 'al servizio di sistema' : 'a Podman in background';
+    showAlert(`Richiesta avvio per '${modID}' inviata ${targetRunner}...`, 'info');
     const res = await fetch('/api/modules/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1403,6 +1404,11 @@ async function startModule(modID) {
 }
 
 async function stopModule(modID) {
+  if (modID === 'network') {
+    if (!confirm('ATTENZIONE: Se sei connesso da remoto tramite VPN NetBird (es. in 4G), arrestando questo modulo la VPN si disconnetterà e perderai l\'accesso al pannello finché non lo riavvii in rete locale (LAN). Vuoi davvero arrestare NetBird?')) {
+      return;
+    }
+  }
   try {
     const res = await fetch('/api/modules/stop', {
       method: 'POST',
@@ -1417,7 +1423,7 @@ async function stopModule(modID) {
       showAlert(`Errore arresto: ${data.message}`, 'danger');
     }
   } catch (err) {
-    showAlert('Errore arresto modulo: ' + err.message, 'danger');
+    showAlert('Comando di arresto inviato al server: chiusura in corso...', 'info');
   }
 }
 

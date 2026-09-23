@@ -245,6 +245,23 @@ func getModuleRuntimeStatus(modName string, level string, runningContainers map[
 		return "stopped"
 	}
 	if modName == "network" {
+		// 1. Check native systemd service first
+		if out, err := exec.Command("systemctl", "is-active", "netbird").Output(); err == nil && strings.TrimSpace(string(out)) == "active" {
+			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+			if res, err := client.Execute("network.netbird_status", nil, false); err == nil && res.Ok {
+				var stMap map[string]interface{}
+				if err := json.Unmarshal([]byte(res.Output), &stMap); err == nil {
+					if mgmt, ok := stMap["management"].(map[string]interface{}); ok {
+						if conn, ok := mgmt["connected"].(bool); ok && !conn {
+							return "stopped"
+						}
+					}
+				}
+			}
+			return "running"
+		}
+
+		// 2. Check helper status (covers container or native when service active check differs)
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		if res, err := client.Execute("network.netbird_status", nil, false); err == nil && res.Ok {
 			var stMap map[string]interface{}
@@ -257,9 +274,18 @@ func getModuleRuntimeStatus(modName string, level string, runningContainers map[
 				if ip, ok := stMap["netbirdIp"].(string); ok && ip != "" {
 					return "running"
 				}
+				if level == "off" || level == "" {
+					return "off"
+				}
+				return "stopped"
 			}
+		}
+
+		// 3. Check if running in a container
+		if quadlet.IsModuleRunning("network", runningContainers) {
 			return "running"
 		}
+
 		if level == "off" || level == "" {
 			return "off"
 		}
@@ -695,15 +721,18 @@ func main() {
 		}
 
 		if req.Module == "network" {
-			client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-			_, err := client.Execute("network.netbird_down", nil, false)
-			if err != nil {
-				client.SocketPath = "allod-helper.sock"
-				_, _ = client.Execute("network.netbird_down", nil, false)
-			}
-			_ = exec.Command("systemctl", "--user", "stop", "network").Run()
-			_ = exec.Command("podman", "rm", "-f", "network").Run()
-			_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
+			go func() {
+				time.Sleep(150 * time.Millisecond)
+				client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+				_, err := client.Execute("network.netbird_down", nil, false)
+				if err != nil {
+					client.SocketPath = "allod-helper.sock"
+					_, _ = client.Execute("network.netbird_down", nil, false)
+				}
+				_ = exec.Command("systemctl", "--user", "stop", "network").Run()
+				_ = exec.Command("podman", "rm", "-f", "network").Run()
+				_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
+			}()
 			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Modulo network (NetBird) fermato con successo"})
 			return
 		}
@@ -1328,6 +1357,21 @@ func main() {
 					continue
 				}
 
+				if modID == "network" {
+					client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+					res, err := client.Execute("network.netbird_up", nil, false)
+					if err != nil {
+						client.SocketPath = "allod-helper.sock"
+						res, err = client.Execute("network.netbird_up", nil, false)
+					}
+					if err != nil || !res.Ok {
+						report.WriteString(fmt.Sprintf("  ✗ %-12s Errore avvio NetBird: %v\n", modID, err))
+					} else {
+						report.WriteString(fmt.Sprintf("  ▶ %-12s Avviato (NetBird native)\n", modID))
+					}
+					continue
+				}
+
 				_ = exec.Command("systemctl", "--user", "start", "--no-block", modID+"-postgres").Run()
 				_ = exec.Command("systemctl", "--user", "start", "--no-block", modID+"-valkey").Run()
 				err := exec.Command("systemctl", "--user", "start", "--no-block", modID).Run()
@@ -1341,6 +1385,17 @@ func main() {
 				if modID == "shares" {
 					_ = exec.Command("systemctl", "stop", "smbd").Run()
 					report.WriteString(fmt.Sprintf("  ⏹ %-12s Fermato (Samba native)\n", modID))
+					continue
+				}
+
+				if modID == "network" {
+					client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+					_, err := client.Execute("network.netbird_down", nil, false)
+					if err != nil {
+						client.SocketPath = "allod-helper.sock"
+						_, _ = client.Execute("network.netbird_down", nil, false)
+					}
+					report.WriteString(fmt.Sprintf("  ⏹ %-12s Fermato (NetBird native)\n", modID))
 					continue
 				}
 
@@ -2764,6 +2819,17 @@ WantedBy=default.target
 			_ = os.MkdirAll(quadDir, 0755)
 			_ = os.MkdirAll(systemdUserDir, 0755)
 			if req.Level == "off" {
+				if req.Module == "network" {
+					client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+					_, _ = client.Execute("network.netbird_down", nil, false)
+				} else if req.Module == "shares" {
+					client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+					_, _ = client.Execute("shares.apply", map[string]interface{}{
+						"name":    "shares",
+						"path":    "/mnt/allod-storage/shares",
+						"enabled": false,
+					}, false)
+				}
 				_ = quadlet.StopAndRemoveContainers(req.Module, true)
 			} else {
 				quadlet.EnsureAllodNetwork(quadDir)

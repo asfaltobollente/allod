@@ -429,6 +429,13 @@ var stopCmd = &cobra.Command{
 				if modName == "network" {
 					hClient := &helper.Client{}
 					_, _ = hClient.Execute("network.netbird_down", nil, false)
+				} else if modName == "shares" {
+					hClient := &helper.Client{}
+					_, _ = hClient.Execute("shares.apply", map[string]interface{}{
+						"name":    "shares",
+						"path":    "/mnt/allod-storage/shares",
+						"enabled": false,
+					}, false)
 				}
 				_ = quadlet.StopAndRemoveContainers(modName, false)
 				fmt.Printf("  ⏹ %-12s Fermato e container rimossi\n", modName)
@@ -437,6 +444,13 @@ var stopCmd = &cobra.Command{
 			if target == "network" {
 				hClient := &helper.Client{}
 				_, _ = hClient.Execute("network.netbird_down", nil, false)
+			} else if target == "shares" {
+				hClient := &helper.Client{}
+				_, _ = hClient.Execute("shares.apply", map[string]interface{}{
+					"name":    "shares",
+					"path":    "/mnt/allod-storage/shares",
+					"enabled": false,
+				}, false)
 			}
 			_ = quadlet.StopAndRemoveContainers(target, false)
 			fmt.Printf("⏹ Modulo '%s' fermato e container rimossi\n", target)
