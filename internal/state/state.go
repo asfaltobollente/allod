@@ -45,6 +45,16 @@ type Session struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type SentinelConfigRecord struct {
+	TelegramBotToken     string    `json:"telegram_bot_token"`
+	TelegramChatID       string    `json:"telegram_chat_id"`
+	WeatherCity          string    `json:"weather_city"`
+	DigestTime           string    `json:"digest_time"`
+	DownThresholdSeconds int       `json:"down_threshold_seconds"`
+	VPSSetupKey          string    `json:"vps_setup_key"`
+	UpdatedAt            time.Time `json:"updated_at"`
+}
+
 type Store struct {
 	db *sql.DB
 }
@@ -96,6 +106,17 @@ func Open(dbPath string) (*Store, error) {
 		expires_at DATETIME NOT NULL,
 		created_at DATETIME NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS sentinel_config (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		telegram_bot_token TEXT DEFAULT '',
+		telegram_chat_id TEXT DEFAULT '',
+		weather_city TEXT DEFAULT 'Roma',
+		digest_time TEXT DEFAULT '08:30',
+		down_threshold_seconds INTEGER DEFAULT 180,
+		vps_setup_key TEXT DEFAULT '',
+		updated_at DATETIME NOT NULL
+	);
 	`
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
@@ -105,6 +126,7 @@ func Open(dbPath string) (*Store, error) {
 	// Safe column additions for existing databases
 	_, _ = db.Exec("ALTER TABLE family_members ADD COLUMN password_hash TEXT DEFAULT ''")
 	_, _ = db.Exec("ALTER TABLE family_members ADD COLUMN password_salt TEXT DEFAULT ''")
+	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN vps_setup_key TEXT DEFAULT ''")
 
 	return &Store{db: db}, nil
 }
@@ -484,4 +506,73 @@ func (s *Store) ClearAdminAuth() error {
 		return err
 	}
 	return s.SetMeta("admin_password_salt", "")
+}
+
+// --- Watch Sentinel Methods ---
+
+// GetSentinelConfig returns the saved sentinel config or defaults.
+func (s *Store) GetSentinelConfig() (*SentinelConfigRecord, error) {
+	query := `
+	SELECT telegram_bot_token, telegram_chat_id, weather_city, digest_time, down_threshold_seconds, vps_setup_key, updated_at
+	FROM sentinel_config WHERE id = 1
+	`
+	row := s.db.QueryRow(query)
+	var cfg SentinelConfigRecord
+	var updatedStr string
+	err := row.Scan(&cfg.TelegramBotToken, &cfg.TelegramChatID, &cfg.WeatherCity, &cfg.DigestTime, &cfg.DownThresholdSeconds, &cfg.VPSSetupKey, &updatedStr)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return &SentinelConfigRecord{
+				WeatherCity:          "Roma",
+				DigestTime:           "08:30",
+				DownThresholdSeconds: 180,
+				UpdatedAt:            time.Now(),
+			}, nil
+		}
+		return nil, err
+	}
+	cfg.UpdatedAt, _ = time.Parse(time.RFC3339, updatedStr)
+	if cfg.WeatherCity == "" {
+		cfg.WeatherCity = "Roma"
+	}
+	if cfg.DigestTime == "" {
+		cfg.DigestTime = "08:30"
+	}
+	if cfg.DownThresholdSeconds <= 0 {
+		cfg.DownThresholdSeconds = 180
+	}
+	return &cfg, nil
+}
+
+// SaveSentinelConfig persists the sentinel configuration singleton.
+func (s *Store) SaveSentinelConfig(cfg *SentinelConfigRecord) error {
+	if cfg == nil {
+		return fmt.Errorf("configurazione sentinella nulla")
+	}
+	if cfg.WeatherCity == "" {
+		cfg.WeatherCity = "Roma"
+	}
+	if cfg.DigestTime == "" {
+		cfg.DigestTime = "08:30"
+	}
+	if cfg.DownThresholdSeconds <= 0 {
+		cfg.DownThresholdSeconds = 180
+	}
+	now := time.Now()
+	cfg.UpdatedAt = now
+
+	query := `
+	INSERT INTO sentinel_config (id, telegram_bot_token, telegram_chat_id, weather_city, digest_time, down_threshold_seconds, vps_setup_key, updated_at)
+	VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(id) DO UPDATE SET
+		telegram_bot_token = excluded.telegram_bot_token,
+		telegram_chat_id = excluded.telegram_chat_id,
+		weather_city = excluded.weather_city,
+		digest_time = excluded.digest_time,
+		down_threshold_seconds = excluded.down_threshold_seconds,
+		vps_setup_key = excluded.vps_setup_key,
+		updated_at = excluded.updated_at;
+	`
+	_, err := s.db.Exec(query, cfg.TelegramBotToken, cfg.TelegramChatID, cfg.WeatherCity, cfg.DigestTime, cfg.DownThresholdSeconds, cfg.VPSSetupKey, now.Format(time.RFC3339))
+	return err
 }

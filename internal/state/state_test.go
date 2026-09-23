@@ -253,3 +253,60 @@ func TestSessionLifecycle(t *testing.T) {
 		t.Errorf("expected session to be deleted, got: %+v", delSess)
 	}
 }
+
+func TestSentinelConfigLifecycle(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test-sentinel-state.db")
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open state db: %v", err)
+	}
+	defer store.Close()
+
+	// 1. Initial defaults
+	cfg, err := store.GetSentinelConfig()
+	if err != nil {
+		t.Fatalf("failed to get default sentinel config: %v", err)
+	}
+	if cfg.WeatherCity != "Roma" || cfg.DigestTime != "08:30" || cfg.DownThresholdSeconds != 180 {
+		t.Errorf("unexpected defaults: %+v", cfg)
+	}
+
+	// 2. Save config
+	cfg.TelegramBotToken = "123456:ABC-DEF"
+	cfg.TelegramChatID = "987654321"
+	cfg.WeatherCity = "Milano"
+	cfg.DigestTime = "07:45"
+	cfg.DownThresholdSeconds = 120
+	cfg.VPSSetupKey = "NB-SETUP-TEST-KEY"
+
+	if err := store.SaveSentinelConfig(cfg); err != nil {
+		t.Fatalf("failed to save sentinel config: %v", err)
+	}
+
+	// 3. Retrieve saved
+	saved, err := store.GetSentinelConfig()
+	if err != nil {
+		t.Fatalf("failed to get saved sentinel config: %v", err)
+	}
+	if saved.TelegramBotToken != "123456:ABC-DEF" || saved.TelegramChatID != "987654321" ||
+		saved.WeatherCity != "Milano" || saved.DigestTime != "07:45" ||
+		saved.DownThresholdSeconds != 120 || saved.VPSSetupKey != "NB-SETUP-TEST-KEY" {
+		t.Errorf("mismatch in saved sentinel config: %+v", saved)
+	}
+
+	// 4. Update partial
+	saved.WeatherCity = "Napoli"
+	if err := store.SaveSentinelConfig(saved); err != nil {
+		t.Fatalf("failed to update sentinel config: %v", err)
+	}
+	updated, err := store.GetSentinelConfig()
+	if err != nil {
+		t.Fatalf("failed to retrieve updated sentinel config: %v", err)
+	}
+	if updated.WeatherCity != "Napoli" || updated.TelegramBotToken != "123456:ABC-DEF" {
+		t.Errorf("mismatch after update: %+v", updated)
+	}
+}
+

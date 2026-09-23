@@ -139,6 +139,31 @@ func getRingTopology(cfg *config.Config) (*ring.RingTopology, bool) {
 
 const dbPath = "state.db"
 
+func getLocalNetBirdIP() string {
+	if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
+		return ip
+	}
+	ifaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+					ipv4 := ipNet.IP.To4()
+					if ipv4 != nil && ipv4[0] == 100 && (ipv4[1]&0xC0) == 64 {
+						return ipv4.String()
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+
 func getStorageInfo(modID string) (string, string, int64, bool, []VolumeMountInfo) {
 	baseDir := "/mnt/allod-storage"
 	isOnNAS := true
@@ -576,6 +601,362 @@ func main() {
 		}
 
 		json.NewEncoder(w).Encode(payload)
+	})
+
+	// 2d. API Watch Config (GET /api/watch/config)
+	mux.HandleFunc("/api/watch/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		st, err := state.Open(dbPath)
+		if err != nil {
+			http.Error(w, "DB error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer st.Close()
+
+		cfg, err := st.GetSentinelConfig()
+		if err != nil {
+			http.Error(w, "Failed to load sentinel config: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		meshIP := getLocalNetBirdIP()
+
+		resp := map[string]interface{}{
+			"status": "ok",
+			"data": map[string]interface{}{
+				"config":  cfg,
+				"mesh_ip": meshIP,
+				"port":    8080,
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	// 2e. API Watch Save Config (POST /api/watch/config/save)
+	mux.HandleFunc("/api/watch/config/save", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var input state.SentinelConfigRecord
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "JSON non valido: " + err.Error()})
+			return
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore DB: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		if err := st.SaveSentinelConfig(&input); err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Salvataggio fallito: " + err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Configurazione sentinella salvata con successo!"})
+	})
+
+	// 2f. API Watch Detect Chat ID (POST /api/watch/detect-chat-id)
+	mux.HandleFunc("/api/watch/detect-chat-id", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var req struct {
+			Token string `json:"bot_token"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		token := strings.TrimSpace(req.Token)
+		if token == "" {
+			st, err := state.Open(dbPath)
+			if err == nil {
+				cfg, _ := st.GetSentinelConfig()
+				st.Close()
+				if cfg != nil {
+					token = strings.TrimSpace(cfg.TelegramBotToken)
+				}
+			}
+		}
+
+		if token == "" {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Inserisci prima il Bot Token ricevuto da @BotFather."})
+			return
+		}
+
+		chats, err := watch.GetChatIDs(token)
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore durante l'interrogazione dell'API Telegram: " + err.Error()})
+			return
+		}
+		if len(chats) == 0 {
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "warn",
+				Message: "Nessun messaggio recente trovato per questo bot.\n\nPer favore:\n1. Apri Telegram e cerca il tuo bot\n2. Clicca su 'AVVIA' (oppure invia il comando /start)\n3. Riprova a cliccare 'Rileva Chat ID'",
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Rilevate %d conversazioni attive con il bot!", len(chats)),
+			Data:    chats,
+		})
+	})
+
+	// 2g. API Watch Test Telegram (POST /api/watch/test-telegram)
+	mux.HandleFunc("/api/watch/test-telegram", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var req struct {
+			Token  string `json:"bot_token"`
+			ChatID string `json:"chat_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		token := strings.TrimSpace(req.Token)
+		chatID := strings.TrimSpace(req.ChatID)
+
+		if token == "" || chatID == "" {
+			st, err := state.Open(dbPath)
+			if err == nil {
+				cfg, _ := st.GetSentinelConfig()
+				st.Close()
+				if cfg != nil {
+					if token == "" {
+						token = strings.TrimSpace(cfg.TelegramBotToken)
+					}
+					if chatID == "" {
+						chatID = strings.TrimSpace(cfg.TelegramChatID)
+					}
+				}
+			}
+		}
+
+		if token == "" || chatID == "" {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Token del bot e Chat ID sono entrambi necessari per inviare il messaggio di test."})
+			return
+		}
+
+		client := watch.NewTelegramNotifier(token, chatID, 0)
+		testMsg := fmt.Sprintf("🔔 <b>Allod Sentinel — Test Connessione</b>\n\n✅ Se ricevi questo messaggio, il bot Telegram è configurato correttamente ed è pronto a inviarti gli allarmi di blackout e i resoconti meteo!\n\n🕒 %s\n🏷️ Nodo: Allod Node", time.Now().Format("02/01/2006 15:04:05"))
+		if err := client.Send(testMsg); err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Invio fallito: " + err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Messaggio di prova inviato con successo! Controlla la chat Telegram."})
+	})
+
+	// 2h. API Watch Installer Script (GET /api/watch/install.sh)
+	mux.HandleFunc("/api/watch/install.sh", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		st, err := state.Open(dbPath)
+		var cfg *state.SentinelConfigRecord
+		if err == nil {
+			cfg, _ = st.GetSentinelConfig()
+			st.Close()
+		}
+		if cfg == nil {
+			cfg = &state.SentinelConfigRecord{
+				WeatherCity:          "Roma",
+				DigestTime:           "08:30",
+				DownThresholdSeconds: 180,
+			}
+		}
+
+		allodHost := r.Host
+		if allodHost == "" {
+			meshIP := getLocalNetBirdIP()
+			if meshIP == "" {
+				meshIP = "127.0.0.1"
+			}
+			allodHost = meshIP + ":8080"
+		}
+
+		nodeName := "allod-node"
+		if c, _ := config.LoadConfig(getConfigPath()); c != nil && c.Node.Name != "" {
+			nodeName = c.Node.Name
+		}
+
+		tgEnabled := cfg.TelegramBotToken != "" && cfg.TelegramChatID != ""
+
+		script := fmt.Sprintf(`#!/usr/bin/env bash
+# ==============================================================================
+# Allod Watch Sentinel - One-Click VPS Deploy
+# ==============================================================================
+set -e
+
+echo ""
+echo "=========================================================="
+echo "🛡️  Installazione e Avvio Allod Watch Sentinel su VPS"
+echo "=========================================================="
+echo ""
+
+if [ "$EUID" -ne 0 ]; then
+  echo "❌ Errore: questo script deve essere eseguito come root."
+  echo "   Rilancia con: curl -fsSL http://%s/api/watch/install.sh | sudo bash"
+  exit 1
+fi
+
+# 1. Rilevamento Architettura CPU
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64) GOARCH="amd64" ;;
+  aarch64|arm64) GOARCH="arm64" ;;
+  *)
+    echo "❌ Architettura CPU $ARCH non supportata per l'installazione automatica."
+    exit 1
+    ;;
+esac
+echo "✓ Architettura CPU rilevata: $ARCH ($GOARCH)"
+
+# 2. Download Binario dal nodo Allod
+echo "⬇️  Scaricamento binario allod-watch da http://%s..."
+curl -fsSL "http://%s/api/watch/binary?arch=${GOARCH}" -o /usr/local/bin/allod-watch
+chmod 755 /usr/local/bin/allod-watch
+echo "✓ Binario installato con successo in /usr/local/bin/allod-watch"
+
+# 3. Creazione Configurazione
+mkdir -p /etc/allod
+cat << 'ALLOD_EOF' > /etc/allod/watch.yaml
+server:
+  port: 9099
+
+nodes:
+  - name: "%s"
+    url: "http://%s/api/health"
+    interval_seconds: 30
+    down_threshold_seconds: %d
+
+telegram:
+  enabled: %t
+  bot_token: "%s"
+  chat_id: "%s"
+
+weather:
+  enabled: true
+  city: "%s"
+
+digest:
+  enabled: true
+  time: "%s"
+ALLOD_EOF
+
+chmod 600 /etc/allod/watch.yaml
+echo "✓ Configurazione salvata in /etc/allod/watch.yaml"
+
+# 4. Creazione Unit Systemd
+cat << 'ALLOD_EOF' > /etc/systemd/system/allod-watch.service
+[Unit]
+Description=Allod Watch External Sentinel Daemon
+After=network-online.target netbird.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/allod-watch run -c /etc/allod/watch.yaml
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65535
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+ALLOD_EOF
+
+# 5. Avvio e Abilitazione Servizio
+systemctl daemon-reload
+systemctl enable --now allod-watch.service
+
+echo ""
+echo "=========================================================="
+echo "✅ Allod Watch Sentinel è ora ATTIVO e in esecuzione!"
+echo "   Stato servizio: systemctl status allod-watch"
+echo "   Log in tempo reale: journalctl -u allod-watch -f"
+echo "=========================================================="
+echo ""
+
+# 6. Notifica Telegram
+if [ -n "%s" ] && [ -n "%s" ]; then
+  echo "💬 Invio messaggio di conferma su Telegram..."
+  /usr/local/bin/allod-watch test-telegram -c /etc/allod/watch.yaml || true
+fi
+`,
+			allodHost,
+			allodHost,
+			allodHost,
+			nodeName,
+			allodHost,
+			cfg.DownThresholdSeconds,
+			tgEnabled,
+			cfg.TelegramBotToken,
+			cfg.TelegramChatID,
+			cfg.WeatherCity,
+			cfg.DigestTime,
+			cfg.TelegramBotToken,
+			cfg.TelegramChatID,
+		)
+
+		w.Write([]byte(script))
+	})
+
+	// 2i. API Watch Binary (GET /api/watch/binary?arch=amd64|arm64)
+	mux.HandleFunc("/api/watch/binary", func(w http.ResponseWriter, r *http.Request) {
+		arch := r.URL.Query().Get("arch")
+		if arch != "arm64" {
+			arch = "amd64"
+		}
+
+		candidates := []string{
+			filepath.Join("bin", fmt.Sprintf("allod-watch-linux-%s", arch)),
+			filepath.Join(".", "bin", fmt.Sprintf("allod-watch-linux-%s", arch)),
+			filepath.Join("/usr/local/bin", "allod-watch"),
+		}
+
+		var targetPath string
+		for _, c := range candidates {
+			if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+				targetPath = c
+				break
+			}
+		}
+
+		// If not found on disk, attempt on-demand cross-compilation if go toolchain is present
+		if targetPath == "" {
+			if _, err := exec.LookPath("go"); err == nil {
+				_ = os.MkdirAll("bin", 0755)
+				outPath := filepath.Join("bin", fmt.Sprintf("allod-watch-linux-%s", arch))
+				cmd := exec.Command("go", "build", "-ldflags", "-s -w", "-o", outPath, "./cmd/allod-watch")
+				cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+arch, "CGO_ENABLED=0")
+				if out, err := cmd.CombinedOutput(); err == nil {
+					targetPath = outPath
+				} else {
+					log.Printf("[WATCH] Compilazione on-demand fallita: %v, out: %s", err, string(out))
+				}
+			}
+		}
+
+		if targetPath == "" {
+			http.Error(w, fmt.Sprintf("Binario allod-watch per architettura %s non disponibile", arch), http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", "attachment; filename=allod-watch")
+		http.ServeFile(w, r, targetPath)
 	})
 
 	// 3. API Modules list
@@ -3127,6 +3508,8 @@ WantedBy=default.target
 		// Whitelist public static, health prober and auth/portal routes
 		if path == "/login" || path == "/setup" || path == "/portal" || path == "/welcome" ||
 			path == "/api/health" ||
+			path == "/api/watch/install.sh" ||
+			path == "/api/watch/binary" ||
 			strings.HasPrefix(path, "/api/auth/") ||
 			strings.HasPrefix(path, "/api/portal/") ||
 			strings.HasPrefix(path, "/assets/") ||

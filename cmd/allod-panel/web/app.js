@@ -1331,6 +1331,29 @@ function createModuleCard(mod) {
     `;
   }
 
+  let watchBoxHtml = '';
+  if (mod.id === 'watch') {
+    watchBoxHtml = `
+      <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:11.5px; font-weight:600; color:var(--text-main);">🛡️ ${t('watch_sentinel_title', 'Sentinella Cloud & Bot Telegram')}</span>
+            </div>
+            <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">
+              ${t('watch_sentinel_desc', 'Monitoraggio blackout da VPS esterna, allarmi Telegram e resoconto meteo mattutino')}
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-primary" onclick="openWatchSentinelModal()" style="padding:4px 12px; font-size:11px; font-weight:600;">
+              🤖 ${t('btn_configure_watch_sentinel', 'Configura Sentinella & Bot')}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   const tierLabel = t('tier_' + mod.tier, mod.tier);
   const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
   const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
@@ -1372,6 +1395,7 @@ function createModuleCard(mod) {
       ${photosSharesIntegrationHtml}
       ${sharesSmbBoxHtml}
       ${networkBoxHtml}
+      ${watchBoxHtml}
       ${isLocked ? `
         <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
           🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.
@@ -3567,4 +3591,322 @@ function openThemeSelector() {
     }, 100);
   }
 }
+
+// ==============================================================================
+// ALLOD WATCH SENTINEL & TELEGRAM BOT MODAL LOGIC
+// ==============================================================================
+
+let currentWatchConfig = null;
+let currentWatchMeshIP = '--';
+
+async function openWatchSentinelModal() {
+  const modal = document.getElementById('watch-sentinel-modal');
+  if (!modal) return;
+
+  switchWatchTab('telegram');
+
+  try {
+    const res = await fetch('/api/watch/config');
+    const json = await res.json();
+    if (json.status === 'ok' && json.data) {
+      currentWatchConfig = json.data.config || {};
+      currentWatchMeshIP = json.data.mesh_ip || '--';
+
+      // Populate Telegram Tab
+      const tokenInput = document.getElementById('watch-telegram-token');
+      const chatIdInput = document.getElementById('watch-telegram-chat-id');
+      if (tokenInput) tokenInput.value = currentWatchConfig.telegram_bot_token || '';
+      if (chatIdInput) chatIdInput.value = currentWatchConfig.telegram_chat_id || '';
+
+      // Populate Weather Tab
+      const cityInput = document.getElementById('watch-weather-city');
+      const timeInput = document.getElementById('watch-digest-time');
+      const threshSelect = document.getElementById('watch-down-threshold');
+      if (cityInput) cityInput.value = currentWatchConfig.weather_city || 'Roma';
+      if (timeInput) timeInput.value = currentWatchConfig.digest_time || '08:30';
+      if (threshSelect && currentWatchConfig.down_threshold_seconds) {
+        threshSelect.value = String(currentWatchConfig.down_threshold_seconds);
+      }
+
+      // Populate Mesh / VPS Tab
+      const vpsKeyInput = document.getElementById('watch-vps-setup-key');
+      if (vpsKeyInput) vpsKeyInput.value = currentWatchConfig.vps_setup_key || '';
+
+      const meshIpDisplay = document.getElementById('watch-mesh-ip-display');
+      if (meshIpDisplay) {
+        meshIpDisplay.textContent = currentWatchMeshIP;
+      }
+
+      updateWatchDeployCommand();
+    }
+  } catch (err) {
+    console.error('Failed to load sentinel config:', err);
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeWatchSentinelModal() {
+  const modal = document.getElementById('watch-sentinel-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function switchWatchTab(tabName) {
+  const tabs = ['telegram', 'weather', 'mesh'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`btn-tab-watch-${t}`);
+    const pane = document.getElementById(`pane-watch-${t}`);
+    if (btn && pane) {
+      if (t === tabName) {
+        btn.style.background = 'var(--primary)';
+        btn.style.color = '#000';
+        pane.classList.remove('hidden');
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--text-muted)';
+        pane.classList.add('hidden');
+      }
+    }
+  });
+}
+
+function toggleWatchTokenVisibility() {
+  const input = document.getElementById('watch-telegram-token');
+  if (input) {
+    input.type = input.type === 'password' ? 'text' : 'password';
+  }
+}
+
+function onWatchTokenInput() {
+  updateWatchDeployCommand();
+}
+
+async function detectWatchChatID() {
+  const tokenInput = document.getElementById('watch-telegram-token');
+  const token = tokenInput ? tokenInput.value.trim() : '';
+  const feedback = document.getElementById('watch-telegram-feedback');
+  const spinner = document.getElementById('watch-detect-spinner');
+  const detectBtn = document.getElementById('btn-detect-chat-id');
+
+  if (!token) {
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.style.background = 'rgba(239,68,68,0.15)';
+      feedback.style.color = '#f87171';
+      feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+      feedback.textContent = '❌ Inserisci prima il Bot Token fornito da @BotFather al Passo 2.';
+    }
+    return;
+  }
+
+  if (spinner) spinner.style.display = 'inline-block';
+  if (detectBtn) detectBtn.disabled = true;
+  if (feedback) feedback.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/watch/detect-chat-id', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bot_token: token })
+    });
+    const json = await res.json();
+
+    if (json.status === 'ok' && json.data && json.data.length > 0) {
+      const firstChat = json.data[0];
+      const chatIdInput = document.getElementById('watch-telegram-chat-id');
+      if (chatIdInput) {
+        chatIdInput.value = firstChat.chat_id;
+      }
+      if (feedback) {
+        feedback.style.display = 'block';
+        feedback.style.background = 'rgba(16,185,129,0.15)';
+        feedback.style.color = '#34d399';
+        feedback.style.border = '1px solid rgba(16,185,129,0.3)';
+        const name = firstChat.first_name || firstChat.username || 'Utente';
+        feedback.innerHTML = `✅ <strong>Chat ID Rilevato con successo!</strong><br>👤 Utente: <b>${name}</b> (ID: <code>${firstChat.chat_id}</code>)`;
+      }
+      // Auto-save progress
+      await saveWatchConfig(false);
+    } else {
+      if (feedback) {
+        feedback.style.display = 'block';
+        feedback.style.background = 'rgba(245,158,11,0.15)';
+        feedback.style.color = '#fbbf24';
+        feedback.style.border = '1px solid rgba(245,158,11,0.3)';
+        feedback.innerHTML = `⚠️ <strong>Nessun messaggio trovato</strong><br>1. Apri Telegram e cerca il tuo bot<br>2. Clicca su <b>AVVIA</b> (oppure inviagli <code>/start</code>)<br>3. Clicca nuovamente su 'Rileva Chat ID'`;
+      }
+    }
+  } catch (err) {
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.style.background = 'rgba(239,68,68,0.15)';
+      feedback.style.color = '#f87171';
+      feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+      feedback.textContent = '❌ Errore durante il rilevamento: ' + err.message;
+    }
+  } finally {
+    if (spinner) spinner.style.display = 'none';
+    if (detectBtn) detectBtn.disabled = false;
+  }
+}
+
+async function testWatchTelegram() {
+  const token = (document.getElementById('watch-telegram-token')?.value || '').trim();
+  const chatId = (document.getElementById('watch-telegram-chat-id')?.value || '').trim();
+  const feedback = document.getElementById('watch-telegram-feedback');
+  const btn = document.getElementById('btn-test-watch-tg');
+
+  if (!token || !chatId) {
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.style.background = 'rgba(239,68,68,0.15)';
+      feedback.style.color = '#f87171';
+      feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+      feedback.textContent = '❌ Compila sia il Bot Token che il Chat ID prima di inviare la prova.';
+    }
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (feedback) {
+    feedback.style.display = 'block';
+    feedback.style.background = 'rgba(56,189,248,0.15)';
+    feedback.style.color = '#38bdf8';
+    feedback.style.border = '1px solid rgba(56,189,248,0.3)';
+    feedback.textContent = '⏳ Invio messaggio di notifica su Telegram in corso...';
+  }
+
+  try {
+    const res = await fetch('/api/watch/test-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bot_token: token, chat_id: chatId })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      if (feedback) {
+        feedback.style.background = 'rgba(16,185,129,0.15)';
+        feedback.style.color = '#34d399';
+        feedback.style.border = '1px solid rgba(16,185,129,0.3)';
+        feedback.innerHTML = `✅ <strong>${json.message}</strong>`;
+      }
+      await saveWatchConfig(false);
+    } else {
+      if (feedback) {
+        feedback.style.background = 'rgba(239,68,68,0.15)';
+        feedback.style.color = '#f87171';
+        feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+        feedback.innerHTML = `❌ <strong>${json.message}</strong>`;
+      }
+    }
+  } catch (err) {
+    if (feedback) {
+      feedback.style.background = 'rgba(239,68,68,0.15)';
+      feedback.style.color = '#f87171';
+      feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+      feedback.textContent = '❌ Errore invio test: ' + err.message;
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function saveWatchConfig(showNotification = true) {
+  const token = (document.getElementById('watch-telegram-token')?.value || '').trim();
+  const chatId = (document.getElementById('watch-telegram-chat-id')?.value || '').trim();
+  const city = (document.getElementById('watch-weather-city')?.value || '').trim() || 'Roma';
+  const time = (document.getElementById('watch-digest-time')?.value || '').trim() || '08:30';
+  const thresh = parseInt(document.getElementById('watch-down-threshold')?.value || '180', 10);
+  const setupKey = (document.getElementById('watch-vps-setup-key')?.value || '').trim();
+
+  const payload = {
+    telegram_bot_token: token,
+    telegram_chat_id: chatId,
+    weather_city: city,
+    digest_time: time,
+    down_threshold_seconds: thresh,
+    vps_setup_key: setupKey
+  };
+
+  try {
+    const res = await fetch('/api/watch/config/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      currentWatchConfig = payload;
+      updateWatchDeployCommand();
+      if (showNotification && typeof showAlert === 'function') {
+        showAlert('✓ Impostazioni Sentinella e Telegram salvate con successo!', 'success');
+      }
+    }
+  } catch (err) {
+    console.error('Failed to save watch config:', err);
+    if (showNotification && typeof showAlert === 'function') {
+      showAlert('Errore salvataggio impostazioni: ' + err.message, 'danger');
+    }
+  }
+}
+
+async function saveWatchConfigAndAdvance(nextTab) {
+  await saveWatchConfig(false);
+  switchWatchTab(nextTab);
+}
+
+function updateWatchDeployCommand() {
+  const setupKeyInput = document.getElementById('watch-vps-setup-key');
+  const alreadyMeshCheck = document.getElementById('watch-vps-already-mesh');
+  const codeEl = document.getElementById('watch-deploy-command-code');
+  if (!codeEl) return;
+
+  const meshIP = (currentWatchMeshIP && currentWatchMeshIP !== '--') ? currentWatchMeshIP : '<IP-MESH-ALLOD>';
+  const setupKey = setupKeyInput ? setupKeyInput.value.trim() : '';
+  const alreadyMesh = alreadyMeshCheck ? alreadyMeshCheck.checked : false;
+
+  let cmd = '';
+  if (alreadyMesh) {
+    cmd = `curl -fsSL http://${meshIP}:8080/api/watch/install.sh | sudo bash`;
+  } else {
+    const keyPlaceholder = setupKey || '<NETBIRD_SETUP_KEY>';
+    cmd = `curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key ${keyPlaceholder} && curl -fsSL http://${meshIP}:8080/api/watch/install.sh | sudo bash`;
+  }
+
+  codeEl.textContent = cmd;
+}
+
+function copyWatchDeployCommand() {
+  const codeEl = document.getElementById('watch-deploy-command-code');
+  const btn = document.getElementById('btn-copy-watch-cmd');
+  if (!codeEl) return;
+
+  const text = codeEl.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    if (btn) {
+      const origText = btn.innerHTML;
+      btn.innerHTML = '✓ Copiato!';
+      setTimeout(() => { btn.innerHTML = origText; }, 2500);
+    }
+    if (typeof showAlert === 'function') {
+      showAlert('✓ Comando di deploy copiato negli appunti! Incollalo nel terminale della tua VPS.', 'success');
+    }
+  }).catch(() => {
+    prompt('Copia il comando con Ctrl+C:', text);
+  });
+}
+
+// Window bindings
+window.openWatchSentinelModal = openWatchSentinelModal;
+window.closeWatchSentinelModal = closeWatchSentinelModal;
+window.switchWatchTab = switchWatchTab;
+window.toggleWatchTokenVisibility = toggleWatchTokenVisibility;
+window.onWatchTokenInput = onWatchTokenInput;
+window.detectWatchChatID = detectWatchChatID;
+window.testWatchTelegram = testWatchTelegram;
+window.saveWatchConfig = saveWatchConfig;
+window.saveWatchConfigAndAdvance = saveWatchConfigAndAdvance;
+window.updateWatchDeployCommand = updateWatchDeployCommand;
+window.copyWatchDeployCommand = copyWatchDeployCommand;
+
 

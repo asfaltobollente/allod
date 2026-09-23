@@ -6,6 +6,44 @@ The sentinel continuously inspects your primary Allod home node from the outside
 
 ---
 
+## ⚡ Recommended Method: 100% Plug & Play via Web Dashboard
+
+Starting in v1.2, **you no longer need to write configuration files manually on the VPS**: the entire setup wizard and VPS deployment can be done with a few clicks directly in the Allod Web Dashboard!
+
+### 1. Open the Sentinel Wizard in Allod Panel
+* Navigate to the **Modules** tab and click on **🤖 Configure Sentinel & Bot** on the `watch` module card (or under **Settings & Maintenance**).
+
+### 2. Configure Your Telegram Bot in 3 Clicks
+1. Click the link **`↗ Open @BotFather on Telegram`** to launch the official setup bot.
+2. Send `/newbot`, choose your bot's name and username.
+3. Paste the generated **Bot Token** into the field.
+4. Open a chat with your new bot on Telegram, click **START** (or send any text), and press **`🔍 Auto-Detect Chat ID`**.
+   *Allod automatically queries Telegram and populates your Chat ID!*
+5. Click **`💬 Send Test Message`** to verify delivery on your phone immediately.
+
+### 3. Customize Weather & Blackout Thresholds
+* On the **Weather & Morning Digest** tab, configure your city (e.g. *Roma*, *London*, *New York*), morning report time (default *08:30*), and outage threshold (default *3 minutes*).
+
+### 4. VPS Mesh Onboarding & 1-Command Deploy (All-in-One)
+Because the home server is located behind **CGNAT with zero open inbound ports**, your external VPS must join the private encrypted **NetBird WireGuard Mesh** to query Allod's health endpoint (`/api/health`).
+
+Allod automates this entirely by generating a single compound one-liner:
+1. Paste a **Setup Key** from your NetBird dashboard (`https://app.netbird.io/setup-keys`).
+2. Click **`📋 Copy Command for VPS`**. The dashboard generates:
+   ```bash
+   curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key <KEY> && curl -fsSL http://100.x.x.x:8080/api/watch/install.sh | sudo bash
+   ```
+3. SSH into your external cloud VPS and paste the command:
+   * Installs NetBird and connects the VPS to your private WireGuard mesh.
+   * Downloads the precompiled `allod-watch` binary directly from your Allod server over the encrypted mesh.
+   * Pre-fills `/etc/allod/watch.yaml` with your tokens, thresholds, and weather city.
+   * Enables and starts the `allod-watch.service` systemd unit.
+   * Sends an immediate confirmation message to your Telegram!
+
+*(If your VPS is already joined to your NetBird mesh, toggle the checkbox in the UI to get the standalone install command).*
+
+---
+
 ## 🏗️ Why an External Sentinel?
 
 If your home suffers a power outage or ISP interruption:
@@ -14,9 +52,9 @@ If your home suffers a power outage or ISP interruption:
 
 ---
 
-## 🤖 Setting Up the Telegram Bot in 60 Seconds
+## 🤖 Manual Setup Guide for Telegram Bot (Optional)
 
-Telegram provides an official, free, and secure bot platform.
+If you prefer to configure everything manually from the terminal:
 
 ### 1. Create a Bot with @BotFather
 1. Open Telegram on your smartphone or desktop.
