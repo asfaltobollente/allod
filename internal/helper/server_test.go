@@ -459,6 +459,16 @@ func TestHelperNetBirdPlan(t *testing.T) {
 		t.Fatalf("expected network.netbird_up plan to succeed, got error: %s", resUp.Error)
 	}
 
+	reqDown := Request{
+		Action: "network.netbird_down",
+		Plan:   true,
+		Args:   map[string]interface{}{},
+	}
+	resDown := s.processRequest(reqDown)
+	if !resDown.Ok {
+		t.Fatalf("expected network.netbird_down plan to succeed, got error: %s", resDown.Error)
+	}
+
 	reqNative := Request{
 		Action: "network.install_native",
 		Plan:   true,

@@ -1434,18 +1434,22 @@ server:
 	case "network.netbird_down":
 		if nbBin, err := exec.LookPath("netbird"); err == nil {
 			fullCmd := []string{nbBin, "down"}
-			plan := []string{strings.Join(fullCmd, " ")}
+			plan := []string{strings.Join(fullCmd, " "), "systemctl stop netbird", "ip link delete wt0"}
 			if !req.Plan {
 				out, _ := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
+				_ = exec.Command("systemctl", "stop", "netbird").Run()
 				_ = exec.Command("ip", "link", "delete", "wt0").Run()
+				_ = exec.Command("podman", "stop", "allod-netbird").Run()
+				_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
 				return Response{Ok: true, Applied: true, Output: strings.TrimSpace(string(out)), Plan: plan}
 			}
 			return Response{Ok: true, Applied: false, Plan: plan}
 		}
 
 		fullCmd := []string{"podman", "stop", "allod-netbird"}
-		plan := []string{strings.Join(fullCmd, " ")}
+		plan := []string{strings.Join(fullCmd, " "), "systemctl stop netbird", "ip link delete wt0"}
 		if !req.Plan {
+			_ = exec.Command("systemctl", "stop", "netbird").Run()
 			_ = exec.Command("podman", "stop", "allod-netbird").Run()
 			_ = exec.Command("podman", "rm", "-f", "allod-netbird").Run()
 			_ = exec.Command("ip", "link", "delete", "wt0").Run()
