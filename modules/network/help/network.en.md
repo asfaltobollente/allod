@@ -9,7 +9,7 @@ The `network` module manages secure remote access to Immich, Jellyfin, Nextcloud
 ### `cloud` (NetBird European Cloud — 40 MB Allocated RAM — Recommended)
 * **Hosted in Frankfurt, Germany**: 100% compliant with European GDPR regulations.
 * **Zero Infrastructure Overhead**: Connects to NetBird's managed signaling service using an ephemeral Setup Key (`NB_SETUP_KEY`).
-* **Automated WebRTC NAT Traversal**: Connects through CGNAT, Starlink, and mobile firewalls with zero open router ports.
+* **Automated WebRTC NAT Traversal**: Connects through CGNAT, satellite/FWA connections, and mobile firewalls with zero open router ports.
 * **Direct Encrypted WireGuard P2P**: Heavy traffic (Jellyfin 4K streaming, Immich camera sync, Samba transfers) flows directly peer-to-peer between devices.
 
 ### `selfhosted` (Sovereign Management Server — 40 MB Allocated RAM)

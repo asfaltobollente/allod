@@ -80,11 +80,12 @@ Remote access to Allod does not require exposing incoming ports or configuring p
    * Signaling and peer discovery are handled via **NetBird** (European cloud or private self-hosted).
    * All application traffic (Samba SMB TCP 445, Jellyfin 4K streaming, Immich camera sync) flows directly peer-to-peer over kernel WireGuard (`wt0`).
 2. **CGNAT & UPnP Reality**:
-   * On residential connections behind **Carrier-Grade NAT (CGNAT)** — such as **Starlink**, 4G/5G mobile networks, or fixed-wireless access — the router's WAN port receives a private address (`100.64.0.0/10`).
+   * On residential connections behind **Carrier-Grade NAT (CGNAT)** — such as satellite providers, 4G/5G mobile networks, or fixed-wireless access (FWA) — the router's WAN port receives a private address (`100.64.0.0/10`).
    * On such connections, UPnP correctly reports `No valid IGD found` because there is no public IPv4 gateway on the router. Manual IPv4 port forwarding is similarly impossible.
    * If both endpoints are behind symmetric CGNAT, direct IPv4 hole punching is blocked, causing NetBird to route traffic through European cloud relays (capping bandwidth to ~10 Mbps with ~90 ms latency).
 3. **IPv6 as the Zero-Cost Sovereign Highway**:
-   * Starlink natively allocates a dynamic `/56` public IPv6 prefix.
-   * By configuring DHCPv6 Prefix Delegation (`/56`) on the router (e.g. UniFi Dream Machine) and enabling SLAAC, the Allod node receives a global public IPv6 address.
+   * Modern fiber, satellite, and broadband providers natively allocate dynamic public IPv6 prefix delegations (such as `/56` or `/64` via DHCPv6-PD).
+   * By configuring DHCPv6 Prefix Delegation on the home router/firewall and enabling SLAAC on the LAN, the Allod node receives a global public IPv6 address.
    * NetBird discovers IPv6 ICE candidates and negotiates a **Direct WireGuard P2P connection**, delivering uncapped ISP upload speeds and minimal latency without requiring public IPv4 or port forwarding.
+
 

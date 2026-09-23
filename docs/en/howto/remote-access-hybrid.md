@@ -11,7 +11,7 @@ NetBird cleanly separates signaling coordination from high-speed data transfer:
 1. **Signaling & Peer Discovery (Control Plane)**:
    * **`cloud` mode**: Connects to NetBird's European cloud infrastructure (Frankfurt, Germany — 100% GDPR compliant, free up to 100 peers & 5 users).
    * **`selfhosted` mode**: Connects to your private self-hosted NetBird management server (e.g. running on a VPS).
-   * Uses WebRTC (ICE, STUN, TURN) to achieve automated NAT traversal behind Carrier-Grade NAT (CGNAT), Starlink, 4G/5G mobile carriers, and strict firewalls with **zero open router ports**.
+   * Uses WebRTC (ICE, STUN, TURN) to achieve automated NAT traversal behind Carrier-Grade NAT (CGNAT), satellite/cellular providers, 4G/5G mobile carriers, and strict firewalls with **zero open router ports**.
 2. **Encrypted High-Speed Data (Data Plane)**:
    * Your smartphone/laptop pairs using the official, open-source NetBird client app.
    * All application traffic flows **directly peer-to-peer (P2P)** between your device and your Allod node over kernel WireGuard (`wt0`).
@@ -94,7 +94,7 @@ Refresh the Allod Web Panel. In the **Network** module card and **Launchpad**:
 
 ---
 
-## 🔍 Troubleshooting & Network Performance (CGNAT, Starlink & UPnP)
+## 🔍 Troubleshooting & Network Performance (CGNAT, Carrier NAT & UPnP)
 
 ### Why is Speedtest Low (~9-10 Mbps) with High Latency (~90 ms)?
 
@@ -114,7 +114,7 @@ Look at the **Peers detail** section:
 
 ---
 
-### Why UPnP Fails Behind CGNAT / Starlink
+### Why UPnP Fails Behind CGNAT and Providers Without Public IPv4
 
 If you try to test or use UPnP on your server with a tool like `upnpc`:
 ```bash
@@ -124,45 +124,42 @@ upnpc -l
 # No valid UPNP Internet Gateway Device found.
 ```
 
-This error is expected when your home router (such as a **UniFi Dream Machine**) is connected to an ISP using **Carrier-Grade NAT (CGNAT)** — most notably **Starlink**, 4G/5G home routers, or fixed-wireless access (FWA):
-1. **No Public IPv4 on the WAN**: Starlink does not allocate a public IPv4 to residential subscribers. Instead, the router's WAN port receives a private CGNAT address in the `100.64.0.0/10` block.
-2. **UPnP Rejection**: When UPnP queries the router, the router reports that its WAN interface is not connected to a public IP gateway.
-3. **No Inbound IPv4 Routing**: Even if the router opened a local port via UPnP or manual port forwarding, the upstream Starlink ground-station NAT drops all unrequested inbound IPv4 traffic from the internet.
-4. **Symmetric NAT Traversal Failure**: When both the mobile carrier (4G/5G) and home ISP (Starlink) use symmetric CGNAT, standard IPv4 UDP hole punching fails, forcing NetBird into **Relayed** mode.
+This error is expected when your home router or firewall is connected to an ISP using **Carrier-Grade NAT (CGNAT)** — common with satellite connections, 4G/5G home routers, fixed-wireless access (FWA), and modern fiber providers:
+1. **No Public IPv4 on the WAN**: The ISP does not allocate a public IPv4 to residential subscribers. Instead, the router's WAN port receives a private CGNAT address in the `100.64.0.0/10` block.
+2. **UPnP Rejection**: When UPnP queries the router, the router reports that its WAN interface is not connected to a public IP gateway (`No valid IGD found`).
+3. **No Inbound IPv4 Routing**: Even if the router opened a local port via UPnP or manual port forwarding, the upstream provider's carrier gateways drop all unrequested inbound IPv4 traffic from the internet.
+4. **Symmetric NAT Traversal Failure**: When both the mobile carrier (4G/5G) and home ISP are behind symmetric CGNAT, standard IPv4 UDP hole punching fails, forcing NetBird into **Relayed** mode.
 
 ---
 
 ### 🚀 The Sovereign Solution: Native IPv6 Direct P2P (Zero Cost, No Open Ports)
 
-While Starlink does not provide a public IPv4 address, **Starlink natively assigns a dynamic `/56` public IPv6 prefix to every dish**! 
+While many residential providers do not supply a public IPv4 address, **almost all modern fiber, cable, and satellite providers allocate a public IPv6 prefix delegation (often a `/56` or `/64` prefix via DHCPv6-PD)**! 
 
 NetBird fully supports dual-stack IPv4/IPv6 ICE candidate negotiation. Once IPv6 is active:
-1. Every device (your Allod server and your smartphone on 4G/5G) receives a real, globally routable IPv6 address.
+1. Every device (your Allod server and your smartphone on 4G/5G with dual-stack IPv6) receives a real, globally routable IPv6 address.
 2. NetBird uses IPv6 ICE candidates to punch a **Direct WireGuard P2P connection**, bypassing CGNAT, UPnP, and relay servers completely!
-3. Transfer speeds jump to the full upload capacity of your Starlink dish (typically 25–45+ Mbps upload) with minimal latency (~25–35 ms).
+3. Transfer speeds jump to the full upload capacity of your home internet connection with minimal latency (~25–35 ms).
 
-#### Configuring IPv6 on UniFi Dream Machine (UDM / UDM Pro) with Starlink:
+#### Configuring IPv6 on Your Home Router / Gateway:
 
 1. **WAN (Internet) Settings**:
-   * Open UniFi Network Controller -> **Settings** -> **Internet** -> Select WAN1 (Starlink).
-   * Scroll down to **IPv6**.
-   * Set **IPv6 Connection** to **`DHCPv6`**.
-   * Set **Prefix Delegation Size** to **`56`** *(Starlink standard delegation is `/56`)*.
+   * Open your router's management dashboard -> navigate to the **IPv6** configuration for your WAN connection.
+   * Set **IPv6 Connection** to **`DHCPv6`** (or DHCPv6 Prefix Delegation).
+   * Set **Prefix Delegation Size** to **`56`** (or `64`, depending on your ISP specifications).
    * Save changes.
 
 2. **LAN (Local Network) Settings**:
-   * Open UniFi Network Controller -> **Settings** -> **Networks** -> Select your local network (e.g., `Default`).
-   * Scroll down to **IPv6**.
-   * Set **IPv6 Interface Type** to **`Prefix Delegation`**.
-   * Set **Prefix Delegation Interface** to **`WAN1`**.
-   * Enable **Router Advertisement (RA)** and set to **`SLAAC`** (or High Priority).
+   * Navigate to your local network (LAN) settings -> **IPv6**.
+   * Set **IPv6 Interface Type** to **`Prefix Delegation`** (delegated from your primary WAN).
+   * Enable **Router Advertisement (RA)** and set to **`SLAAC`** (Stateless Address Autoconfiguration).
    * Save changes.
 
 3. **Verify Global IPv6 on Ubuntu Server**:
    ```bash
    ip -6 addr show scope global
    ```
-   You should see a global unicast address (typically beginning with `2a02:...` or similar).
+   You should see a global unicast address (with `scope global`).
 
 4. **Verify Direct NetBird Connection**:
    Reconnect the NetBird app on your smartphone over cellular data, then run on the server:
@@ -173,5 +170,5 @@ NetBird fully supports dual-stack IPv4/IPv6 ICE candidate negotiation. Once IPv6
    ```text
    Connection type: Direct (P2P)
    ICE candidate endpoints (Local/Remote): [2a02:...]:51820 / [2a02:...]:51820
-   ```
    No open router ports, no UPnP, and full direct WireGuard speed!
+
