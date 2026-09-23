@@ -262,7 +262,10 @@ const i18n = {
     speedtest_btn_repeat: "⚡ Repeat Speedtest",
     speedtest_close: "Close",
 
-    // Themes
+    // Themes & Language Preferences
+    settings_pref_title: "Interface Preferences: Language & Theme",
+    settings_lang_title: "Interface Language",
+    settings_lang_sub: "Select the language for all panel texts, charts, and system messages.",
     settings_theme_title: "Appearance & Interface Theme",
     settings_theme_desc: "Customize the visual appearance of Allod. Fully rendered in your browser with zero server CPU or RAM overhead.",
     settings_theme_active_label: "Active Theme:",
@@ -538,7 +541,10 @@ const i18n = {
     speedtest_btn_repeat: "⚡ Ripeti Test Velocità",
     speedtest_close: "Chiudi",
 
-    // Themes
+    // Themes & Language Preferences
+    settings_pref_title: "Preferenze Interfaccia: Lingua & Tema",
+    settings_lang_title: "Lingua dell'Interfaccia",
+    settings_lang_sub: "Seleziona la lingua per tutti i testi, grafici e messaggi del pannello.",
     settings_theme_title: "Aspetto & Tema dell'Interfaccia",
     settings_theme_desc: "Personalizza l'esperienza visiva di Allod. Il rendering viene gestito interamente nel browser a zero consumo di CPU e RAM sul server.",
     settings_theme_active_label: "Tema Attivo:",

@@ -2297,11 +2297,11 @@ async function executePodmanSweep() {
 }
 
 async function executeSystemdReload() {
-  const btn = document.getElementById('btn-systemd-reload');
-  if (btn) {
+  const reloadButtons = document.querySelectorAll('.btn-systemd-reload, #btn-systemd-reload');
+  reloadButtons.forEach(btn => {
     btn.disabled = true;
     btn.innerHTML = `<span class="icon">⏳</span> <span>${t('msg_systemd_reloading')}</span>`;
-  }
+  });
 
   try {
     const res = await fetch('/api/system/reload', {
@@ -2318,10 +2318,10 @@ async function executeSystemdReload() {
   } catch (err) {
     showAlert(`Errore reload: ${err.message}`, 'danger');
   } finally {
-    if (btn) {
+    reloadButtons.forEach(btn => {
       btn.disabled = false;
       btn.innerHTML = `<span class="icon">⚙️</span> <span data-i18n="btn_systemd_reload">${t('btn_systemd_reload')}</span>`;
-    }
+    });
   }
 }
 
