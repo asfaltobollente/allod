@@ -19,6 +19,7 @@ import (
 	"github.com/asfaltobollente/allod/internal/config"
 	"github.com/asfaltobollente/allod/internal/helper"
 	"github.com/asfaltobollente/allod/internal/manifest"
+	"github.com/asfaltobollente/allod/internal/panel"
 	"github.com/asfaltobollente/allod/internal/preflight"
 	"github.com/asfaltobollente/allod/internal/quadlet"
 	"github.com/asfaltobollente/allod/internal/ring"
@@ -1119,6 +1120,64 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var adminPasswordCmd = &cobra.Command{
+	Use:   "admin-password",
+	Short: "Gestione credenziali dell'amministratore",
+}
+
+var adminPasswordResetCmd = &cobra.Command{
+	Use:   "reset [nuova-password]",
+	Short: "Reimposta la password dell'amministratore del pannello web",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var newPass string
+		if len(args) == 1 {
+			newPass = strings.TrimSpace(args[0])
+		} else {
+			fmt.Print("Inserisci la nuova password per l'amministratore (min. 6 caratteri): ")
+			reader := bufio.NewReader(os.Stdin)
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Printf("Errore lettura input: %v\n", err)
+				os.Exit(1)
+			}
+			newPass = strings.TrimSpace(line)
+		}
+
+		if len(newPass) < 6 {
+			fmt.Println("Errore: la password deve contenere almeno 6 caratteri.")
+			os.Exit(1)
+		}
+
+		st, err := state.Open(stateDB)
+		if err != nil {
+			fmt.Printf("Errore apertura database (%s): %v\n", stateDB, err)
+			os.Exit(1)
+		}
+		defer st.Close()
+
+		salt, err := panel.GenerateSalt()
+		if err != nil {
+			fmt.Printf("Errore generazione salt crittografico: %v\n", err)
+			os.Exit(1)
+		}
+		hash := panel.HashPassword(newPass, salt)
+		saltHex := hex.EncodeToString(salt)
+
+		if err := st.SetAdminAuth(hash, saltHex); err != nil {
+			fmt.Printf("Errore salvataggio credenziali: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Invalidate existing admin sessions
+		_ = st.DeleteSessionsForUser("admin", "admin")
+
+		fmt.Println("✓ Password amministratore reimpostata con successo!")
+		fmt.Println("✓ Tutte le sessioni admin precedenti sono state invalidate.")
+		fmt.Println("✓ Ora puoi accedere su http://<server-ip>:8080/login con la nuova password.")
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "configs/config.example.yaml", "file di configurazione")
 	rootCmd.PersistentFlags().StringVar(&stateDB, "state-db", "state.db", "percorso file state.db")
@@ -1142,6 +1201,9 @@ func init() {
 	ringCmd.AddCommand(ringStatusCmd)
 	ringCmd.AddCommand(ringSimulateCmd)
 	ringCmd.AddCommand(ringAddCmd)
+
+	adminPasswordCmd.AddCommand(adminPasswordResetCmd)
+	rootCmd.AddCommand(adminPasswordCmd)
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(planCmd)

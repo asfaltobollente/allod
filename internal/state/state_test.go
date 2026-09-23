@@ -135,12 +135,121 @@ func TestFamilyMembersLifecycle(t *testing.T) {
 		t.Errorf("expected error for consumed token, got nil")
 	}
 
-	// 7. Delete Member
+	// 7. Set & verify family member password
+	m2 := &FamilyMember{
+		Username:  "anna",
+		FirstName: "Anna",
+		LastName:  "Rossi",
+	}
+	if err := store.CreateFamilyMember(m2); err != nil {
+		t.Fatalf("failed to create anna: %v", err)
+	}
+	if err := store.SetFamilyMemberPassword("anna", "fakehash123", "fakesalt456"); err != nil {
+		t.Fatalf("failed to set password for anna: %v", err)
+	}
+	fetchedAnna, err := store.GetFamilyMember("anna")
+	if err != nil || fetchedAnna == nil {
+		t.Fatalf("failed to get anna: %v", err)
+	}
+	if fetchedAnna.PasswordHash != "fakehash123" || fetchedAnna.PasswordSalt != "fakesalt456" {
+		t.Errorf("expected anna password fields to match, got hash=%q salt=%q", fetchedAnna.PasswordHash, fetchedAnna.PasswordSalt)
+	}
+
+	// 8. Delete Member
 	if err := store.DeleteFamilyMember("mario"); err != nil {
 		t.Fatalf("failed to delete member: %v", err)
 	}
 	deleted, _ := store.GetFamilyMember("mario")
 	if deleted != nil {
 		t.Errorf("expected member to be deleted, got: %+v", deleted)
+	}
+}
+
+func TestAdminAuthLifecycle(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test-admin-auth.db")
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer store.Close()
+
+	hasAuth, err := store.HasAdminAuth()
+	if err != nil {
+		t.Fatalf("HasAdminAuth error: %v", err)
+	}
+	if hasAuth {
+		t.Errorf("expected false for new db")
+	}
+
+	if err := store.SetAdminAuth("hash_xyz", "salt_123"); err != nil {
+		t.Fatalf("failed to set admin auth: %v", err)
+	}
+
+	hasAuth, err = store.HasAdminAuth()
+	if err != nil || !hasAuth {
+		t.Errorf("expected true after setting admin auth")
+	}
+
+	h, s, err := store.GetAdminAuth()
+	if err != nil || h != "hash_xyz" || s != "salt_123" {
+		t.Errorf("unexpected admin auth: hash=%s, salt=%s", h, s)
+	}
+
+	if err := store.ClearAdminAuth(); err != nil {
+		t.Fatalf("failed to clear admin auth: %v", err)
+	}
+	hasAuth, _ = store.HasAdminAuth()
+	if hasAuth {
+		t.Errorf("expected false after clear")
+	}
+}
+
+func TestSessionLifecycle(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test-session.db")
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer store.Close()
+
+	// 1. Create session
+	token, err := store.CreateSession("admin", "admin", 1*time.Hour)
+	if err != nil || token == "" {
+		t.Fatalf("failed to create session: %v", err)
+	}
+
+	// 2. Get session
+	sess, err := store.GetSession(token)
+	if err != nil || sess == nil {
+		t.Fatalf("failed to get session: %v", err)
+	}
+	if sess.UserType != "admin" || sess.Username != "admin" {
+		t.Errorf("unexpected session data: %+v", sess)
+	}
+
+	// 3. Expired session
+	shortToken, err := store.CreateSession("family", "mario", -10*time.Second)
+	if err != nil {
+		t.Fatalf("failed to create expired session: %v", err)
+	}
+	expSess, err := store.GetSession(shortToken)
+	if err != nil {
+		t.Fatalf("unexpected error getting expired session: %v", err)
+	}
+	if expSess != nil {
+		t.Errorf("expected nil for expired session, got: %+v", expSess)
+	}
+
+	// 4. Delete session
+	if err := store.DeleteSession(token); err != nil {
+		t.Fatalf("failed to delete session: %v", err)
+	}
+	delSess, _ := store.GetSession(token)
+	if delSess != nil {
+		t.Errorf("expected session to be deleted, got: %+v", delSess)
 	}
 }

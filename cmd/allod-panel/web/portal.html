@@ -3,10 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Allod — Portale di Famiglia</title>
+  <title>Allod — Portale Personale di Famiglia</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      const saved = localStorage.getItem('allod_theme');
+      if (saved && saved !== 'default') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
   <style>
     :root {
       --bg: #090d16;
@@ -19,7 +27,7 @@
       --success: #10b981;
       --danger: #ef4444;
       --warning: #f59e0b;
-      --radius: 12px;
+      --radius: 14px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -31,23 +39,24 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 20px;
+      padding: 24px 16px;
     }
     .portal-container {
       width: 100%;
-      max-width: 520px;
+      max-width: 540px;
     }
     .brand-header {
       text-align: center;
       margin-bottom: 24px;
     }
     .brand-icon {
-      font-size: 38px;
-      margin-bottom: 8px;
+      font-size: 40px;
+      margin-bottom: 6px;
       display: inline-block;
+      filter: drop-shadow(0 4px 12px rgba(56, 189, 248, 0.25));
     }
     .brand-title {
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 700;
       letter-spacing: -0.5px;
       color: var(--text);
@@ -61,13 +70,15 @@
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: var(--radius);
-      padding: 28px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      padding: 28px 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+      position: relative;
+      margin-bottom: 16px;
     }
     .card-title {
-      font-size: 17px;
+      font-size: 18px;
       font-weight: 700;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -90,23 +101,24 @@
     }
     .form-control {
       width: 100%;
-      padding: 10px 14px;
+      padding: 11px 14px;
       background: #090d16;
       border: 1px solid var(--card-border);
       border-radius: 8px;
       color: var(--text);
       font-size: 13.5px;
       transition: border-color 0.15s ease;
+      outline: none;
     }
     .form-control:focus {
-      outline: none;
       border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
     }
     .btn {
       width: 100%;
       padding: 12px 18px;
       background: var(--primary);
-      color: #000;
+      color: #090d16;
       border: none;
       border-radius: 8px;
       font-size: 13.5px;
@@ -116,15 +128,24 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: background 0.15s ease;
+      transition: background 0.15s ease, filter 0.15s ease;
       margin-top: 10px;
     }
     .btn:hover {
       background: var(--primary-hover);
+      filter: brightness(1.05);
     }
     .btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+    .btn-secondary:hover {
+      background: #334155;
     }
     .badge {
       display: inline-block;
@@ -134,6 +155,10 @@
       border-radius: 6px;
       background: rgba(56, 189, 248, 0.15);
       color: var(--primary);
+    }
+    .badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
     }
     .alert {
       padding: 12px 14px;
@@ -155,26 +180,21 @@
       border: 1px solid rgba(16, 185, 129, 0.3);
       color: #6ee7b7;
     }
-    .alert-warning {
-      background: rgba(245, 158, 11, 0.15);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      color: #fcd34d;
-    }
     .guide-card {
       background: rgba(255, 255, 255, 0.02);
       border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 14px;
-      margin-top: 12px;
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 14px;
     }
     .guide-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
     .guide-title {
-      font-size: 12.5px;
+      font-size: 13.5px;
       font-weight: 700;
       color: var(--text);
       display: flex;
@@ -185,33 +205,111 @@
       background: #06090e;
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 6px;
-      padding: 8px 10px;
+      padding: 8px 12px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
       color: #38bdf8;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 6px;
+      margin-top: 8px;
     }
     .btn-copy {
       background: rgba(255, 255, 255, 0.1);
       border: none;
       color: var(--text);
-      padding: 3px 8px;
+      padding: 4px 10px;
       border-radius: 4px;
       font-size: 11px;
+      font-weight: 600;
       cursor: pointer;
+      transition: background 0.15s;
     }
     .btn-copy:hover {
       background: rgba(255, 255, 255, 0.2);
     }
-    .hidden { display: none !important; }
+    .user-profile-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 18px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .user-info-flex {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .avatar-bubble {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: #090d16;
+      background: var(--primary);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .btn-logout-small {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      background: transparent;
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-logout-small:hover {
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.4);
+      background: rgba(239, 68, 68, 0.08);
+    }
+    .tab-section-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      font-weight: 700;
+      margin-top: 18px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .portal-footer {
       text-align: center;
       margin-top: 24px;
       font-size: 11.5px;
       color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .portal-footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .portal-footer a:hover {
+      text-decoration: underline;
+    }
+    .hidden { display: none !important; }
+    .loading-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-radius: 50%;
+      border-top-color: currentColor;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
@@ -222,161 +320,225 @@
     <div class="brand-header">
       <div class="brand-icon">🏰</div>
       <h1 class="brand-title">Allod Sovereign Cloud</h1>
-      <p class="brand-subtitle">Portale di Famiglia & Gestione Accessi Personali</p>
+      <p class="brand-subtitle">Portale Personale & Cartelle di Rete Famiglia</p>
     </div>
 
-    <!-- MAIN CARD: ONBOARDING WITH TOKEN -->
-    <div id="card-token-flow" class="card hidden">
-      <div class="card-title">
-        <span>✨</span> <span id="token-greeting">Benvenuto in Famiglia!</span>
-      </div>
-      <p class="card-desc" id="token-desc">
-        Configura la tua password personale segreta per accedere a tutte le tue cartelle di rete private (Samba) e ai servizi multimediali.
-      </p>
+    <!-- Alert Banner -->
+    <div id="portal-alert" class="alert hidden"></div>
 
-      <div id="token-alert" class="alert hidden"></div>
-
-      <form id="token-form" onsubmit="event.preventDefault(); submitTokenPassword();">
-        <div class="form-group">
-          <label>Il tuo account Allod:</label>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span id="token-avatar" style="width:28px; height:28px; border-radius:50%; background:var(--primary); color:#000; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px;">👤</span>
-            <div>
-              <strong id="token-user-display" style="font-size:13.5px;"></strong>
-              <div style="font-size:11px; color:var(--text-muted);">Username: <code id="token-username"></code> &bull; Ruolo: <span id="token-role" class="badge"></span></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-top:16px;">
-          <label for="input-new-pass">Scegli la tua nuova password personale:</label>
-          <input type="password" id="input-new-pass" class="form-control" placeholder="Minimo 4 caratteri" required minlength="4">
-        </div>
-
-        <div class="form-group">
-          <label for="input-confirm-pass">Conferma password:</label>
-          <input type="password" id="input-confirm-pass" class="form-control" placeholder="Ripeti la password" required minlength="4">
-        </div>
-
-        <button type="submit" id="btn-submit-token" class="btn">
-          🚀 Salva Password & Attiva Servizi
-        </button>
-      </form>
+    <!-- 1. LOADING VIEW -->
+    <div id="view-loading" class="card" style="text-align: center; padding: 48px 24px;">
+      <div class="loading-spinner" style="width: 28px; height: 28px; border-width: 3px; color: var(--primary); margin-bottom: 12px;"></div>
+      <div style="font-size: 13.5px; color: var(--text-muted);">Caricamento portale...</div>
     </div>
 
-    <!-- MAIN CARD: DIRECT PASSWORD CHANGE (No Token) -->
-    <div id="card-direct-flow" class="card hidden">
+    <!-- 2. LOGIN VIEW (Username + Password) -->
+    <div id="view-login" class="card hidden">
       <div class="card-title">
-        <span>🔒</span> <span>Modifica la tua Password</span>
+        <span>🔒</span> <span>Accesso al tuo Spazio</span>
       </div>
       <p class="card-desc">
-        Aggiorna in autonomia la password delle tue cartelle Samba private. La nuova password sarà attiva immediatamente su tutti i tuoi dispositivi.
+        Inserisci il tuo username e la password personale per visualizzare le tue risorse e gestire i tuoi accessi.
       </p>
 
-      <div id="direct-alert" class="alert hidden"></div>
-
-      <form id="direct-form" onsubmit="event.preventDefault(); submitDirectPassword();">
+      <form id="form-login" onsubmit="event.preventDefault(); submitPortalLogin();">
         <div class="form-group">
-          <label for="direct-username">Il tuo Username:</label>
-          <input type="text" id="direct-username" class="form-control" placeholder="es. mario" required>
+          <label for="login-user">Nome Utente:</label>
+          <input type="text" id="login-user" class="form-control" placeholder="es. mario" autocomplete="username" required>
         </div>
 
         <div class="form-group">
-          <label for="direct-new-pass">Nuova Password:</label>
-          <input type="password" id="direct-new-pass" class="form-control" placeholder="Minimo 4 caratteri" required minlength="4">
+          <label for="login-pass">Password Personale:</label>
+          <input type="password" id="login-pass" class="form-control" placeholder="••••••••" autocomplete="current-password" required>
         </div>
 
-        <div class="form-group">
-          <label for="direct-confirm-pass">Conferma Nuova Password:</label>
-          <input type="password" id="direct-confirm-pass" class="form-control" placeholder="Ripeti la nuova password" required minlength="4">
-        </div>
-
-        <button type="submit" id="btn-submit-direct" class="btn">
-          💾 Salva Nuova Password
+        <button type="submit" id="btn-login" class="btn">
+          🚀 Accedi al Portale
         </button>
       </form>
 
       <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--card-border); font-size:12px; color:var(--text-muted); text-align:center;">
-        Hai dimenticato la password? Chiedi all'amministratore di famiglia di inviarti un link o QR code di ripristino istantaneo.
+        Non hai ancora una password o l'hai dimenticata? Chiedi all'amministratore di inviarti un link o codice QR di ripristino istantaneo.
       </div>
     </div>
 
-    <!-- SUCCESS & SERVICE ACCESS CARD -->
-    <div id="card-success-services" class="card hidden">
-      <div class="card-title" style="color:var(--success);">
-        <span>🎉</span> <span>Configurazione Completata!</span>
+    <!-- 3. ONBOARDING / TOKEN VIEW -->
+    <div id="view-token" class="card hidden">
+      <div class="card-title">
+        <span>✨</span> <span id="token-greeting">Benvenuto in Famiglia!</span>
       </div>
       <p class="card-desc">
-        La tua password personale è attiva. Ecco come accedere subito ai tuoi file e servizi su qualsiasi dispositivo:
+        Imposta la tua password personale segreta per attivare le tue cartelle di rete private (Samba) e i servizi multimediali.
       </p>
 
-      <!-- SMB Guide -->
-      <div class="guide-card">
-        <div class="guide-header">
-          <span class="guide-title">📁 Cartella Privata di Rete (Samba)</span>
-          <span class="badge" style="background:rgba(16,185,129,0.15); color:var(--success);">Attiva</span>
-        </div>
-        <p style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">
-          Inserisci questo percorso in Esplora File (Windows) o Finder (Mac) usando il tuo username e la nuova password:
-        </p>
-        <div class="code-box">
-          <span id="res-smb-path">\\allod\mario</span>
-          <button type="button" class="btn-copy" onclick="copyText(document.getElementById('res-smb-path').innerText)">Copia</button>
+      <div class="form-group" style="padding:10px; background:rgba(255,255,255,0.02); border-radius:8px; border:1px solid var(--card-border);">
+        <label style="margin-bottom:4px;">Il tuo account:</label>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div id="token-avatar" class="avatar-bubble" style="width:34px; height:34px; font-size:14px;">👤</div>
+          <div>
+            <strong id="token-display-name" style="font-size:14px;"></strong>
+            <div style="font-size:11.5px; color:var(--text-muted);">Username: <code id="token-username"></code></div>
+          </div>
         </div>
       </div>
 
-      <!-- Immich Photos -->
-      <div class="guide-card">
-        <div class="guide-header">
-          <span class="guide-title">📸 Immich Photos (Backup Smartphone)</span>
-          <span class="badge">App iOS & Android</span>
+      <form id="form-token" onsubmit="event.preventDefault(); submitTokenSetup();">
+        <div class="form-group">
+          <label for="token-pass">Nuova Password Personale:</label>
+          <input type="password" id="token-pass" class="form-control" placeholder="Minimo 4 caratteri" minlength="4" required>
         </div>
-        <p style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">
-          Scarica l'app ufficiale <strong>Immich</strong> dall'App Store o Google Play. Esegui il login con il tuo account o apri l'interfaccia web:
-        </p>
-        <div style="margin-top:8px;">
-          <a id="res-immich-link" href="http://allod:2283" target="_blank" class="btn" style="padding:8px 12px; font-size:12px; background:#1e293b; color:var(--text); text-decoration:none;">
-            🌐 Apri Immich Photos
-          </a>
+
+        <div class="form-group">
+          <label for="token-confirm">Conferma Nuova Password:</label>
+          <input type="password" id="token-confirm" class="form-control" placeholder="Ripeti la password" minlength="4" required>
+        </div>
+
+        <button type="submit" id="btn-token-submit" class="btn">
+          💾 Salva Password & Attiva Servizi
+        </button>
+      </form>
+    </div>
+
+    <!-- 4. PERSONAL DASHBOARD VIEW (Authenticated) -->
+    <div id="view-dashboard" class="hidden">
+      <!-- Profile Card -->
+      <div class="card">
+        <div class="user-profile-header">
+          <div class="user-info-flex">
+            <div id="dash-avatar" class="avatar-bubble">👤</div>
+            <div>
+              <div style="font-size:16px; font-weight:700; color:var(--text);" id="dash-full-name">Mario Rossi</div>
+              <div style="font-size:12px; color:var(--text-muted);">
+                <span id="dash-username">@mario</span> &bull; <span id="dash-role" class="badge">Membro</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn-logout-small" onclick="submitLogout()" title="Esci dal portale">
+            <span>Esci</span> <span>🚪</span>
+          </button>
+        </div>
+
+        <div class="tab-section-title">
+          <span>📁</span> Le tue risorse assegnate
+        </div>
+
+        <!-- SMB Share Card -->
+        <div class="guide-card">
+          <div class="guide-header">
+            <span class="guide-title">📂 Cartella di Rete Personale (Samba)</span>
+            <span class="badge badge-success">Attiva</span>
+          </div>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.45;">
+            Spazio privato esclusivo protetto da credenziali. Inserisci questo percorso su Windows o Mac:
+          </p>
+          <div class="code-box">
+            <span id="dash-smb-win">\\allod\mario</span>
+            <button type="button" class="btn-copy" onclick="copyText('dash-smb-win', this)">Copia Windows</button>
+          </div>
+          <div class="code-box" style="margin-top:6px;">
+            <span id="dash-smb-mac">smb://allod/mario</span>
+            <button type="button" class="btn-copy" onclick="copyText('dash-smb-mac', this)">Copia Mac</button>
+          </div>
+        </div>
+
+        <!-- Immich Photos -->
+        <div class="guide-card">
+          <div class="guide-header">
+            <span class="guide-title">📸 Immich Photos (Backup Smartphone)</span>
+            <span class="badge">App iOS & Android</span>
+          </div>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.45;">
+            Backup automatico e galleria smart per foto e video. Puoi usare l'app mobile ufficiale o l'interfaccia web:
+          </p>
+          <div style="margin-top:10px;">
+            <a id="link-immich" href="http://allod:2283" target="_blank" class="btn btn-secondary" style="text-decoration:none; padding:9px 14px; font-size:12.5px;">
+              🌐 Apri Immich Photos Web
+            </a>
+          </div>
+        </div>
+
+        <!-- Jellyfin Streaming -->
+        <div class="guide-card">
+          <div class="guide-header">
+            <span class="guide-title">🍿 Jellyfin Cinema & Musica</span>
+            <span class="badge">Streaming LAN</span>
+          </div>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.45;">
+            Streaming cinema, serie e musica condivisi della famiglia su Smart TV, smartphone o browser:
+          </p>
+          <div style="margin-top:10px;">
+            <a id="link-jellyfin" href="http://allod:8096" target="_blank" class="btn btn-secondary" style="text-decoration:none; padding:9px 14px; font-size:12.5px;">
+              🎬 Apri Jellyfin Streaming
+            </a>
+          </div>
         </div>
       </div>
 
-      <!-- Jellyfin Streaming -->
-      <div class="guide-card">
-        <div class="guide-header">
-          <span class="guide-title">🍿 Jellyfin Cinema & Musica</span>
-          <span class="badge">Streaming LAN</span>
+      <!-- Self-Service Password Change Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>🔑</span> <span>Cambio Password Autonomo</span>
         </div>
-        <p style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">
-          Guarda film e musica condivisi della famiglia su Smart TV, smartphone o PC:
+        <p class="card-desc">
+          Aggiorna in autonomia la tua password. La modifica sarà immediatamente attiva per l'accesso a Samba e ai tuoi file su tutti i tuoi dispositivi.
         </p>
-        <div style="margin-top:8px;">
-          <a id="res-jellyfin-link" href="http://allod:8096" target="_blank" class="btn" style="padding:8px 12px; font-size:12px; background:#1e293b; color:var(--text); text-decoration:none;">
-            🎬 Apri Jellyfin Streaming
-          </a>
-        </div>
+
+        <form id="form-change-pass" onsubmit="event.preventDefault(); submitChangePassword();">
+          <div class="form-group">
+            <label for="change-cur-pass">Password Attuale:</label>
+            <input type="password" id="change-cur-pass" class="form-control" placeholder="••••••••" required>
+          </div>
+
+          <div class="form-group">
+            <label for="change-new-pass">Nuova Password:</label>
+            <input type="password" id="change-new-pass" class="form-control" placeholder="Minimo 4 caratteri" minlength="4" required>
+          </div>
+
+          <div class="form-group">
+            <label for="change-confirm-pass">Conferma Nuova Password:</label>
+            <input type="password" id="change-confirm-pass" class="form-control" placeholder="Ripeti la nuova password" minlength="4" required>
+          </div>
+
+          <button type="submit" id="btn-change-submit" class="btn">
+            💾 Salva Nuova Password
+          </button>
+        </form>
       </div>
     </div>
 
     <!-- Footer -->
     <div class="portal-footer">
       Allod Sovereign Platform &bull; Dati 100% locali e protetti nella tua casa
+      <br>
+      <a href="/login" style="margin-top:4px; display:inline-block;">Sei l'amministratore del server? Accedi al Pannello Admin →</a>
     </div>
   </div>
 
   <script>
-    let currentToken = '';
-    let currentUsername = '';
+    let activeToken = '';
 
     function getParam(key) {
       const urlParams = new URLSearchParams(window.location.search);
       return urlParams.get(key) || '';
     }
 
-    function copyText(text, btn) {
+    function showAlert(msg, isError = true) {
+      const el = document.getElementById('portal-alert');
+      el.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+      el.innerHTML = (isError ? '⚠️ ' : '✓ ') + msg;
+      el.classList.remove('hidden');
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function hideAlert() {
+      document.getElementById('portal-alert').classList.add('hidden');
+    }
+
+    function copyText(elementId, btn) {
+      const text = document.getElementById(elementId).innerText;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => {
-          showCopyPill(btn);
+          showCopySuccess(btn);
         }).catch(() => fallbackCopy(text, btn));
       } else {
         fallbackCopy(text, btn);
@@ -392,182 +554,258 @@
       ta.style.top = '0';
       ta.style.width = '1px';
       ta.style.height = '1px';
-      ta.style.fontSize = '16px';
       document.body.appendChild(ta);
       ta.focus();
       ta.select();
-      ta.setSelectionRange(0, text.length);
-      let ok = false;
       try {
-        ok = document.execCommand('copy');
-      } catch (_) {}
-      document.body.removeChild(ta);
-
-      if (ok) {
-        showCopyPill(btn);
-      } else {
-        window.prompt('Copia:', text);
+        document.execCommand('copy');
+        showCopySuccess(btn);
+      } catch (e) {
+        alert('Copia fallita, seleziona il testo manualmente: ' + text);
       }
+      document.body.removeChild(ta);
     }
 
-    function showCopyPill(btn) {
-      if (btn) {
-        const old = btn.innerText;
-        btn.innerText = '✓ Copiato!';
-        setTimeout(() => { btn.innerText = old; }, 2000);
-      } else {
-        alert('✓ Copiato negli appunti!');
-      }
+    function showCopySuccess(btn) {
+      if (!btn) return;
+      const oldText = btn.innerText;
+      btn.innerText = '✓ Copiato!';
+      btn.style.background = 'rgba(16, 185, 129, 0.3)';
+      setTimeout(() => {
+        btn.innerText = oldText;
+        btn.style.background = '';
+      }, 2000);
     }
 
     async function initPortal() {
-      const token = getParam('invite') || getParam('token');
-      const cardToken = document.getElementById('card-token-flow');
-      const cardDirect = document.getElementById('card-direct-flow');
-
+      const token = getParam('token');
       if (token) {
-        currentToken = token;
-        try {
-          const res = await fetch(`/api/portal/verify-token?token=${encodeURIComponent(token)}`);
-          const json = await res.json();
-          if (json.status === 'ok' && json.data) {
-            const u = json.data;
-            currentUsername = u.username;
-            cardToken.classList.remove('hidden');
-            document.getElementById('token-greeting').innerText = `Ciao ${u.first_name}!`;
-            document.getElementById('token-user-display').innerText = `${u.first_name} ${u.last_name || ''}`.trim();
-            document.getElementById('token-username').innerText = u.username;
-            document.getElementById('token-role').innerText = u.role ? u.role.toUpperCase() : 'MEMBRO';
-            if (u.first_name) {
-              document.getElementById('token-avatar').innerText = u.first_name.charAt(0).toUpperCase();
-            }
-          } else {
-            cardDirect.classList.remove('hidden');
-            showDirectAlert(json.message || 'Link di invito non valido o scaduto.', 'warning');
+        activeToken = token;
+        await verifyToken(token);
+        return;
+      }
+
+      // Check if logged in
+      try {
+        const res = await fetch('/api/portal/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'ok') {
+            showDashboard(data.data);
+            return;
           }
-        } catch (err) {
-          cardDirect.classList.remove('hidden');
-          showDirectAlert('Errore di verifica del token: ' + err.message, 'danger');
         }
-      } else {
-        cardDirect.classList.remove('hidden');
+      } catch (err) {
+        // Not authenticated
+      }
+
+      document.getElementById('view-loading').classList.add('hidden');
+      document.getElementById('view-login').classList.remove('hidden');
+      setTimeout(() => document.getElementById('login-user').focus(), 100);
+    }
+
+    async function verifyToken(token) {
+      try {
+        const res = await fetch(`/api/portal/verify-token?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        document.getElementById('view-loading').classList.add('hidden');
+
+        if (res.ok && data.status === 'ok') {
+          const member = data.data || {};
+          document.getElementById('token-username').innerText = member.username;
+          document.getElementById('token-display-name').innerText = `${member.first_name} ${member.last_name}`.trim();
+          document.getElementById('token-greeting').innerText = `Benvenuto, ${member.first_name}!`;
+          if (member.first_name) {
+            document.getElementById('token-avatar').innerText = member.first_name.charAt(0).toUpperCase();
+          }
+          document.getElementById('view-token').classList.remove('hidden');
+          setTimeout(() => document.getElementById('token-pass').focus(), 100);
+        } else {
+          showAlert(data.message || 'Il link o QR di attivazione non è valido o è scaduto. Richiedine uno nuovo all\'amministratore.');
+          document.getElementById('view-login').classList.remove('hidden');
+        }
+      } catch (err) {
+        document.getElementById('view-loading').classList.add('hidden');
+        showAlert('Errore di connessione: ' + err.message);
+        document.getElementById('view-login').classList.remove('hidden');
       }
     }
 
-    function showTokenAlert(msg, type) {
-      const el = document.getElementById('token-alert');
-      el.className = `alert alert-${type}`;
-      el.innerText = msg;
-      el.classList.remove('hidden');
-    }
-
-    function showDirectAlert(msg, type) {
-      const el = document.getElementById('direct-alert');
-      el.className = `alert alert-${type}`;
-      el.innerText = msg;
-      el.classList.remove('hidden');
-    }
-
-    async function submitTokenPassword() {
-      const p1 = document.getElementById('input-new-pass').value;
-      const p2 = document.getElementById('input-confirm-pass').value;
-      const btn = document.getElementById('btn-submit-token');
+    async function submitTokenSetup() {
+      hideAlert();
+      const p1 = document.getElementById('token-pass').value;
+      const p2 = document.getElementById('token-confirm').value;
 
       if (p1.length < 4) {
-        showTokenAlert('La password deve contenere almeno 4 caratteri', 'warning');
+        showAlert('La password deve contenere almeno 4 caratteri');
         return;
       }
       if (p1 !== p2) {
-        showTokenAlert('Le password non coincidono. Riprova.', 'warning');
+        showAlert('Le password non coincidono');
         return;
       }
 
+      const btn = document.getElementById('btn-token-submit');
       btn.disabled = true;
-      btn.innerText = '⏳ Configurazione in corso...';
+      btn.innerHTML = '<span class="loading-spinner"></span> <span>Salvataggio e sincronizzazione Samba...</span>';
 
       try {
         const res = await fetch('/api/portal/set-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token: currentToken,
-            new_password: p1
-          })
+          body: JSON.stringify({ token: activeToken, new_password: p1 })
         });
-        const json = await res.json();
-        if (json.status === 'ok') {
-          showSuccessServices(currentUsername);
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+          showAlert('Password attivata con successo!', false);
+          // Transition to authenticated dashboard
+          setTimeout(async () => {
+            hideAlert();
+            document.getElementById('view-token').classList.add('hidden');
+            // Remove token from query string
+            window.history.replaceState({}, document.title, window.location.pathname);
+            const meRes = await fetch('/api/portal/me');
+            if (meRes.ok) {
+              const meData = await meRes.json();
+              showDashboard(meData.data);
+            } else {
+              window.location.reload();
+            }
+          }, 800);
         } else {
-          showTokenAlert(json.message || 'Errore durante l\'impostazione della password', 'danger');
+          showAlert(data.message || 'Errore salvataggio password');
           btn.disabled = false;
-          btn.innerText = '🚀 Salva Password & Attiva Servizi';
+          btn.innerHTML = '💾 Salva Password & Attiva Servizi';
         }
       } catch (err) {
-        showTokenAlert('Errore di connessione: ' + err.message, 'danger');
+        showAlert('Errore di rete: ' + err.message);
         btn.disabled = false;
-        btn.innerText = '🚀 Salva Password & Attiva Servizi';
+        btn.innerHTML = '💾 Salva Password & Attiva Servizi';
       }
     }
 
-    async function submitDirectPassword() {
-      const username = document.getElementById('direct-username').value.trim().toLowerCase();
-      const p1 = document.getElementById('direct-new-pass').value;
-      const p2 = document.getElementById('direct-confirm-pass').value;
-      const btn = document.getElementById('btn-submit-direct');
-
-      if (!username) {
-        showDirectAlert('Inserisci il tuo nome utente', 'warning');
-        return;
-      }
-      if (p1.length < 4) {
-        showDirectAlert('La password deve contenere almeno 4 caratteri', 'warning');
-        return;
-      }
-      if (p1 !== p2) {
-        showDirectAlert('Le password non coincidono', 'warning');
-        return;
-      }
+    async function submitPortalLogin() {
+      hideAlert();
+      const btn = document.getElementById('btn-login');
+      const username = document.getElementById('login-user').value.trim();
+      const password = document.getElementById('login-pass').value;
 
       btn.disabled = true;
-      btn.innerText = '⏳ Aggiornamento in corso...';
+      btn.innerHTML = '<span class="loading-spinner"></span> <span>Accesso in corso...</span>';
 
       try {
-        const res = await fetch('/api/portal/set-password', {
+        const res = await fetch('/api/portal/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: username,
-            new_password: p1
-          })
+          body: JSON.stringify({ username, password })
         });
-        const json = await res.json();
-        if (json.status === 'ok') {
-          showSuccessServices(username);
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+          document.getElementById('view-login').classList.add('hidden');
+          const meRes = await fetch('/api/portal/me');
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            showDashboard(meData.data);
+          } else {
+            window.location.reload();
+          }
         } else {
-          showDirectAlert(json.message || 'Errore durante l\'aggiornamento della password', 'danger');
+          showAlert(data.message || 'Credenziali non corrette');
           btn.disabled = false;
-          btn.innerText = '💾 Salva Nuova Password';
+          btn.innerHTML = '🚀 Accedi al Portale';
+          document.getElementById('login-pass').focus();
         }
       } catch (err) {
-        showDirectAlert('Errore di connessione: ' + err.message, 'danger');
+        showAlert('Errore di connessione: ' + err.message);
         btn.disabled = false;
-        btn.innerText = '💾 Salva Nuova Password';
+        btn.innerHTML = '🚀 Accedi al Portale';
       }
     }
 
-    function showSuccessServices(username) {
-      document.getElementById('card-token-flow').classList.add('hidden');
-      document.getElementById('card-direct-flow').classList.add('hidden');
-      const sCard = document.getElementById('card-success-services');
-      sCard.classList.remove('hidden');
+    function showDashboard(user) {
+      document.getElementById('view-loading').classList.add('hidden');
+      document.getElementById('view-login').classList.add('hidden');
+      document.getElementById('view-token').classList.add('hidden');
+      document.getElementById('view-dashboard').classList.remove('hidden');
 
-      const host = window.location.hostname || 'allod';
-      document.getElementById('res-smb-path').innerText = `\\\\${host}\\${username}`;
-      document.getElementById('res-immich-link').href = `http://${host}:2283`;
-      document.getElementById('res-jellyfin-link').href = `http://${host}:8096`;
+      const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+      document.getElementById('dash-full-name').innerText = name;
+      document.getElementById('dash-username').innerText = `@${user.username}`;
+      document.getElementById('dash-role').innerText = user.role === 'admin' ? 'Amministratore' : 'Membro Famiglia';
+
+      const avatar = document.getElementById('dash-avatar');
+      avatar.innerText = (user.first_name || user.username).charAt(0).toUpperCase();
+      if (user.avatar_color) {
+        avatar.style.background = user.avatar_color;
+      }
+
+      // Samba paths
+      const hostname = user.hostname || window.location.hostname || 'allod';
+      const smbWin = `\\\\${hostname}\\${user.username}`;
+      const smbMac = `smb://${hostname}/${user.username}`;
+      document.getElementById('dash-smb-win').innerText = smbWin;
+      document.getElementById('dash-smb-mac').innerText = smbMac;
+
+      // Service links
+      const hostIp = window.location.hostname || 'allod';
+      document.getElementById('link-immich').href = `http://${hostIp}:2283`;
+      document.getElementById('link-jellyfin').href = `http://${hostIp}:8096`;
     }
 
-    window.addEventListener('DOMContentLoaded', initPortal);
+    async function submitChangePassword() {
+      hideAlert();
+      const curPass = document.getElementById('change-cur-pass').value;
+      const newPass = document.getElementById('change-new-pass').value;
+      const confPass = document.getElementById('change-confirm-pass').value;
+
+      if (newPass.length < 4) {
+        showAlert('La nuova password deve contenere almeno 4 caratteri');
+        return;
+      }
+      if (newPass !== confPass) {
+        showAlert('Le nuove password inserite non coincidono');
+        return;
+      }
+
+      const btn = document.getElementById('btn-change-submit');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading-spinner"></span> <span>Aggiornamento in corso...</span>';
+
+      try {
+        const res = await fetch('/api/portal/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: curPass, new_password: newPass })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+          showAlert('Password aggiornata con successo! La nuova password è ora attiva per l\'accesso a Samba e a tutti i tuoi servizi.', false);
+          document.getElementById('form-change-pass').reset();
+          btn.disabled = false;
+          btn.innerHTML = '💾 Salva Nuova Password';
+        } else {
+          showAlert(data.message || 'Errore durante l\'aggiornamento password');
+          btn.disabled = false;
+          btn.innerHTML = '💾 Salva Nuova Password';
+        }
+      } catch (err) {
+        showAlert('Errore di connessione: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '💾 Salva Nuova Password';
+      }
+    }
+
+    async function submitLogout() {
+      try {
+        await fetch('/api/portal/logout', { method: 'POST' });
+      } catch (e) {}
+      window.location.reload();
+    }
+
+    initPortal();
   </script>
 </body>
 </html>

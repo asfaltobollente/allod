@@ -1,3 +1,29 @@
+// Global Fetch Interceptor: Automatically redirect to /login on 401 Unauthorized
+const _rawFetch = window.fetch;
+window.fetch = async function(...args) {
+  const res = await _rawFetch.apply(this, args);
+  if (res.status === 401) {
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+    if (url.includes('/api/') && !url.includes('/api/auth/status')) {
+      window.location.href = '/login';
+    }
+  }
+  return res;
+};
+
+async function logoutAdmin() {
+  const msg = typeof t === 'function' ? t('confirm_logout', 'Sei sicuro di voler uscire dal pannello amministratore?') : 'Sei sicuro di voler uscire dal pannello amministratore?';
+  if (!confirm(msg)) {
+    return;
+  }
+  try {
+    await _rawFetch('/api/auth/logout', { method: 'POST' });
+  } catch (e) {
+    console.error('Logout error:', e);
+  }
+  window.location.href = '/login';
+}
+
 // Allod Panel SPA Logic
 let currentStatus = null;
 let currentModules = null;
