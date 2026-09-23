@@ -547,6 +547,12 @@ systemctl --user enable --now allod-panel</pre>
                   <span class="icon">📌</span> <span data-i18n="btn_enable_autostart">Enable Boot Autostart</span>
                 </button>
               </div>
+
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-outline-primary" onclick="openWatchSentinelModal()" style="flex:1;">
+                  <span class="icon">🛡️</span> <span data-i18n="btn_configure_watch_sentinel">Configura Sentinella & Bot</span>
+                </button>
+              </div>
             </div>
             <p style="font-size:11px; color:var(--text-muted); margin-top:10px; font-style:italic;" data-i18n="settings_start_active_note">
               Starts only modules configured with an active level (modules with level 'off' remain off).
@@ -1421,6 +1427,205 @@ sudo systemctl enable --now allod-helperd</pre>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeNetworkPairingModal()" data-i18n="sweeper_close">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Allod Watch Sentinel & Telegram Bot -->
+  <div id="watch-sentinel-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:720px; max-height:92vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🛡️</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:700;" data-i18n="watch_modal_title">🛡️ Allod Watch Sentinel — Sentinella Cloud & Allarmi Telegram</h3>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);" data-i18n="watch_modal_subtitle">Monitoraggio continuo da VPS esterna (Free-Tier) su rete mesh NetBird a zero porte aperte</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeWatchSentinelModal()">&times;</button>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div style="display:flex; gap:6px; padding:10px 16px; background:rgba(0,0,0,0.25); border-bottom:1px solid var(--card-border);">
+        <button type="button" class="btn btn-sm" id="btn-tab-watch-telegram" onclick="switchWatchTab('telegram')" style="padding:5px 12px; font-size:11.5px; font-weight:600; background:var(--primary); color:#000; border-radius:6px;">
+          <span data-i18n="watch_tab_telegram">🤖 Bot Telegram & Chat ID</span>
+        </button>
+        <button type="button" class="btn btn-sm" id="btn-tab-watch-weather" onclick="switchWatchTab('weather')" style="padding:5px 12px; font-size:11.5px; font-weight:600; background:transparent; color:var(--text-muted); border-radius:6px;">
+          <span data-i18n="watch_tab_weather">☀️ Meteo & Resoconto</span>
+        </button>
+        <button type="button" class="btn btn-sm" id="btn-tab-watch-mesh" onclick="switchWatchTab('mesh')" style="padding:5px 12px; font-size:11.5px; font-weight:600; background:transparent; color:var(--text-muted); border-radius:6px;">
+          <span data-i18n="watch_tab_mesh">☁️ Messa in Mesh & Deploy VPS</span>
+        </button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto; flex:1; padding:16px; min-height:360px;">
+        <!-- PANE 1: TELEGRAM BOT WIZARD -->
+        <div id="pane-watch-telegram">
+          <!-- Step 1: Create bot on BotFather -->
+          <div style="background:rgba(15,23,42,0.6); border:1px solid var(--card-border); border-radius:8px; padding:12px 14px; margin-bottom:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+              <strong style="color:var(--text-main); font-size:12.5px;" data-i18n="watch_tg_step1_title">Passo 1: Crea il tuo Bot su Telegram (Gratuito & Istantaneo)</strong>
+              <a href="https://t.me/BotFather" target="_blank" class="btn btn-sm btn-outline-info" style="padding:3px 10px; font-size:11px; text-decoration:none;" data-i18n="watch_tg_step1_open">↗ Apri @BotFather su Telegram</a>
+            </div>
+            <div style="font-size:11.5px; color:var(--text-muted); line-height:1.5;" data-i18n="watch_tg_step1_instruction">
+              1. Clicca il pulsante qui sopra per avviare una chat con @BotFather<br>2. Invia il comando <code>/newbot</code><br>3. Scegli un nome amichevole (es. <i>Allod Sentinel</i>)<br>4. Scegli un username univoco che termini con <code>bot</code> (es. <i>MioAllodSentinel_bot</i>)<br>5. Copia il <b>Token HTTP API</b> fornito da BotFather.
+            </div>
+          </div>
+
+          <!-- Step 2: Paste Bot Token -->
+          <div class="form-group mb-3">
+            <label for="watch-telegram-token" style="font-size:12px; font-weight:600;" data-i18n="watch_tg_token_label">Token del Bot Telegram:</label>
+            <div style="display:flex; gap:6px;">
+              <input type="password" id="watch-telegram-token" class="form-control" placeholder="es. 7123456789:AAH1234567890abcdef..." oninput="onWatchTokenInput()" />
+              <button type="button" class="btn btn-sm btn-secondary" onclick="toggleWatchTokenVisibility()" style="padding:0 10px;" title="Mostra/Nascondi Token">👁️</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Auto-detect Chat ID -->
+          <div style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:12px 14px; margin-bottom:14px;">
+            <strong style="color:var(--primary); font-size:12.5px; display:block; margin-bottom:6px;" data-i18n="watch_tg_step3_title">Passo 3: Rilevamento Automatico Chat ID (1 Clic)</strong>
+            <div style="font-size:11.5px; color:var(--text-muted); line-height:1.5; margin-bottom:10px;" data-i18n="watch_tg_step3_desc">
+              1. Cerca il tuo bot appena creato su Telegram e premi <b>AVVIA</b> (o inviagli un messaggio qualsiasi).<br>2. Clicca il pulsante qui sotto per rilevare in automatico il tuo Chat ID univoco:
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <button type="button" class="btn btn-sm btn-info" id="btn-detect-chat-id" onclick="detectWatchChatID()" style="font-weight:600; padding:6px 14px;">
+                🔍 <span data-i18n="watch_tg_btn_detect">Rileva Chat ID Automaticamente</span>
+              </button>
+              <div id="watch-detect-spinner" style="display:none; font-size:11px; color:var(--primary);">⏳ Interrogazione Telegram in corso...</div>
+            </div>
+          </div>
+
+          <!-- Chat ID Input & Test Button -->
+          <div class="form-group mb-3">
+            <label for="watch-telegram-chat-id" style="font-size:12px; font-weight:600;" data-i18n="watch_tg_chat_id_label">Chat ID Telegram:</label>
+            <input type="text" id="watch-telegram-chat-id" class="form-control" placeholder="es. 987654321" />
+          </div>
+
+          <!-- Feedback message box -->
+          <div id="watch-telegram-feedback" style="display:none; padding:10px 12px; border-radius:6px; font-size:11.5px; margin-bottom:14px;"></div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--card-border);">
+            <button type="button" class="btn btn-sm btn-outline-success" id="btn-test-watch-tg" onclick="testWatchTelegram()" style="font-weight:600; padding:6px 14px;">
+              💬 <span data-i18n="watch_tg_btn_test">Invia Messaggio di Prova su Telegram</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveWatchConfigAndAdvance('weather')" style="font-weight:600; padding:6px 16px;">
+              Avanti: Meteo ➔
+            </button>
+          </div>
+        </div>
+
+        <!-- PANE 2: WEATHER & DIGEST -->
+        <div id="pane-watch-weather" class="hidden">
+          <div style="margin-bottom:14px;">
+            <strong style="color:var(--text-main); font-size:13px;" data-i18n="watch_weather_title">Resoconto Mattutino & Previsioni Meteo Locali</strong>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);" data-i18n="watch_weather_desc">Ogni mattina la sentinella esterna ti invia un messaggio positivo su Telegram con le previsioni meteo della tua città e lo stato del server.</p>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="watch-weather-city" style="font-size:12px; font-weight:600;" data-i18n="watch_city_label">Città / Località del Meteo:</label>
+            <input type="text" id="watch-weather-city" class="form-control" placeholder="es. Roma, Milano, Napoli, Torino, Palermo, Bologna..." value="Roma" />
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;" data-i18n="watch_city_sub">
+              Previsioni basate sulle API aperte Open-Meteo (gratuite, senza chiavi né registrazioni).
+            </div>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="watch-digest-time" style="font-size:12px; font-weight:600;" data-i18n="watch_digest_time_label">Orario Invio Resoconto Mattutino:</label>
+            <input type="time" id="watch-digest-time" class="form-control" value="08:30" style="max-width:180px;" />
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;" data-i18n="watch_digest_time_sub">
+              Orario (formato 24h) in cui desideri ricevere il messaggio del buongiorno.
+            </div>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="watch-down-threshold" style="font-size:12px; font-weight:600;" data-i18n="watch_threshold_label">Soglia Rilevamento Blackout / Assenza Rete:</label>
+            <select id="watch-down-threshold" class="form-control" style="max-width:320px;">
+              <option value="60" data-i18n="watch_threshold_1m">1 minuto (Ultra-reattivo)</option>
+              <option value="120" data-i18n="watch_threshold_2m">2 minuti (Veloce)</option>
+              <option value="180" selected data-i18n="watch_threshold_3m">3 minuti (Predefinito - consigliato)</option>
+              <option value="300" data-i18n="watch_threshold_5m">5 minuti (Tollerante)</option>
+              <option value="600" data-i18n="watch_threshold_10m">10 minuti (Solo blackout prolungati)</option>
+            </select>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;" data-i18n="watch_threshold_sub">
+              Tempo di mancata risposta del server domestico prima di notificare il blackout.
+            </div>
+          </div>
+
+          <div id="watch-weather-feedback" style="display:none; padding:10px 12px; border-radius:6px; font-size:11.5px; margin-bottom:14px;"></div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--card-border);">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="switchWatchTab('telegram')">
+              ⬅ Indietro: Bot Telegram
+            </button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveWatchConfigAndAdvance('mesh')" style="font-weight:600; padding:6px 16px;">
+              Avanti: Deploy VPS ➔
+            </button>
+          </div>
+        </div>
+
+        <!-- PANE 3: MESH SETUP & VPS DEPLOY (PLUG & PLAY) -->
+        <div id="pane-watch-mesh" class="hidden">
+          <div style="margin-bottom:14px;">
+            <strong style="color:var(--text-main); font-size:13px;" data-i18n="watch_mesh_title">Messa in Mesh della VPS & Deploy in 1 Comando</strong>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);" data-i18n="watch_mesh_desc">Poiché Allod si trova dietro CGNAT con zero porte aperte, la VPS esterna deve entrare nella rete mesh NetBird per raggiungere l'endpoint di stato cifrato.</p>
+          </div>
+
+          <!-- Allod Node Mesh IP Status Badge -->
+          <div style="background:#0f172a; border-radius:8px; padding:10px 14px; border:1px solid rgba(255,255,255,0.08); margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600;" data-i18n="watch_mesh_ip_label">IP Mesh del Nodo Allod:</div>
+              <code id="watch-mesh-ip-display" style="font-size:13px; font-weight:700; color:var(--success); font-family:monospace;">--</code>
+            </div>
+            <div id="watch-mesh-ip-note" style="font-size:11px; color:var(--text-muted);">
+              Rete mesh WireGuard punto-punto cifrata
+            </div>
+          </div>
+
+          <!-- Setup Key Input -->
+          <div class="form-group mb-3" id="watch-setup-key-group">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label for="watch-vps-setup-key" style="font-size:12px; font-weight:600; margin:0;" data-i18n="watch_mesh_key_label">NetBird Setup Key per la VPS:</label>
+              <a href="https://app.netbird.io/setup-keys" target="_blank" style="color:var(--primary); font-size:11px; text-decoration:none; font-weight:600;" data-i18n="watch_mesh_key_link">↗ Genera Setup Key su NetBird</a>
+            </div>
+            <input type="text" id="watch-vps-setup-key" class="form-control" placeholder="es. 4A8B7C21-DF34-45F2-..." oninput="updateWatchDeployCommand()" />
+          </div>
+
+          <!-- Already in Mesh Toggle -->
+          <div class="form-group mb-3">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:11.5px; color:var(--text-main);">
+              <input type="checkbox" id="watch-vps-already-mesh" onchange="updateWatchDeployCommand()" style="cursor:pointer; width:15px; height:15px; accent-color:var(--primary);" />
+              <span data-i18n="watch_vps_already_mesh_label">La VPS è già connessa alla rete NetBird</span>
+            </label>
+          </div>
+
+          <!-- Generated Single Command Box -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;" data-i18n="watch_vps_cmd_label">Comando All-in-One per la VPS (Copia & Incolla):</label>
+            <div style="position:relative; background:#0b1120; border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:12px 14px;">
+              <pre style="margin:0; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; white-space:pre-wrap; word-break:break-all; line-height:1.5;"><code id="watch-deploy-command-code">curl -fsSL ... | bash</code></pre>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+              <button type="button" class="btn btn-sm btn-success" id="btn-copy-watch-cmd" onclick="copyWatchDeployCommand()" style="font-weight:600; padding:6px 14px;">
+                📋 <span data-i18n="watch_btn_copy_cmd">Copia Comando per VPS</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Simple 3-step Instructions -->
+          <div style="background:#0b1120; border-radius:8px; padding:12px 14px; border:1px solid rgba(255,255,255,0.08); font-size:11.5px; line-height:1.6;">
+            <strong style="color:var(--text-main); display:block; margin-bottom:4px;" data-i18n="watch_vps_instructions_title">Come installare sulla VPS in 10 secondi:</strong>
+            <div data-i18n="watch_vps_step1">1. Connettiti via SSH alla tua VPS esterna (Oracle Cloud Always-Free, Hetzner, ecc.): <code>ssh utente@ip-vps</code></div>
+            <div data-i18n="watch_vps_step2">2. Incolla il comando copiato qui sopra e premi <b>Invio</b>.</div>
+            <div data-i18n="watch_vps_step3">3. La VPS entra nel mesh, scarica la sentinella Allod, attiva systemd e invia subito una conferma su Telegram!</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-primary" onclick="saveWatchConfig(true)">
+          💾 <span data-i18n="watch_btn_save_config">Salva Impostazioni Sentinella</span>
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="closeWatchSentinelModal()" data-i18n="sweeper_close">Chiudi</button>
       </div>
     </div>
   </div>

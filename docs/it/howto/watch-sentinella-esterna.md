@@ -2,7 +2,45 @@
 
 Il componente **Allod Watch Sentinel** (`allod-watch`) è un demone di monitoraggio ultra-leggero (occupa **meno di 15 MB di RAM**) progettato per essere eseguito su una VPS esterna (es. un'istanza *always free-tier* o un piccolo server Linux in cloud).
 
-La sentinella sorveglia continuamente dall'esterno il tuo server Allod domestico: se il nodo casalingo perde la connessione a Internet o subisce un blackout elettrico, la sentinella invia immediatamente un allarme su **Telegram**, ti avvisa non appena il server torna online, e ogni mattina alle 08:30 ti invia un **resoconto positivo con il meteo della giornata**.
+La sentinella sorveglia continuamente dall'esterno il tuo server Allod domestico: se il nodo casalingo perde la connessione a Internet o subisce un blackout elettrico, la sentinella invia immediatamente un allarme su **Telegram**, ti avvisa non appena il server torna online, e ogni mattina ti invia un **resoconto positivo con il meteo della giornata**.
+
+---
+
+## ⚡ Metodo Consigliato: Configurazione 100% Plug & Play dalla Dashboard Web
+
+Dalla versione v1.2, **non è più necessario configurare file a mano sulla VPS**: l'intera procedura di configurazione del Bot Telegram e il deploy della VPS si esegue con pochi clic direttamente dalla Web Dashboard di Allod!
+
+### 1. Apri la Procedura Guidata nel Pannello Allod
+* Vai nella scheda **Moduli** e clicca su **🤖 Configura Sentinella & Bot** nella card del modulo `watch` (oppure in **Settings & Manutenzione**).
+
+### 2. Configura il Bot Telegram in 3 Clic
+1. Clicca sul link **`↗ Apri @BotFather su Telegram`** per avviare la chat ufficiale.
+2. Invia il comando `/newbot`, scegli il nome del bot e il suo username.
+3. Incolla il **Bot Token** nel campo apposito del pannello.
+4. Apri la chat con il tuo nuovo bot su Telegram, premi **AVVIA** (o invia un messaggio), e clicca sul pulsante magico **`🔍 Rileva Chat ID Automaticamente`**.
+   *Allod interrogherà Telegram e compilerà il tuo Chat ID in automatico!*
+5. Clicca su **`💬 Invia Messaggio di Prova`** per ricevere subito una notifica di conferma sul telefono.
+
+### 3. Personalizza Meteo e Soglie
+* Nella scheda **Meteo & Resoconto**, imposta la tua città (es. *Roma*, *Milano*, *Napoli*), l'orario di invio del buongiorno (default *08:30*) e la soglia di allarme blackout (default *3 minuti*).
+
+### 4. Messa in Mesh della VPS & Deploy in 1 Comando (All-in-One)
+Poiché il server Allod si trova in casa dietro una rete **CGNAT senza porte pubbliche aperte sul router**, la VPS esterna deve entrare nella rete privata crittografata **NetBird WireGuard Mesh** per poter interrogare lo stato di salute di Allod (`/api/health`).
+
+Allod risolve questo passaggio generando un **singolo comando combinato** che fa tutto in automatico:
+1. Copia una **Setup Key** dalla tua dashboard NetBird (`https://app.netbird.io/setup-keys`) e incollala nel pannello Allod.
+2. Clicca su **`📋 Copia Comando per VPS`**. Il pannello genererà un comando simile a:
+   ```bash
+   curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key <KEY> && curl -fsSL http://100.x.x.x:8080/api/watch/install.sh | sudo bash
+   ```
+3. Connettiti via SSH alla tua VPS esterna e incolla il comando:
+   * Installa NetBird e collega la VPS alla tua rete WireGuard privata.
+   * Scarica il binario `allod-watch` precompilato direttamente dal nodo Allod via tunnel sicuro.
+   * Crea la configurazione `/etc/allod/watch.yaml` con tutti i tuoi parametri già compilati.
+   * Registra e avvia il servizio di sistema systemd.
+   * Invia un ping istantaneo su Telegram per confermarti che la sentinella è attiva!
+
+*(Se la VPS è già collegata alla rete NetBird, basta attivare la spunta corrispondente nel pannello per ottenere il comando semplificato di sola installazione).*
 
 ---
 
@@ -14,9 +52,9 @@ Se a casa salta la corrente o cade la connessione del provider:
 
 ---
 
-## 🤖 Come Configurare il Bot Telegram in 60 Secondi
+## 🤖 Guida Manuale Dettagliata per il Bot Telegram (Opzionale)
 
-Telegram offre un sistema ufficiale, gratuito e sicuro per creare bot senza dover programmare o pagare canoni.
+Se preferisci eseguire l'intera procedura manualmente da terminale:
 
 ### 1. Crea il Bot con @BotFather
 1. Apri Telegram sul tuo smartphone o PC.
