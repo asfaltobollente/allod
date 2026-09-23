@@ -261,6 +261,7 @@ const i18n = {
     speedtest_btn_running: "⏳ Benchmarking...",
     speedtest_btn_repeat: "⚡ Repeat Speedtest",
     speedtest_close: "Close",
+    speedtest_iperf_info: "For advanced terminal benchmarking:",
 
     // Themes & Language Preferences
     settings_pref_title: "Interface Preferences: Language & Theme",
@@ -535,7 +536,7 @@ const i18n = {
     speedtest_ul: "📤 Upload (PC➔Server)",
     speedtest_verdict_title: "🎬 Idoneità Streaming & Prestazioni Media:",
     speedtest_verdict_wait: "In attesa di esecuzione test... Clicca su 'Avvia Test Velocità' per iniziare.",
-    speedtest_iperf_info: "💡 Per test avanzati da terminale:",
+    speedtest_iperf_info: "Per test avanzati da terminale:",
     speedtest_btn_start: "⚡ Avvia Test Velocità",
     speedtest_btn_running: "⏳ Test in corso...",
     speedtest_btn_repeat: "⚡ Ripeti Test Velocità",
