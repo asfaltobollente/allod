@@ -69,7 +69,7 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **`storage`** | **[Btrfs](https://btrfs.readthedocs.io)** + **smartmontools** | Hardware-safe RAID 1, instant snapshots & S.M.A.R.T. health | Native |
 | **`media`** | **[Jellyfin](https://jellyfin.org)** | Personal streaming server for movies, series & music | `8096` |
 | **`network`** | **[NetBird](https://netbird.io)** | Sovereign WireGuard mesh, remote access & zero open router ports (Cloud EU / Self-Hosted) | Mesh only |
-| **`watch`** | **Allod Watchdog** + **[WireGuard](https://www.wireguard.com)** | Encrypted peer heartbeat & federation quorum supervisor | Mesh only |
+| **`watch`** | **Allod Watch Sentinel** + **Telegram** | Remote blackout & recovery alerts, Telegram notifications & daily morning digest with weather | Standalone / Mesh |
 
 ---
 
@@ -85,6 +85,7 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update, hardware telemetry vitals pill, and streamlined navigation. |
 | **Web Panel Auth Gate** | **Funzionante oggi** *(Working Today)* | Dedicated session authentication (`/login`, `/setup`), PBKDF2-SHA256, cryptographically secure memory session tokens, and CLI emergency recovery. |
 | **Family User Self-Service Portal** | **Funzionante oggi** *(Working Today)* | Dedicated family dashboard (`/portal`) with private Samba paths (`\\allod\<user>`), personal app launchpad, and autonomous password change synced via `allod-helperd`. |
+| **External Watch Sentinel** | **Funzionante oggi** *(Working Today)* | Dedicated daemon (<15MB RAM) for cloud VPS/free-tier with instant outage & recovery Telegram alerts, and daily morning digest with weather. |
 | **NetBird Sovereign Mesh** | **Funzionante oggi** *(Working Today)* | Native WireGuard overlay mesh with automated WebRTC NAT traversal, zero open router ports, EU Cloud (Frankfurt) & Self-Hosted sovereign modes. |
 | **Media & Photos Modules** | **In sviluppo** *(In Development)* | Immich standard/full and Jellyfin container orchestration functional; automated mobile client integration in refinement. |
 | **Cloud Module (Nextcloud)** | **In sviluppo** *(In Development)* | Nextcloud 30 with dedicated PostgreSQL 16 Alpine and dynamic secret management; automated WebDAV setup in refinement. |
@@ -464,6 +465,7 @@ Complete documentation according to the official project structure is available 
   * [Your First Allod Node in 15 Minutes](docs/en/tutorial/first-node.md)
 * **How-to Guides**:
   * [Sovereign Remote Access via NetBird Mesh](docs/en/howto/remote-access-hybrid.md) / [🇮🇹 Accesso Remoto Sovrano NetBird](docs/it/howto/accesso-remoto-netbird.md)
+  * [External Watch Sentinel with Telegram & Weather](docs/en/howto/watch-external-sentinel.md) / [🇮🇹 Watch Sentinel Esterna & Telegram](docs/it/howto/watch-sentinella-esterna.md)
   * [Storage Profiles Guide (Nextcloud vs Samba + Immich vs Hybrid)](docs/en/howto/storage-profiles-guide.md) / [🇮🇹 Guida Profili Storage](docs/it/howto/guida-profili-storage.md)
   * [Physical Disk Management & Btrfs RAID 1](docs/en/howto/disk-management.md) / [🇮🇹 Gestione Dischi](docs/it/howto/gestione-dischi.md)
   * [Invite a Friend to your Ring](docs/en/howto/invite-peer.md)

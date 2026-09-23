@@ -1,0 +1,22 @@
+[Unit]
+Description=Allod Watch Sentinel (Remote Monitoring & Telegram Alerts)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/allod
+ExecStart=/usr/local/bin/allod-watch run -c /etc/allod/watch.yaml
+Restart=always
+RestartSec=10
+MemoryMax=64M
+LimitNOFILE=65536
+
+# Hardening
+ProtectSystem=full
+ProtectHome=read-only
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

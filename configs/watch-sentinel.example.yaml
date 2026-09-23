@@ -1,0 +1,36 @@
+# ==============================================================================
+# Allod Watch Sentinel — Configurazione per Server Esterno / Cloud VPS
+# ==============================================================================
+
+# Nodi Allod da monitorare
+nodes:
+  - id: "allod-casa"
+    # Indirizzo WireGuard Mesh (NetBird) o IP del nodo Allod casalingo:
+    url: "http://100.100.64.229:8080/api/health"
+    # Opzionale: eventuale token di protezione
+    token: ""
+
+# Notifiche tramite Bot Telegram
+telegram:
+  enabled: true
+  # Token fornito da @BotFather su Telegram (es: 1234567890:ABCdefGhIjk...)
+  bot_token: "INSERISCI_QUI_IL_TUO_BOT_TOKEN"
+  # Tuo Chat ID (eseguendo: allod-watch get-chat-id oppure tramite @userinfobot)
+  chat_id: "INSERISCI_QUI_IL_TUO_CHAT_ID"
+  # Opzionale: ID del thread se invii i messaggi in un topic di un supergruppo
+  topic_id: 0
+
+# Previsioni meteo incluse nel digest del mattino (Open-Meteo, 100% gratuita senza API key)
+weather:
+  enabled: true
+  city: "Roma" # Inserisci la tua città (es: Milano, Napoli, Bologna, Firenze, ecc.)
+
+# Frequenza di polling e soglia allarmi
+intervals:
+  check_seconds: 60           # Verifica ogni 60 secondi
+  down_threshold_seconds: 180 # Invia allarme dopo 3 minuti di assenza di battiti (3 check falliti)
+
+# Resoconto positivo giornaliero (M5)
+digest:
+  enabled: true
+  time: "08:30" # Orario di invio del buongiorno quotidiano con meteo e stato dischi (HH:MM)
