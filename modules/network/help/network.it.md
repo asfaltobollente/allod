@@ -9,7 +9,7 @@ Il modulo `network` gestisce la connettività sicura da remoto per accedere a Im
 ### `cloud` (NetBird Cloud Europeo — 40 MB RAM Allocata — Consigliato)
 * **Server a Francoforte, Germania**: Conforme al 100% al GDPR europeo e alla sovranità dei dati.
 * **Zero Manutenzione Infrastrutturale**: Si collega al control plane gestito di NetBird con una semplice Setup Key (`NB_SETUP_KEY`).
-* **NAT Traversal WebRTC Automatico**: Connessione istantanea dietro CGNAT, Starlink, reti mobili 4G/5G con zero porte aperte sul router.
+* **NAT Traversal WebRTC Automatico**: Connessione istantanea dietro CGNAT, connessioni satellitari/FWA, reti mobili 4G/5G con zero porte aperte sul router.
 * **Flussi Dati WireGuard P2P Diretti**: Streaming 4K Jellyfin, backup automatico foto Immich e cartelle Samba viaggiano in P2P diretto ad altissima velocità.
 
 ### `selfhosted` (Server di Gestione Sovrano — 40 MB RAM Allocata)

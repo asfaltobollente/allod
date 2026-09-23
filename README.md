@@ -246,7 +246,7 @@ Accessing your home cloud from outside the home usually presents an impossible d
 1. **The Dangerous Route**: Open ports on your home router and expose your server to automated port-scanners, brute-force bots, and zero-day exploits.
 2. **The Commercial Subscription Trap**: Pay monthly SaaS fees to proprietary cloud relays that track your traffic, enforce bandwidth caps, and require central corporate accounts.
 
-Allod solves this by integrating **[NetBird](https://netbird.io)**, the open-source WireGuard overlay mesh (BSD-3 licensed). NetBird combines native kernel WireGuard performance with automated WebRTC (ICE, STUN, TURN) NAT traversal — keeping all incoming router ports closed, bypassing strict Carrier-Grade NAT (CGNAT), Starlink, and 4G/5G mobile carriers, and connecting seamlessly from iOS, Android, macOS, Windows, and Linux.
+Allod solves this by integrating **[NetBird](https://netbird.io)**, the open-source WireGuard overlay mesh (BSD-3 licensed). NetBird combines native kernel WireGuard performance with automated WebRTC (ICE, STUN, TURN) NAT traversal — keeping all incoming router ports closed, bypassing strict Carrier-Grade NAT (CGNAT), satellite/FWA providers, and 4G/5G mobile carriers, and connecting seamlessly from iOS, Android, macOS, Windows, and Linux.
 
 ```text
                ┌─────────────────────────────────────────────────────────┐
@@ -265,7 +265,7 @@ Allod solves this by integrating **[NetBird](https://netbird.io)**, the open-sou
                                             │
                CONTROL PLANE (Signaling)    │    DATA PLANE (P2P WireGuard)
                Zero router ports needed     │    Direct encrypted pipe:
-               Bypasses CGNAT & Starlink    │    High-speed 4K streaming & photos
+               Bypasses CGNAT & ISP firewalls    High-speed 4K streaming & photos
                100% Open-Source BSD-3       │    Native Samba (SMB TCP 445) support!
                                             │
                        ┌────────────────────┴───────────────────┐
@@ -323,12 +323,12 @@ When you leave home, open the Allod Dashboard over WireGuard, toggle the switch 
 
 ---
 
-### 🛰️ Starlink, CGNAT & IPv6 Direct Peering
+### 🛰️ Carrier-Grade NAT (CGNAT) & IPv6 Direct Peering
 
-When using residential internet providers behind **Carrier-Grade NAT (CGNAT)** — such as **Starlink**, cellular 4G/5G, or fixed-wireless access:
+When using residential internet providers behind **Carrier-Grade NAT (CGNAT)** — such as satellite, cellular 4G/5G, or fixed-wireless access (FWA):
 * **Why UPnP Fails**: Routers report `No valid IGD` because the WAN port receives a private `100.64.0.0/10` address rather than a public IPv4. Manual IPv4 port forwarding is similarly blocked upstream by the ISP.
 * **Relayed Fallback**: When both ends are behind symmetric CGNAT, NetBird routes traffic through European public relays, capping throughput to ~10 Mbps with ~90 ms latency.
-* **The IPv6 Solution**: Starlink provides a `/56` public IPv6 delegation natively to every dish. By enabling **DHCPv6 Prefix Delegation (`/56`)** on your router (e.g. UniFi Dream Machine) and SLAAC on your LAN, Allod acquires a global IPv6. NetBird automatically establishes an **uncapped Direct WireGuard P2P connection** over IPv6 with zero open ports! (See [How-to Guide](docs/en/howto/remote-access-hybrid.md)).
+* **The IPv6 Solution**: Modern fiber, satellite, and broadband providers allocate dynamic public IPv6 prefix delegations (e.g. `/56` or `/64` via DHCPv6-PD). By enabling **DHCPv6 Prefix Delegation** on your router/firewall and SLAAC on your LAN, Allod acquires a global IPv6. NetBird automatically establishes an **uncapped Direct WireGuard P2P connection** over IPv6 with zero open ports! (See [How-to Guide](docs/en/howto/remote-access-hybrid.md)).
 
 ---
 
