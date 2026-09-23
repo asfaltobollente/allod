@@ -86,13 +86,8 @@
           <p class="subtitle" id="page-subtitle">System state, hardware resources, and security boundary</p>
         </div>
         <div class="topbar-actions">
-          <!-- Language Selector -->
-          <div class="lang-selector" style="display:flex; align-items:center; background:rgba(30,41,59,0.8); border:1px solid var(--card-border); border-radius:6px; padding:2px; margin-right:4px;">
-            <button class="btn-lang active" id="lang-btn-en" onclick="setLanguage('en')" style="padding:3px 8px; font-size:11px; font-weight:600; border:none; border-radius:4px; cursor:pointer; background:var(--primary); color:var(--primary-text, #0f172a);">🇬🇧 EN</button>
-            <button class="btn-lang" id="lang-btn-it" onclick="setLanguage('it')" style="padding:3px 8px; font-size:11px; font-weight:600; border:none; border-radius:4px; cursor:pointer; background:transparent; color:var(--text-muted);">🇮🇹 IT</button>
-          </div>
           <!-- Theme Quick Button -->
-          <button class="btn btn-outline-secondary" onclick="openThemeSelector()" id="btn-topbar-theme" style="padding:4px 10px; font-size:11.5px; margin-right:6px;" title="Cambia tema interfaccia">
+          <button class="btn btn-outline-secondary" onclick="openThemeSelector()" id="btn-topbar-theme" style="padding:4px 10px; font-size:11.5px; margin-right:4px;" title="Cambia tema interfaccia">
             <span class="icon">🎨</span> <span id="topbar-theme-name" data-i18n="btn_theme">Tema</span>
           </button>
           <!-- Live Vitals Pill (Server Health) -->
@@ -103,18 +98,15 @@
             <span class="vitals-divider">|</span>
             <span class="vitals-metric" id="topbar-uptime-text">⏱️ <span id="topbar-uptime-val">--</span></span>
           </div>
+          <!-- LAN Speedtest -->
           <button class="btn btn-outline-primary" onclick="openSpeedtestModal()" title="Run LAN/Wi-Fi speedtest and verify 4K Jellyfin streaming">
             <span class="icon">⚡</span> <span data-i18n="btn_speedtest">LAN Speedtest</span>
           </button>
-          <button class="btn btn-outline-info" onclick="openSweeperModal()" title="Scan and remove ghost containers and unused image layers">
-            <span class="icon">🧹</span> <span data-i18n="btn_sweeper">Podman Sweeper</span>
-          </button>
-          <button class="btn btn-outline-warning" id="btn-systemd-reload" onclick="executeSystemdReload()" title="Regenerate Quadlet files and run systemctl --user daemon-reload">
-            <span class="icon">⚙️</span> <span data-i18n="btn_systemd_reload">Systemd Reload</span>
-          </button>
+          <!-- Refresh -->
           <button class="btn btn-secondary" onclick="refreshData()">
             <span class="icon">🔄</span> <span data-i18n="btn_refresh">Refresh</span>
           </button>
+          <!-- Helper Status -->
           <div class="helper-status" id="helper-status-pill" onclick="openHelperModal()" style="cursor:pointer;" title="Click to view Root Helper status and restart instructions">
             <span class="status-indicator"></span> <span data-i18n="helper_connected">Root Helper: Connected</span>
           </div>
@@ -374,9 +366,19 @@ systemctl --user enable --now allod-panel</pre>
 
       <!-- TAB 2: MODULES -->
       <section id="tab-modules" class="tab-pane">
-        <div class="tab-header mb-3">
-          <h2 data-i18n="modules_header_title">Module & Resource Management</h2>
-          <p class="text-muted" data-i18n="modules_header_desc">Each module adjusts resource consumption based on the selected level with instant preflight checks.</p>
+        <div class="tab-header mb-3" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 data-i18n="modules_header_title">Module & Resource Management</h2>
+            <p class="text-muted" data-i18n="modules_header_desc">Each module adjusts resource consumption based on the selected level with instant preflight checks.</p>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-outline-warning btn-systemd-reload" onclick="executeSystemdReload()" title="Regenerate Quadlet files and run systemctl --user daemon-reload">
+              <span class="icon">⚙️</span> <span data-i18n="btn_systemd_reload">Systemd Reload</span>
+            </button>
+            <button class="btn btn-outline-info" onclick="openSweeperModal()" title="Scan and remove ghost containers and unused image layers">
+              <span class="icon">🧹</span> <span data-i18n="btn_sweeper">Podman Sweeper</span>
+            </button>
+          </div>
         </div>
 
         <div class="modules-sections-container" id="modules-grid">
@@ -520,7 +522,7 @@ systemctl --user enable --now allod-panel</pre>
 
             <div style="display:flex; flex-direction:column; gap:10px;">
               <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button class="btn btn-outline-warning" onclick="executeSystemdReload()" style="flex:1;">
+                <button class="btn btn-outline-warning btn-systemd-reload" id="btn-systemd-reload" onclick="executeSystemdReload()" style="flex:1;">
                   <span class="icon">⚙️</span> <span data-i18n="btn_systemd_reload">Systemd Reload</span>
                 </button>
                 <button class="btn btn-outline-secondary" onclick="runResetFailed()" style="flex:1;">
@@ -609,18 +611,42 @@ sudo systemctl enable --now allod-helperd</pre>
 Ready for operations. Click any maintenance action above to see real-time output.</div>
         </div>
 
-        <!-- Card 4: Aspetto & Tema (Theme & Appearance) - Collapsible -->
+        <!-- Card 4: Preferenze Interfaccia: Lingua & Tema -->
         <div class="card" id="settings-theme-card" style="margin-top:16px;">
-          <div class="card-header theme-collapse-header" onclick="toggleThemeCollapse()" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; cursor:pointer; user-select:none;" title="Clicca per espandere o comprimere">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
             <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
-              <span>🎨</span> <span data-i18n="settings_theme_title">Aspetto & Tema dell'Interfaccia</span>
+              <span>🎨</span> <span data-i18n="settings_pref_title">Preferenze Interfaccia: Lingua &amp; Tema</span>
             </h3>
-            <div style="display:flex; align-items:center; gap:12px;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:12px; color:var(--text-muted);" data-i18n="settings_theme_active_label">Tema Attivo:</span>
-                <span class="badge badge-info" id="current-theme-badge">Default Slate</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:12px; color:var(--text-muted);" data-i18n="settings_theme_active_label">Tema Attivo:</span>
+              <span class="badge badge-info" id="current-theme-badge">Default Slate</span>
+            </div>
+          </div>
+
+          <!-- Language Selector Row (Dedicated inside Settings) -->
+          <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.25); border:1px solid var(--card-border); border-radius:8px; padding:12px 16px; flex-wrap:wrap; gap:12px;">
+            <div>
+              <strong style="font-size:13px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                <span>🌐</span> <span data-i18n="settings_lang_title">Lingua dell'Interfaccia</span>
+              </strong>
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;" data-i18n="settings_lang_sub">
+                Seleziona la lingua per tutti i testi, grafici e messaggi del pannello.
               </div>
-              <span id="theme-chevron" class="theme-chevron" title="Espandi / Comprimi">▼</span>
+            </div>
+            <div class="lang-selector" style="display:flex; align-items:center; background:rgba(30,41,59,0.8); border:1px solid var(--card-border); border-radius:6px; padding:2px;">
+              <button class="btn-lang active" id="lang-btn-en" onclick="setLanguage('en')" style="padding:5px 12px; font-size:11.5px; font-weight:600; border:none; border-radius:4px; cursor:pointer; background:var(--primary); color:var(--primary-text, #0f172a);">🇬🇧 English</button>
+              <button class="btn-lang" id="lang-btn-it" onclick="setLanguage('it')" style="padding:5px 12px; font-size:11.5px; font-weight:600; border:none; border-radius:4px; cursor:pointer; background:transparent; color:var(--text-muted);">🇮🇹 Italiano</button>
+            </div>
+          </div>
+
+          <!-- Theme Collapse Bar -->
+          <div class="theme-collapse-header" onclick="toggleThemeCollapse()" style="margin-top:14px; padding:10px 14px; background:rgba(255,255,255,0.02); border:1px solid var(--card-border); border-radius:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none;" title="Clicca per visualizzare o cambiare tema">
+            <span style="font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:6px;">
+              <span>🎭</span> <span data-i18n="settings_theme_title">Aspetto &amp; Tema Grafico</span>
+            </span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:11px; color:var(--text-muted);">Scegli stile</span>
+              <span id="theme-chevron" class="theme-chevron">▼</span>
             </div>
           </div>
 
