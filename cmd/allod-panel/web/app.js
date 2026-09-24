@@ -114,6 +114,7 @@ async function refreshData() {
     renderRing();
     renderResilience();
     checkSetupStatus();
+    loadWoLDevices();
   } catch (err) {
     showAlert('Errore di comunicazione con il backend Allod: ' + err.message, 'danger');
   }
@@ -3908,5 +3909,339 @@ window.saveWatchConfig = saveWatchConfig;
 window.saveWatchConfigAndAdvance = saveWatchConfigAndAdvance;
 window.updateWatchDeployCommand = updateWatchDeployCommand;
 window.copyWatchDeployCommand = copyWatchDeployCommand;
+
+// ==========================================
+// --- WAKE-ON-LAN (WoL) IMPLEMENTATION ---
+// ==========================================
+let wolDevicesList = [];
+
+function openWoLModal() {
+  const modal = document.getElementById('wol-modal');
+  if (modal) modal.classList.remove('hidden');
+  loadWoLDevices();
+}
+
+function closeWoLModal() {
+  const modal = document.getElementById('wol-modal');
+  if (modal) modal.classList.add('hidden');
+  resetWoLForm();
+  hideWoLFeedback();
+}
+
+function hideWoLFeedback() {
+  const fb = document.getElementById('wol-feedback-banner');
+  if (fb) {
+    fb.className = 'alert-banner hidden';
+    fb.innerHTML = '';
+  }
+}
+
+function showWoLFeedback(msg, type = 'success') {
+  const fb = document.getElementById('wol-feedback-banner');
+  if (fb) {
+    fb.className = `alert-banner alert-${type}`;
+    fb.innerHTML = msg;
+    fb.classList.remove('hidden');
+  }
+  if (typeof showAlert === 'function' && type === 'danger') {
+    showAlert(msg, type);
+  }
+}
+
+async function loadWoLDevices() {
+  try {
+    const res = await fetch('/api/wol/devices');
+    if (!res.ok) {
+      if (res.status === 401) return;
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    wolDevicesList = (json && json.data) ? json.data : [];
+    renderWoLDevices();
+  } catch (err) {
+    console.error('Error loading WoL devices:', err);
+  }
+}
+
+function renderWoLDevices() {
+  const tbody = document.getElementById('wol-devices-table-body');
+  const chipsContainer = document.getElementById('launchpad-wol-chips');
+
+  // 1. Render Table in Modal
+  if (tbody) {
+    if (!wolDevicesList || wolDevicesList.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">
+            ${t('wol_no_devices', 'Nessun dispositivo Wake-on-LAN salvato. Aggiungi il tuo PC qui sotto!')}
+          </td>
+        </tr>`;
+    } else {
+      tbody.innerHTML = wolDevicesList.map(d => {
+        let lastWake = t('wol_last_wake_never', 'Mai');
+        if (d.last_wake_at) {
+          const dt = new Date(d.last_wake_at);
+          lastWake = dt.toLocaleString();
+        }
+        return `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:10px 12px; font-weight:600; color:var(--text-main);">
+              🖥️ ${escapeHtml(d.name)}
+            </td>
+            <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace; color:#38bdf8;">
+              ${escapeHtml(d.mac_address)}
+            </td>
+            <td style="padding:10px 12px; color:var(--text-muted); font-size:11.5px;">
+              ${escapeHtml(d.broadcast_ip || '255.255.255.255')}:${d.port || 9}
+            </td>
+            <td style="padding:10px 12px; color:var(--text-muted); font-size:11.5px;">
+              ${lastWake}
+            </td>
+            <td style="padding:10px 12px; text-align:right;">
+              <div style="display:flex; justify-content:flex-end; gap:6px;">
+                <button class="btn btn-sm btn-warning" id="btn-wol-wake-${d.id}" onclick="wakeDevice(${d.id}, '${escapeHtml(d.mac_address)}', '${escapeHtml(d.name)}')" style="font-weight:700; padding:4px 10px; font-size:11.5px;">
+                  ⚡ ${t('wol_btn_wake_now', 'Accendi')}
+                </button>
+                <button class="btn btn-sm btn-outline-info" onclick="editWoLDevice(${d.id})" title="Modifica" style="padding:4px 8px; font-size:11px;">
+                  ✏️
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteWoLDevice(${d.id})" title="Elimina" style="padding:4px 8px; font-size:11px;">
+                  🗑️
+                </button>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+  }
+
+  // 2. Render Quick Chips in Launchpad
+  if (chipsContainer) {
+    if (!wolDevicesList || wolDevicesList.length === 0) {
+      chipsContainer.innerHTML = `
+        <div style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px;">
+          <span>💡 Salva il MAC address del tuo PC principale per accenderlo con 1 clic:</span>
+          <button class="btn btn-sm btn-outline-warning" onclick="openWoLModal()" style="font-size:11.5px; padding:2px 8px;">
+            + Salva PC
+          </button>
+        </div>`;
+    } else {
+      chipsContainer.innerHTML = wolDevicesList.map(d => {
+        let lastWakeStr = '';
+        if (d.last_wake_at) {
+          const dt = new Date(d.last_wake_at);
+          lastWakeStr = `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">(ultimo: ${dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})</span>`;
+        }
+        return `
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:rgba(15,23,42,0.8); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:8px 12px; min-width:240px; flex:1;">
+            <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+              <span style="font-size:18px;">🖥️</span>
+              <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                <div style="font-size:12.5px; font-weight:700; color:var(--text-main);">${escapeHtml(d.name)}</div>
+                <div style="font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--text-muted);">${escapeHtml(d.mac_address)} ${lastWakeStr}</div>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-warning" id="btn-quick-wake-${d.id}" onclick="wakeDevice(${d.id}, '${escapeHtml(d.mac_address)}', '${escapeHtml(d.name)}')" style="font-weight:700; padding:6px 12px; font-size:12px; white-space:nowrap; box-shadow:0 2px 8px rgba(245,158,11,0.25);">
+              ⚡ ${t('wol_btn_wake_now', 'Accendi')}
+            </button>
+          </div>`;
+      }).join('');
+    }
+  }
+}
+
+async function wakeDevice(id, mac, name) {
+  const btn1 = document.getElementById(`btn-wol-wake-${id}`);
+  const btn2 = document.getElementById(`btn-quick-wake-${id}`);
+  const origText1 = btn1 ? btn1.innerHTML : '';
+  const origText2 = btn2 ? btn2.innerHTML : '';
+
+  if (btn1) { btn1.disabled = true; btn1.innerHTML = '⏳ ' + t('wol_btn_wake_sending', 'Invio...'); }
+  if (btn2) { btn2.disabled = true; btn2.innerHTML = '⏳ ' + t('wol_btn_wake_sending', 'Invio...'); }
+
+  try {
+    const payload = id ? { id: Number(id) } : { mac_address: mac };
+    const res = await fetch('/api/wol/wake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const json = await res.json();
+    if (!res.ok || json.status !== 'ok') {
+      throw new Error(json.error || `HTTP ${res.status}`);
+    }
+
+    const ifaces = (json.data && json.data.interfaces) ? json.data.interfaces.join(', ') : 'LAN';
+    const targetName = name || mac;
+    const msg = `⚡ <b>Magic Packet inviato con successo a ${escapeHtml(targetName)}!</b><br><small style="opacity:0.9;">MAC: ${escapeHtml(json.data.mac_address)} &bull; Destinazione: ${escapeHtml(json.data.broadcast_ip)}:${json.data.port} &bull; Rete: ${escapeHtml(ifaces)}</small>`;
+
+    showWoLFeedback(msg, 'success');
+    if (typeof showAlert === 'function') {
+      showAlert(`✓ Magic packet inviato a ${targetName}!`, 'success');
+    }
+
+    // Refresh devices to update last_wake_at timestamp
+    loadWoLDevices();
+  } catch (err) {
+    const errMsg = `❌ Errore durante l'accensione: ${err.message}`;
+    showWoLFeedback(errMsg, 'danger');
+  } finally {
+    if (btn1) { btn1.disabled = false; btn1.innerHTML = origText1; }
+    if (btn2) { btn2.disabled = false; btn2.innerHTML = origText2; }
+  }
+}
+
+async function wakeAdhocMAC() {
+  const input = document.getElementById('wol-adhoc-mac');
+  const btn = document.getElementById('btn-wake-adhoc');
+  if (!input) return;
+
+  const mac = input.value.trim();
+  if (!mac) {
+    showWoLFeedback('Inserisci un indirizzo MAC valido (es. 00:D8:61:33:0E:1F)', 'warning');
+    input.focus();
+    return;
+  }
+
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ ' + t('wol_btn_wake_sending', 'Invio...'); }
+
+  try {
+    const res = await fetch('/api/wol/wake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mac_address: mac })
+    });
+
+    const json = await res.json();
+    if (!res.ok || json.status !== 'ok') {
+      throw new Error(json.error || `HTTP ${res.status}`);
+    }
+
+    const ifaces = (json.data && json.data.interfaces) ? json.data.interfaces.join(', ') : 'LAN';
+    const msg = `⚡ <b>Magic Packet inviato con successo a ${escapeHtml(json.data.mac_address)}!</b><br><small style="opacity:0.9;">Destinazione: ${escapeHtml(json.data.broadcast_ip)}:${json.data.port} &bull; Rete: ${escapeHtml(ifaces)}</small>`;
+    showWoLFeedback(msg, 'success');
+    if (typeof showAlert === 'function') {
+      showAlert(`✓ Magic packet inviato a ${mac}!`, 'success');
+    }
+  } catch (err) {
+    showWoLFeedback(`❌ Errore invio Magic Packet: ${err.message}`, 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+  }
+}
+
+async function handleWoLSave(e) {
+  if (e) e.preventDefault();
+  const idInput = document.getElementById('wol-device-id');
+  const nameInput = document.getElementById('wol-device-name');
+  const macInput = document.getElementById('wol-device-mac');
+  const bcastInput = document.getElementById('wol-device-broadcast');
+  const portInput = document.getElementById('wol-device-port');
+
+  const id = idInput && idInput.value ? Number(idInput.value) : 0;
+  const name = nameInput ? nameInput.value.trim() : '';
+  const mac = macInput ? macInput.value.trim() : '';
+  const bcast = bcastInput ? bcastInput.value.trim() : '255.255.255.255';
+  const port = portInput && portInput.value ? Number(portInput.value) : 9;
+
+  if (!name || !mac) {
+    showWoLFeedback('Inserisci sia il nome che il MAC address.', 'warning');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/wol/devices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: id,
+        name: name,
+        mac_address: mac,
+        broadcast_ip: bcast || '255.255.255.255',
+        port: port || 9
+      })
+    });
+
+    const json = await res.json();
+    if (!res.ok || json.status !== 'ok') {
+      throw new Error(json.error || `HTTP ${res.status}`);
+    }
+
+    showWoLFeedback(`✓ Dispositivo <b>${escapeHtml(name)}</b> salvato con successo!`, 'success');
+    resetWoLForm();
+    await loadWoLDevices();
+  } catch (err) {
+    showWoLFeedback(`❌ Errore durante il salvataggio: ${err.message}`, 'danger');
+  }
+}
+
+function editWoLDevice(id) {
+  const d = wolDevicesList.find(x => x.id === id);
+  if (!d) return;
+
+  const idInput = document.getElementById('wol-device-id');
+  const nameInput = document.getElementById('wol-device-name');
+  const macInput = document.getElementById('wol-device-mac');
+  const bcastInput = document.getElementById('wol-device-broadcast');
+  const portInput = document.getElementById('wol-device-port');
+  const saveBtn = document.getElementById('btn-save-wol-device');
+
+  if (idInput) idInput.value = d.id;
+  if (nameInput) nameInput.value = d.name;
+  if (macInput) macInput.value = d.mac_address;
+  if (bcastInput) bcastInput.value = d.broadcast_ip || '255.255.255.255';
+  if (portInput) portInput.value = d.port || 9;
+  if (saveBtn) saveBtn.innerHTML = '💾 ' + t('wol_btn_save', 'Salva Modifiche');
+
+  if (nameInput) nameInput.focus();
+}
+
+function resetWoLForm() {
+  const form = document.getElementById('wol-add-form');
+  if (form) form.reset();
+  const idInput = document.getElementById('wol-device-id');
+  if (idInput) idInput.value = '';
+  const portInput = document.getElementById('wol-device-port');
+  if (portInput) portInput.value = 9;
+  const saveBtn = document.getElementById('btn-save-wol-device');
+  if (saveBtn) saveBtn.innerHTML = '💾 ' + t('wol_btn_save', 'Salva Dispositivo');
+}
+
+async function deleteWoLDevice(id) {
+  const d = wolDevicesList.find(x => x.id === id);
+  const name = d ? d.name : `#${id}`;
+  if (!confirm(`${t('wol_confirm_delete', 'Sei sicuro di voler rimuovere questo dispositivo?')}\n(${name})`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/wol/devices?id=${id}`, {
+      method: 'DELETE'
+    });
+    const json = await res.json();
+    if (!res.ok || json.status !== 'ok') {
+      throw new Error(json.error || `HTTP ${res.status}`);
+    }
+
+    showWoLFeedback(`✓ Dispositivo <b>${escapeHtml(name)}</b> eliminato.`, 'info');
+    await loadWoLDevices();
+  } catch (err) {
+    showWoLFeedback(`❌ Errore durante l'eliminazione: ${err.message}`, 'danger');
+  }
+}
+
+// WoL Window Bindings
+window.openWoLModal = openWoLModal;
+window.closeWoLModal = closeWoLModal;
+window.loadWoLDevices = loadWoLDevices;
+window.renderWoLDevices = renderWoLDevices;
+window.wakeDevice = wakeDevice;
+window.wakeAdhocMAC = wakeAdhocMAC;
+window.handleWoLSave = handleWoLSave;
+window.editWoLDevice = editWoLDevice;
+window.resetWoLForm = resetWoLForm;
+window.deleteWoLDevice = deleteWoLDevice;
 
 

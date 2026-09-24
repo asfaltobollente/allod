@@ -153,6 +153,9 @@
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-sm btn-outline-warning" onclick="openWoLModal()" id="btn-open-wol-modal" style="padding:4px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-color:#f59e0b; color:#f59e0b;" title="Accendi PC o dispositivi locali tramite Wake-on-LAN">
+              <span>⚡</span> <span data-i18n="wol_btn_open">Wake-on-LAN</span>
+            </button>
             <button class="btn btn-sm btn-outline-primary" onclick="openFamilyModal()" id="btn-open-family-modal" style="padding:4px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-color:var(--primary); color:var(--primary);">
               <span>👥</span> <span data-i18n="btn_family_hub">Membri Famiglia & Triade</span>
             </button>
@@ -170,6 +173,27 @@
 
         <div class="launchpad-grid" id="launchpad-grid">
           <!-- Rendered dynamically by JS -->
+        </div>
+
+        <!-- Quick WoL Bar in Launchpad -->
+        <div id="launchpad-wol-section" class="card" style="margin-top:20px; background:linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9)); border:1px solid rgba(245, 158, 11, 0.3);">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:22px;">⚡</span>
+              <div>
+                <h4 style="margin:0; font-size:14px; font-weight:700; color:var(--text-main);" data-i18n="wol_card_title">⚡ Wake-on-LAN</h4>
+                <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);" data-i18n="wol_card_desc">Accendi il tuo computer principale o altre workstation con un solo clic</p>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button class="btn btn-sm btn-outline-warning" onclick="openWoLModal()" style="font-size:12px; font-weight:600; padding:4px 10px;">
+                ⚙️ <span data-i18n="wol_title">Gestisci Dispositivi</span>
+              </button>
+            </div>
+          </div>
+          <div id="launchpad-wol-chips" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:14px;">
+            <!-- Rendered by renderWoLDevices() -->
+          </div>
         </div>
       </section>
 
@@ -551,6 +575,9 @@ systemctl --user enable --now allod-panel</pre>
               <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <button class="btn btn-outline-primary" onclick="openWatchSentinelModal()" style="flex:1;">
                   <span class="icon">🛡️</span> <span data-i18n="btn_configure_watch_sentinel">Configura Sentinella & Bot</span>
+                </button>
+                <button class="btn btn-outline-warning" onclick="openWoLModal()" style="flex:1;">
+                  <span class="icon">⚡</span> <span data-i18n="wol_btn_open">Wake-on-LAN</span>
                 </button>
               </div>
             </div>
@@ -1626,6 +1653,108 @@ sudo systemctl enable --now allod-helperd</pre>
           💾 <span data-i18n="watch_btn_save_config">Salva Impostazioni Sentinella</span>
         </button>
         <button type="button" class="btn btn-secondary" onclick="closeWatchSentinelModal()" data-i18n="sweeper_close">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WAKE-ON-LAN (WoL) MODAL -->
+  <div id="wol-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width: 780px; width: 95%;">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:24px;">⚡</span>
+          <div>
+            <h3 style="margin:0; font-size:16px;" data-i18n="wol_title">Wake-on-LAN (WoL)</h3>
+            <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);" data-i18n="wol_subtitle">Accendi PC e dispositivi della rete locale via Magic Packet UDP</p>
+          </div>
+        </div>
+        <button class="modal-close" onclick="closeWoLModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="max-height: 75vh; overflow-y: auto; padding: 20px;">
+        <!-- Status Notification Box -->
+        <div id="wol-feedback-banner" class="alert-banner hidden" style="margin-bottom: 16px;"></div>
+
+        <!-- Section 1: Saved Devices Table -->
+        <div style="margin-bottom: 24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+            <h4 style="margin:0; font-size:14px; font-weight:700; color:var(--text-main);" data-i18n="wol_card_title">⚡ Dispositivi Salvati</h4>
+            <button class="btn btn-sm btn-outline-secondary" onclick="loadWoLDevices()" style="padding:2px 8px; font-size:11px;">
+              🔄 <span data-i18n="btn_refresh">Aggiorna</span>
+            </button>
+          </div>
+
+          <div style="background:var(--bg-main, #0f172a); border:1px solid var(--card-border); border-radius:8px; overflow:hidden;">
+            <table class="data-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+              <thead>
+                <tr style="background:rgba(255,255,255,0.03); border-bottom:1px solid var(--card-border); text-align:left;">
+                  <th style="padding:10px 12px;" data-i18n="wol_th_name">Nome Computer</th>
+                  <th style="padding:10px 12px;" data-i18n="wol_th_mac">Indirizzo MAC</th>
+                  <th style="padding:10px 12px;" data-i18n="wol_th_broadcast">Broadcast</th>
+                  <th style="padding:10px 12px;" data-i18n="wol_th_last_wake">Ultima Accensione</th>
+                  <th style="padding:10px 12px; text-align:right;" data-i18n="wol_th_actions">Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="wol-devices-table-body">
+                <tr>
+                  <td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);" data-i18n="wol_no_devices">
+                    Nessun dispositivo Wake-on-LAN salvato. Aggiungi il tuo PC qui sotto!
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 2: Form to Add/Edit Device -->
+        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--card-border); border-radius:8px; padding:16px; margin-bottom: 20px;">
+          <h4 style="margin:0 0 12px 0; font-size:13px; font-weight:700; color:var(--text-main);" data-i18n="wol_form_add_title">Aggiungi / Salva Dispositivo LAN</h4>
+          <form id="wol-add-form" onsubmit="handleWoLSave(event)">
+            <input type="hidden" id="wol-device-id" value="" />
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:12px;">
+              <div class="form-group">
+                <label for="wol-device-name" style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;" data-i18n="wol_name_label">Nome Computer:</label>
+                <input type="text" id="wol-device-name" class="form-control" placeholder="es. PC Principale, Computer Studio" required />
+              </div>
+              <div class="form-group">
+                <label for="wol-device-mac" style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;" data-i18n="wol_mac_label">Indirizzo MAC:</label>
+                <input type="text" id="wol-device-mac" class="form-control" placeholder="es. 00:D8:61:33:0E:1F" pattern="^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^[0-9A-Fa-f]{12}$" title="Formato esadecimale a 6 coppie (es. 00:11:22:33:44:55)" required />
+              </div>
+              <div class="form-group">
+                <label for="wol-device-broadcast" style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;" data-i18n="wol_bcast_label">IP Broadcast (Opzionale):</label>
+                <input type="text" id="wol-device-broadcast" class="form-control" placeholder="255.255.255.255" />
+              </div>
+              <div class="form-group">
+                <label for="wol-device-port" style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;" data-i18n="wol_port_label">Porta UDP (Predefinita: 9):</label>
+                <input type="number" id="wol-device-port" class="form-control" placeholder="9" min="1" max="65535" value="9" />
+              </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+              <button type="button" class="btn btn-sm btn-secondary" onclick="resetWoLForm()" data-i18n="btn_cancel">Annulla</button>
+              <button type="submit" class="btn btn-sm btn-primary" id="btn-save-wol-device">
+                💾 <span data-i18n="wol_btn_save">Salva Dispositivo</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Section 3: Ad-hoc Quick Wake by MAC (Without Saving) -->
+        <div style="background:rgba(245, 158, 11, 0.05); border:1px solid rgba(245, 158, 11, 0.2); border-radius:8px; padding:14px;">
+          <h4 style="margin:0 0 6px 0; font-size:13px; font-weight:700; color:#f59e0b;" data-i18n="wol_adhoc_title">Accensione Rapida per MAC (Senza Salvare)</h4>
+          <p style="margin:0 0 10px 0; font-size:11.5px; color:var(--text-muted);" data-i18n="wol_adhoc_desc">
+            Invia un Magic Packet istantaneo direttamente a qualsiasi MAC address della rete locale:
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="text" id="wol-adhoc-mac" class="form-control" style="flex:1; min-width:200px;" placeholder="es. 00:D8:61:33:0E:1F" />
+            <button class="btn btn-warning" onclick="wakeAdhocMAC()" id="btn-wake-adhoc" style="font-weight:600; padding:6px 14px; white-space:nowrap;">
+              ⚡ <span data-i18n="wol_btn_wake_adhoc">Invia Magic Packet</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display:flex; justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeWoLModal()" data-i18n="sweeper_close">Chiudi</button>
       </div>
     </div>
   </div>

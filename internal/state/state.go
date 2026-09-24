@@ -55,6 +55,16 @@ type SentinelConfigRecord struct {
 	UpdatedAt            time.Time `json:"updated_at"`
 }
 
+type WoLDevice struct {
+	ID          int64      `json:"id"`
+	Name        string     `json:"name"`
+	MACAddress  string     `json:"mac_address"`
+	BroadcastIP string     `json:"broadcast_ip"`
+	Port        int        `json:"port"`
+	CreatedAt   time.Time  `json:"created_at"`
+	LastWakeAt  *time.Time `json:"last_wake_at,omitempty"`
+}
+
 type Store struct {
 	db *sql.DB
 }
@@ -116,6 +126,16 @@ func Open(dbPath string) (*Store, error) {
 		down_threshold_seconds INTEGER DEFAULT 180,
 		vps_setup_key TEXT DEFAULT '',
 		updated_at DATETIME NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS wol_devices (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		mac_address TEXT NOT NULL,
+		broadcast_ip TEXT DEFAULT '255.255.255.255',
+		port INTEGER DEFAULT 9,
+		created_at DATETIME NOT NULL,
+		last_wake_at DATETIME
 	);
 	`
 	if _, err := db.Exec(schema); err != nil {
@@ -576,3 +596,120 @@ func (s *Store) SaveSentinelConfig(cfg *SentinelConfigRecord) error {
 	_, err := s.db.Exec(query, cfg.TelegramBotToken, cfg.TelegramChatID, cfg.WeatherCity, cfg.DigestTime, cfg.DownThresholdSeconds, cfg.VPSSetupKey, now.Format(time.RFC3339))
 	return err
 }
+
+// --- Wake-on-LAN (WoL) Methods ---
+
+// ListWoLDevices returns all saved WoL devices ordered by ID ascending.
+func (s *Store) ListWoLDevices() ([]WoLDevice, error) {
+	query := `
+	SELECT id, name, mac_address, broadcast_ip, port, created_at, last_wake_at
+	FROM wol_devices ORDER BY id ASC
+	`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var devices []WoLDevice
+	for rows.Next() {
+		var d WoLDevice
+		var createdStr string
+		var lastWakeStr sql.NullString
+		if err := rows.Scan(&d.ID, &d.Name, &d.MACAddress, &d.BroadcastIP, &d.Port, &createdStr, &lastWakeStr); err != nil {
+			return nil, err
+		}
+		d.CreatedAt, _ = time.Parse(time.RFC3339, createdStr)
+		if lastWakeStr.Valid && lastWakeStr.String != "" {
+			t, _ := time.Parse(time.RFC3339, lastWakeStr.String)
+			d.LastWakeAt = &t
+		}
+		devices = append(devices, d)
+	}
+	return devices, nil
+}
+
+// GetWoLDevice fetches a single WoL device by its primary key ID.
+func (s *Store) GetWoLDevice(id int64) (*WoLDevice, error) {
+	query := `
+	SELECT id, name, mac_address, broadcast_ip, port, created_at, last_wake_at
+	FROM wol_devices WHERE id = ?
+	`
+	row := s.db.QueryRow(query, id)
+	var d WoLDevice
+	var createdStr string
+	var lastWakeStr sql.NullString
+	err := row.Scan(&d.ID, &d.Name, &d.MACAddress, &d.BroadcastIP, &d.Port, &createdStr, &lastWakeStr)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	d.CreatedAt, _ = time.Parse(time.RFC3339, createdStr)
+	if lastWakeStr.Valid && lastWakeStr.String != "" {
+		t, _ := time.Parse(time.RFC3339, lastWakeStr.String)
+		d.LastWakeAt = &t
+	}
+	return &d, nil
+}
+
+// SaveWoLDevice inserts a new WoL device (if ID == 0) or updates an existing device.
+func (s *Store) SaveWoLDevice(d *WoLDevice) error {
+	if d == nil {
+		return fmt.Errorf("dispositivo WoL nullo")
+	}
+	d.Name = strings.TrimSpace(d.Name)
+	d.MACAddress = strings.TrimSpace(d.MACAddress)
+	if d.Name == "" {
+		return fmt.Errorf("nome dispositivo obbligatorio")
+	}
+	if d.MACAddress == "" {
+		return fmt.Errorf("indirizzo MAC obbligatorio")
+	}
+	if strings.TrimSpace(d.BroadcastIP) == "" {
+		d.BroadcastIP = "255.255.255.255"
+	}
+	if d.Port <= 0 {
+		d.Port = 9
+	}
+
+	now := time.Now()
+	if d.ID == 0 {
+		d.CreatedAt = now
+		query := `
+		INSERT INTO wol_devices (name, mac_address, broadcast_ip, port, created_at)
+		VALUES (?, ?, ?, ?, ?)
+		`
+		res, err := s.db.Exec(query, d.Name, d.MACAddress, d.BroadcastIP, d.Port, now.Format(time.RFC3339))
+		if err != nil {
+			return err
+		}
+		id, _ := res.LastInsertId()
+		d.ID = id
+		return nil
+	}
+
+	query := `
+	UPDATE wol_devices SET
+		name = ?, mac_address = ?, broadcast_ip = ?, port = ?
+	WHERE id = ?
+	`
+	_, err := s.db.Exec(query, d.Name, d.MACAddress, d.BroadcastIP, d.Port, d.ID)
+	return err
+}
+
+// DeleteWoLDevice removes a WoL device by its ID.
+func (s *Store) DeleteWoLDevice(id int64) error {
+	_, err := s.db.Exec("DELETE FROM wol_devices WHERE id = ?", id)
+	return err
+}
+
+// RecordWoLWake updates the last_wake_at timestamp to the current time.
+func (s *Store) RecordWoLWake(id int64) error {
+	now := time.Now().Format(time.RFC3339)
+	query := `UPDATE wol_devices SET last_wake_at = ? WHERE id = ?`
+	_, err := s.db.Exec(query, now, id)
+	return err
+}
+

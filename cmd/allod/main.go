@@ -26,6 +26,7 @@ import (
 	"github.com/asfaltobollente/allod/internal/sbom"
 	"github.com/asfaltobollente/allod/internal/state"
 	"github.com/asfaltobollente/allod/internal/version"
+	"github.com/asfaltobollente/allod/internal/wol"
 )
 
 var (
@@ -39,6 +40,8 @@ var (
 	storageInitMode  string
 	storageInitMount string
 	storageInitForce bool
+	wolBroadcast     string
+	wolPort          int
 )
 
 var rootCmd = &cobra.Command{
@@ -1178,6 +1181,220 @@ var adminPasswordResetCmd = &cobra.Command{
 	},
 }
 
+var wolCmd = &cobra.Command{
+	Use:   "wol",
+	Short: "Gestione e invio comandi Wake-on-LAN per computer di rete",
+}
+
+var wolWakeCmd = &cobra.Command{
+	Use:   "wake <nome-o-mac>",
+	Short: "Invia un Magic Packet WoL per accendere un computer salvato o tramite MAC address",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		target := strings.TrimSpace(args[0])
+
+		var macToWake string
+		var bcastIP = wolBroadcast
+		var port = wolPort
+		var devID int64
+		var devName string
+
+		// Check if it's a direct MAC address
+		if _, err := wol.ParseMAC(target); err == nil {
+			macToWake = target
+		} else {
+			// Search in state.db
+			st, err := state.Open(stateDB)
+			if err != nil {
+				fmt.Printf("Errore apertura database (%s): %v\n", stateDB, err)
+				os.Exit(1)
+			}
+			defer st.Close()
+
+			devices, err := st.ListWoLDevices()
+			if err != nil {
+				fmt.Printf("Errore lettura dispositivi WoL: %v\n", err)
+				os.Exit(1)
+			}
+
+			var found *state.WoLDevice
+			for _, d := range devices {
+				if strings.EqualFold(d.Name, target) || strconv.FormatInt(d.ID, 10) == target {
+					dev := d
+					found = &dev
+					break
+				}
+			}
+
+			if found == nil {
+				fmt.Printf("❌ Dispositivo '%s' non trovato tra i dispositivi salvati e non è un MAC address valido.\n", target)
+				fmt.Println("   Usa 'allod wol list' per vedere i dispositivi salvati o specifica un MAC valido (es. 00:11:22:33:44:55).")
+				os.Exit(1)
+			}
+
+			macToWake = found.MACAddress
+			if cmd.Flags().Changed("broadcast") {
+				bcastIP = wolBroadcast
+			} else if found.BroadcastIP != "" {
+				bcastIP = found.BroadcastIP
+			}
+			if cmd.Flags().Changed("port") {
+				port = wolPort
+			} else if found.Port > 0 {
+				port = found.Port
+			}
+			devID = found.ID
+			devName = found.Name
+		}
+
+		res, err := wol.Send(macToWake, bcastIP, port)
+		if err != nil {
+			fmt.Printf("❌ Errore durante l'invio del pacchetto WoL: %v\n", err)
+			os.Exit(1)
+		}
+
+		// If matched a DB device, record wake
+		if devID > 0 {
+			if st, err := state.Open(stateDB); err == nil {
+				_ = st.RecordWoLWake(devID)
+				st.Close()
+			}
+		}
+
+		if devName != "" {
+			fmt.Printf("⚡ Magic packet inviato con successo a '%s' [%s] (%s:%d)\n", devName, res.MACAddress, res.BroadcastIP, res.Port)
+		} else {
+			fmt.Printf("⚡ Magic packet inviato con successo a [%s] (%s:%d)\n", res.MACAddress, res.BroadcastIP, res.Port)
+		}
+
+		if len(res.Interfaces) > 0 {
+			fmt.Printf("   Interfacce di rete broadcast raggiunte (%d):\n", len(res.Interfaces))
+			for _, iface := range res.Interfaces {
+				fmt.Printf("     • %s\n", iface)
+			}
+		}
+	},
+}
+
+var wolListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Elenca i dispositivi Wake-on-LAN salvati",
+	Run: func(cmd *cobra.Command, args []string) {
+		st, err := state.Open(stateDB)
+		if err != nil {
+			fmt.Printf("Errore apertura database (%s): %v\n", stateDB, err)
+			os.Exit(1)
+		}
+		defer st.Close()
+
+		devices, err := st.ListWoLDevices()
+		if err != nil {
+			fmt.Printf("Errore lettura dispositivi WoL: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(devices) == 0 {
+			fmt.Println("Nessun dispositivo Wake-on-LAN salvato.")
+			fmt.Println("Aggiungi il tuo primo computer con: allod wol add <nome> <mac>")
+			return
+		}
+
+		fmt.Printf("%-4s  %-20s  %-18s  %-18s  %-6s  %-20s\n", "ID", "NOME", "MAC ADDRESS", "BROADCAST", "PORTA", "ULTIMA ACCENSIONE")
+		fmt.Println(strings.Repeat("-", 94))
+		for _, d := range devices {
+			lastWake := "Mai"
+			if d.LastWakeAt != nil {
+				lastWake = d.LastWakeAt.Local().Format("2006-01-02 15:04:05")
+			}
+			fmt.Printf("%-4d  %-20s  %-18s  %-18s  %-6d  %-20s\n", d.ID, d.Name, d.MACAddress, d.BroadcastIP, d.Port, lastWake)
+		}
+	},
+}
+
+var wolAddCmd = &cobra.Command{
+	Use:   "add <nome> <mac>",
+	Short: "Aggiunge o aggiorna un dispositivo Wake-on-LAN",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		name := strings.TrimSpace(args[0])
+		macStr := strings.TrimSpace(args[1])
+
+		normMAC, err := wol.ParseMAC(macStr)
+		if err != nil {
+			fmt.Printf("❌ Indirizzo MAC non valido '%s': %v\n", macStr, err)
+			os.Exit(1)
+		}
+
+		st, err := state.Open(stateDB)
+		if err != nil {
+			fmt.Printf("Errore apertura database (%s): %v\n", stateDB, err)
+			os.Exit(1)
+		}
+		defer st.Close()
+
+		dev := state.WoLDevice{
+			Name:        name,
+			MACAddress:  normMAC.String(),
+			BroadcastIP: wolBroadcast,
+			Port:        wolPort,
+		}
+
+		if err := st.SaveWoLDevice(&dev); err != nil {
+			fmt.Printf("❌ Errore salvataggio dispositivo: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("✓ Dispositivo '%s' [%s] salvato con successo (ID: %d)!\n", dev.Name, dev.MACAddress, dev.ID)
+		fmt.Printf("  Puoi accenderlo in qualsiasi momento con: allod wol wake \"%s\"\n", dev.Name)
+	},
+}
+
+var wolDeleteCmd = &cobra.Command{
+	Use:     "delete <id-o-nome>",
+	Aliases: []string{"remove", "rm"},
+	Short:   "Elimina un dispositivo Wake-on-LAN salvato",
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		target := strings.TrimSpace(args[0])
+
+		st, err := state.Open(stateDB)
+		if err != nil {
+			fmt.Printf("Errore apertura database (%s): %v\n", stateDB, err)
+			os.Exit(1)
+		}
+		defer st.Close()
+
+		var idToDelete int64
+		if id, err := strconv.ParseInt(target, 10, 64); err == nil {
+			idToDelete = id
+		} else {
+			devices, err := st.ListWoLDevices()
+			if err != nil {
+				fmt.Printf("Errore lettura dispositivi: %v\n", err)
+				os.Exit(1)
+			}
+			for _, d := range devices {
+				if strings.EqualFold(d.Name, target) {
+					idToDelete = d.ID
+					break
+				}
+			}
+		}
+
+		if idToDelete <= 0 {
+			fmt.Printf("❌ Dispositivo '%s' non trovato.\n", target)
+			os.Exit(1)
+		}
+
+		if err := st.DeleteWoLDevice(idToDelete); err != nil {
+			fmt.Printf("❌ Errore eliminazione: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("✓ Dispositivo con ID %d rimosso con successo.\n", idToDelete)
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "configs/config.example.yaml", "file di configurazione")
 	rootCmd.PersistentFlags().StringVar(&stateDB, "state-db", "state.db", "percorso file state.db")
@@ -1204,6 +1421,18 @@ func init() {
 
 	adminPasswordCmd.AddCommand(adminPasswordResetCmd)
 	rootCmd.AddCommand(adminPasswordCmd)
+
+	wolWakeCmd.Flags().StringVar(&wolBroadcast, "broadcast", "255.255.255.255", "Indirizzo IP broadcast di destinazione")
+	wolWakeCmd.Flags().IntVar(&wolPort, "port", 9, "Porta UDP per il Magic Packet")
+
+	wolAddCmd.Flags().StringVar(&wolBroadcast, "broadcast", "255.255.255.255", "Indirizzo IP broadcast di destinazione")
+	wolAddCmd.Flags().IntVar(&wolPort, "port", 9, "Porta UDP per il Magic Packet")
+
+	wolCmd.AddCommand(wolWakeCmd)
+	wolCmd.AddCommand(wolListCmd)
+	wolCmd.AddCommand(wolAddCmd)
+	wolCmd.AddCommand(wolDeleteCmd)
+	rootCmd.AddCommand(wolCmd)
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(planCmd)
