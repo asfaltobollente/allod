@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/asfaltobollente/allod/internal/updater"
 	"github.com/asfaltobollente/allod/internal/version"
 	"github.com/asfaltobollente/allod/internal/watch"
+	"github.com/asfaltobollente/allod/internal/wol"
 )
 
 //go:embed web/*
@@ -957,6 +959,128 @@ fi
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", "attachment; filename=allod-watch")
 		http.ServeFile(w, r, targetPath)
+	})
+
+	// 2j. API Wake-on-LAN Devices (GET/POST/DELETE /api/wol/devices)
+	mux.HandleFunc("/api/wol/devices", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		st, err := state.Open(dbPath)
+		if err != nil {
+			http.Error(w, "DB error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer st.Close()
+
+		switch r.Method {
+		case http.MethodGet:
+			devs, err := st.ListWoLDevices()
+			if err != nil {
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore caricamento dispositivi: " + err.Error()})
+				return
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: devs})
+
+		case http.MethodPost:
+			var dev state.WoLDevice
+			if err := json.NewDecoder(r.Body).Decode(&dev); err != nil {
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Dati non validi: " + err.Error()})
+				return
+			}
+			hw, err := wol.ParseMAC(dev.MACAddress)
+			if err != nil {
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Indirizzo MAC non valido: " + err.Error()})
+				return
+			}
+			dev.MACAddress = hw.String()
+			if strings.TrimSpace(dev.Name) == "" {
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Inserisci un nome per il dispositivo."})
+				return
+			}
+
+			if err := st.SaveWoLDevice(&dev); err != nil {
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Salvataggio fallito: " + err.Error()})
+				return
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Dispositivo salvato con successo!", Data: dev})
+
+		case http.MethodDelete:
+			idStr := r.URL.Query().Get("id")
+			id, _ := strconv.ParseInt(idStr, 10, 64)
+			if id <= 0 {
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "ID dispositivo mancante o non valido."})
+				return
+			}
+			if err := st.DeleteWoLDevice(id); err != nil {
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Cancellazione fallita: " + err.Error()})
+				return
+			}
+			json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Dispositivo eliminato con successo."})
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// 2k. API Wake-on-LAN Wake Trigger (POST /api/wol/wake)
+	mux.HandleFunc("/api/wol/wake", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+
+		var req struct {
+			ID          int64  `json:"id"`
+			MACAddress  string `json:"mac_address"`
+			BroadcastIP string `json:"broadcast_ip"`
+			Port        int    `json:"port"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		targetMAC := strings.TrimSpace(req.MACAddress)
+		bcast := strings.TrimSpace(req.BroadcastIP)
+		port := req.Port
+		var devName string
+
+		st, err := state.Open(dbPath)
+		if err == nil {
+			defer st.Close()
+			if req.ID > 0 {
+				dev, errD := st.GetWoLDevice(req.ID)
+				if errD == nil && dev != nil {
+					targetMAC = dev.MACAddress
+					devName = dev.Name
+					if bcast == "" {
+						bcast = dev.BroadcastIP
+					}
+					if port <= 0 {
+						port = dev.Port
+					}
+				}
+			}
+		}
+
+		if targetMAC == "" {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Indirizzo MAC o ID dispositivo obbligatorio."})
+			return
+		}
+
+		res, err := wol.Send(targetMAC, bcast, port)
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Invio Magic Packet fallito: " + err.Error()})
+			return
+		}
+
+		if st != nil && req.ID > 0 {
+			_ = st.RecordWoLWake(req.ID)
+		}
+
+		displayName := targetMAC
+		if devName != "" {
+			displayName = fmt.Sprintf("%s (%s)", devName, targetMAC)
+		}
+		msg := fmt.Sprintf("Magic Packet inviato con successo a %s!", displayName)
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: msg, Data: res})
 	})
 
 	// 3. API Modules list

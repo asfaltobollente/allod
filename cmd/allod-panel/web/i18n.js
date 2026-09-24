@@ -329,7 +329,40 @@ const i18n = {
     watch_vps_instructions_title: "How to deploy in 10 seconds:",
     watch_vps_step1: "1. Connect via SSH to your external VPS (Oracle Cloud Always-Free, Hetzner, etc.): <code>ssh user@your-vps-ip</code>",
     watch_vps_step2: "2. Paste the command above and press <b>Enter</b>.",
-    watch_vps_step3: "3. The VPS joins the mesh, downloads the sentinel binary, sets up systemd, and pings your Telegram immediately!"
+    watch_vps_step3: "3. The VPS joins the mesh, downloads the sentinel binary, sets up systemd, and pings your Telegram immediately!",
+
+    // Wake-on-LAN
+    wol_title: "Wake-on-LAN (WoL)",
+    wol_subtitle: "Power on PCs and LAN devices remotely via UDP Magic Packet",
+    wol_btn_open: "⚡ Wake-on-LAN",
+    wol_card_title: "⚡ Wake-on-LAN Hub",
+    wol_card_desc: "Power on your primary PC or network workstations with a single click",
+    wol_btn_wake_now: "⚡ Power On",
+    wol_btn_wake_sending: "Waking...",
+    wol_th_name: "Device Name",
+    wol_th_mac: "MAC Address",
+    wol_th_broadcast: "Broadcast Target",
+    wol_th_last_wake: "Last Power On",
+    wol_th_actions: "Actions",
+    wol_no_devices: "No Wake-on-LAN devices saved yet. Add your main PC below!",
+    wol_form_add_title: "Add / Save LAN Device",
+    wol_name_label: "Device Name:",
+    wol_name_placeholder: "e.g. Main Workstation, Studio Desktop",
+    wol_mac_label: "MAC Address:",
+    wol_mac_placeholder: "e.g. 00:D8:61:33:0E:1F",
+    wol_bcast_label: "Broadcast IP (Optional):",
+    wol_port_label: "UDP Port (Default: 9):",
+    wol_btn_save: "💾 Save Device",
+    wol_adhoc_title: "Quick Wake by MAC (Without Saving)",
+    wol_adhoc_desc: "Send an instant Magic Packet to any MAC address on your local network:",
+    wol_btn_wake_adhoc: "⚡ Send Magic Packet",
+    wol_success_wake: "✓ Magic packet sent successfully to {target} ({bcast}:{port})",
+    wol_error_wake: "❌ Failed to send Magic Packet: {err}",
+    wol_success_save: "✓ Device saved successfully!",
+    wol_error_save: "❌ Failed to save device: {err}",
+    wol_confirm_delete: "Are you sure you want to remove this device?",
+    wol_last_wake_never: "Never",
+    wol_quick_section: "Wake-on-LAN"
   },
   it: {
     app_title: "Allod — Cloud Personale in Piena Proprietà",
@@ -659,7 +692,40 @@ const i18n = {
     watch_vps_instructions_title: "Come installare sulla VPS in 10 secondi:",
     watch_vps_step1: "1. Connettiti via SSH alla tua VPS esterna (Oracle Cloud Always-Free, Hetzner, ecc.): <code>ssh utente@ip-vps</code>",
     watch_vps_step2: "2. Incolla il comando copiato qui sopra e premi <b>Invio</b>.",
-    watch_vps_step3: "3. La VPS entra nel mesh, scarica la sentinella Allod, attiva systemd e invia subito una conferma su Telegram!"
+    watch_vps_step3: "3. La VPS entra nel mesh, scarica la sentinella Allod, attiva systemd e invia subito una conferma su Telegram!",
+
+    // Wake-on-LAN
+    wol_title: "Wake-on-LAN (WoL)",
+    wol_subtitle: "Accendi PC e dispositivi della rete locale via Magic Packet UDP",
+    wol_btn_open: "⚡ Wake-on-LAN",
+    wol_card_title: "⚡ Wake-on-LAN",
+    wol_card_desc: "Accendi il tuo computer principale o altre workstation con un solo clic",
+    wol_btn_wake_now: "⚡ Accendi Ora",
+    wol_btn_wake_sending: "Invio in corso...",
+    wol_th_name: "Nome Dispositivo",
+    wol_th_mac: "Indirizzo MAC",
+    wol_th_broadcast: "Destinazione Broadcast",
+    wol_th_last_wake: "Ultima Accensione",
+    wol_th_actions: "Azioni",
+    wol_no_devices: "Nessun computer salvato per il Wake-on-LAN. Aggiungi il tuo PC qui sotto!",
+    wol_form_add_title: "Aggiungi / Salva Dispositivo LAN",
+    wol_name_label: "Nome Computer:",
+    wol_name_placeholder: "es. PC Principale, Computer Studio",
+    wol_mac_label: "Indirizzo MAC:",
+    wol_mac_placeholder: "es. 00:D8:61:33:0E:1F",
+    wol_bcast_label: "IP Broadcast (Opzionale):",
+    wol_port_label: "Porta UDP (Predefinita: 9):",
+    wol_btn_save: "💾 Salva Dispositivo",
+    wol_adhoc_title: "Accensione Rapida per MAC (Senza Salvare)",
+    wol_adhoc_desc: "Invia un Magic Packet istantaneo direttamente a qualsiasi MAC address della rete locale:",
+    wol_btn_wake_adhoc: "⚡ Invia Magic Packet",
+    wol_success_wake: "✓ Magic packet inviato con successo a {target} ({bcast}:{port})",
+    wol_error_wake: "❌ Errore durante l'invio del Magic Packet: {err}",
+    wol_success_save: "✓ Dispositivo salvato con successo!",
+    wol_error_save: "❌ Errore durante il salvataggio: {err}",
+    wol_confirm_delete: "Sei sicuro di voler rimuovere questo dispositivo?",
+    wol_last_wake_never: "Mai",
+    wol_quick_section: "Wake-on-LAN"
   }
 };
 
@@ -708,5 +774,6 @@ function setLanguage(lang) {
   if (typeof renderModules === 'function') renderModules();
   if (typeof renderRing === 'function') renderRing();
   if (typeof renderResilience === 'function') renderResilience();
+  if (typeof renderWoLDevices === 'function') renderWoLDevices();
   if (typeof updateThemeBadge === 'function') updateThemeBadge();
 }

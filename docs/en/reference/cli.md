@@ -80,3 +80,10 @@ Simulates member departure, identifying lost datasets, degraded replicas, and au
 ### `allod sbom`
 Generates a complete Software Bill of Materials in standard CycloneDX JSON format for Cyber Resilience Act compliance.
 
+### `allod wol <wake|list|add|delete>`
+Manages and transmits native Wake-on-LAN Magic Packets to power on network computers.
+* `allod wol wake <name|mac>`: Sends a UDP Magic Packet on port 9 to the target device or MAC address, broadcasting across all active physical network interfaces.
+* `allod wol list`: Displays a formatted table of all saved computers, MAC addresses, and last wake timestamps.
+* `allod wol add <name> <mac>`: Saves or updates a device in `state.db`.
+* `allod wol delete <id|name>`: Removes a device from the database.
+

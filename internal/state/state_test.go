@@ -310,3 +310,95 @@ func TestSentinelConfigLifecycle(t *testing.T) {
 	}
 }
 
+func TestWoLDevicesLifecycle(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test-wol-state.db")
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open state db: %v", err)
+	}
+	defer store.Close()
+
+	// 1. Initial list should be empty
+	devs, err := store.ListWoLDevices()
+	if err != nil {
+		t.Fatalf("failed to list WoL devices: %v", err)
+	}
+	if len(devs) != 0 {
+		t.Errorf("expected 0 devices initially, got %d", len(devs))
+	}
+
+	// 2. Add device
+	dev1 := &WoLDevice{
+		Name:        "PC Principale",
+		MACAddress:  "00:D8:61:33:0E:1F",
+		BroadcastIP: "255.255.255.255",
+		Port:        9,
+	}
+	if err := store.SaveWoLDevice(dev1); err != nil {
+		t.Fatalf("failed to save WoL device: %v", err)
+	}
+	if dev1.ID <= 0 {
+		t.Errorf("expected positive ID after insert, got %d", dev1.ID)
+	}
+
+	// 3. Add second device
+	dev2 := &WoLDevice{
+		Name:        "Workstation Studio",
+		MACAddress:  "11:22:33:44:55:66",
+		BroadcastIP: "192.168.1.255",
+		Port:        7,
+	}
+	if err := store.SaveWoLDevice(dev2); err != nil {
+		t.Fatalf("failed to save second WoL device: %v", err)
+	}
+
+	// 4. List devices
+	all, err := store.ListWoLDevices()
+	if err != nil || len(all) != 2 {
+		t.Fatalf("expected 2 devices, got %d (err: %v)", len(all), err)
+	}
+	if all[0].Name != "PC Principale" || all[1].Name != "Workstation Studio" {
+		t.Errorf("unexpected device names: %+v", all)
+	}
+
+	// 5. Get by ID
+	fetched, err := store.GetWoLDevice(dev1.ID)
+	if err != nil || fetched == nil {
+		t.Fatalf("failed to fetch device by ID: %v", err)
+	}
+	if fetched.MACAddress != "00:D8:61:33:0E:1F" || fetched.LastWakeAt != nil {
+		t.Errorf("unexpected fetched device data: %+v", fetched)
+	}
+
+	// 6. Record wake
+	if err := store.RecordWoLWake(dev1.ID); err != nil {
+		t.Fatalf("failed to record WoL wake: %v", err)
+	}
+	afterWake, _ := store.GetWoLDevice(dev1.ID)
+	if afterWake.LastWakeAt == nil {
+		t.Errorf("expected LastWakeAt to be set after RecordWoLWake")
+	}
+
+	// 7. Update device
+	afterWake.Name = "PC Gaming Studio"
+	if err := store.SaveWoLDevice(afterWake); err != nil {
+		t.Fatalf("failed to update WoL device: %v", err)
+	}
+	updated, _ := store.GetWoLDevice(dev1.ID)
+	if updated.Name != "PC Gaming Studio" {
+		t.Errorf("expected updated name 'PC Gaming Studio', got %q", updated.Name)
+	}
+
+	// 8. Delete device
+	if err := store.DeleteWoLDevice(dev2.ID); err != nil {
+		t.Fatalf("failed to delete WoL device: %v", err)
+	}
+	remaining, _ := store.ListWoLDevices()
+	if len(remaining) != 1 {
+		t.Errorf("expected 1 remaining device, got %d", len(remaining))
+	}
+}
+
+
