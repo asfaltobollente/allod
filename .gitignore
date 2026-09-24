@@ -12,7 +12,8 @@
 allod_linux_*
 allod-helperd_linux_*
 allod-panel_linux_*
-bin/
+bin/*
+!bin/allod-watch-linux-*
 
 # Test binary
 *.test

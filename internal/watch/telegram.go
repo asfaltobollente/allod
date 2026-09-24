@@ -140,6 +140,8 @@ type DigestReport struct {
 	StorageFree   string
 	RAMUsedMB     int
 	RAMTotalMB    int
+	CPULoad       float64
+	CPUTemp       float64
 	ActiveModules []string
 	WeatherInfo   string // e.g. "☀️ Roma: Sereno, min 16°C / max 25°C, Pioggia: 0%"
 }
@@ -158,6 +160,18 @@ func (t *TelegramNotifier) SendDailyDigest(report DigestReport) error {
 		weatherSection = fmt.Sprintf("🌤️ <b>Meteo di Oggi:</b>\n%s\n\n", html.EscapeString(report.WeatherInfo))
 	}
 
+	vitalsInfo := ""
+	var vitalsParts []string
+	if report.CPUTemp > 0 {
+		vitalsParts = append(vitalsParts, fmt.Sprintf("Temp CPU: %.1f°C", report.CPUTemp))
+	}
+	if report.CPULoad > 0 {
+		vitalsParts = append(vitalsParts, fmt.Sprintf("Carico: %.2f", report.CPULoad))
+	}
+	if len(vitalsParts) > 0 {
+		vitalsInfo = fmt.Sprintf("🌡️ <b>Hardware:</b> %s\n", html.EscapeString(strings.Join(vitalsParts, " • ")))
+	}
+
 	msg := fmt.Sprintf(
 		"☀️ <b>Buongiorno! Resoconto Allod</b>\n\n"+
 			"%s"+
@@ -165,6 +179,7 @@ func (t *TelegramNotifier) SendDailyDigest(report DigestReport) error {
 			"⏱️ <b>Uptime:</b> %s\n"+
 			"💾 <b>Pool Storage:</b> %s (Usati: %s, Liberi: %s)\n"+
 			"🧠 <b>Memoria RAM:</b> %d MB / %d MB\n"+
+			"%s"+
 			"🧩 <b>Servizi:</b> %s\n\n"+
 			"✓ <i>Tutto regolare. I tuoi dati personali sono al sicuro.</i>",
 		weatherSection,
@@ -175,6 +190,7 @@ func (t *TelegramNotifier) SendDailyDigest(report DigestReport) error {
 		html.EscapeString(report.StorageFree),
 		report.RAMUsedMB,
 		report.RAMTotalMB,
+		vitalsInfo,
 		html.EscapeString(modulesStr),
 	)
 	return t.Send(msg)

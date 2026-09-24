@@ -141,6 +141,8 @@ func (s *DailyDigestScheduler) dispatch() error {
 			}
 			report.RAMUsedMB = peer.LatestPayload.MemoryUsedMB
 			report.RAMTotalMB = peer.LatestPayload.MemoryTotalMB
+			report.CPULoad = peer.LatestPayload.CPULoad
+			report.CPUTemp = peer.LatestPayload.CPUTemp
 			report.ActiveModules = peer.LatestPayload.ActiveModules
 		}
 
