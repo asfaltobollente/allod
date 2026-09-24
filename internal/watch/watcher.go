@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ type NodeHealthPayload struct {
 	StorageFree    string   `json:"storage_free,omitempty"`
 	StorageFreePct int      `json:"storage_free_pct,omitempty"`
 	CPULoad        float64  `json:"cpu_load,omitempty"`
+	CPUTemp        float64  `json:"cpu_temp,omitempty"`
 	MemoryUsedMB   int      `json:"memory_used_mb,omitempty"`
 	MemoryTotalMB  int      `json:"memory_total_mb,omitempty"`
 	ActiveModules  []string `json:"active_modules,omitempty"`
@@ -48,6 +50,8 @@ type Watcher struct {
 	failureCountLimit   int
 	stopChan            chan struct{}
 	client              *http.Client
+	secretToken         string
+	receiverSrv         *http.Server
 	OnAlert             func(nodeID, reason string, downtime time.Duration)
 	OnRecover           func(nodeID string, totalDowntime time.Duration)
 	OnWarning           func(nodeID, title, details string)
@@ -291,3 +295,222 @@ func (w *Watcher) GetAllPeers() map[string]PeerStatus {
 	}
 	return res
 }
+
+// SetSecretToken configures the pre-shared secret token for validating incoming heartbeats.
+func (w *Watcher) SetSecretToken(token string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.secretToken = strings.TrimSpace(token)
+}
+
+// HandleHeartbeat processes an incoming push heartbeat from an Allod node.
+func (w *Watcher) HandleHeartbeat(payload *NodeHealthPayload, token string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	// Authenticate if a secret token is configured
+	if w.secretToken != "" {
+		cleanedToken := strings.TrimSpace(token)
+		if strings.HasPrefix(strings.ToLower(cleanedToken), "bearer ") {
+			cleanedToken = strings.TrimSpace(cleanedToken[7:])
+		}
+		if cleanedToken != w.secretToken {
+			return fmt.Errorf("autenticazione fallita: token non valido")
+		}
+	}
+
+	if payload == nil {
+		return fmt.Errorf("payload heartbeat vuoto")
+	}
+
+	nodeID := strings.TrimSpace(payload.NodeName)
+	if nodeID == "" {
+		nodeID = "allod-node"
+	}
+
+	now := time.Now()
+	peer, exists := w.peers[nodeID]
+	if !exists {
+		peer = &PeerStatus{
+			ID:            nodeID,
+			IsOnline:      true,
+			LastSeen:      now,
+			LatestPayload: payload,
+		}
+		w.peers[nodeID] = peer
+	} else {
+		if !peer.IsOnline {
+			// Node recovered from downtime!
+			totalDowntime := now.Sub(peer.DowntimeStart)
+			fmt.Printf("💚 [Watchdog Receiver] Rientro: Il nodo %s è tornato online! (Disservizio: %v)\n", nodeID, totalDowntime.Round(time.Second))
+			peer.IsOnline = true
+			peer.AlertSent = false
+			peer.ConsecutiveFailures = 0
+
+			if w.OnRecover != nil {
+				go w.OnRecover(nodeID, totalDowntime)
+			}
+		}
+
+		peer.LastSeen = now
+		peer.LatestPayload = payload
+		peer.ConsecutiveFailures = 0
+	}
+
+	// Warnings check
+	if !payload.StorageOK && !peer.StorageWarningSent {
+		peer.StorageWarningSent = true
+		if w.OnWarning != nil {
+			go w.OnWarning(nodeID, "Storage Degradato", "Il pool di archiviazione segnala anomalie o spazio in esaurimento.")
+		}
+	} else if payload.StorageOK {
+		peer.StorageWarningSent = false
+	}
+
+	if payload.CPUTemp >= 80.0 {
+		if w.OnWarning != nil {
+			go w.OnWarning(nodeID, "Temperatura CPU Elevata", fmt.Sprintf("Sensore termico a %.1f°C - possibile throttling.", payload.CPUTemp))
+		}
+	}
+
+	return nil
+}
+
+// CheckDeadManTimeout inspects all peers for missed heartbeats and fires alerts if threshold exceeded.
+func (w *Watcher) CheckDeadManTimeout() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	now := time.Now()
+	for _, peer := range w.peers {
+		if peer.IsOnline {
+			silenceDuration := now.Sub(peer.LastSeen)
+			if silenceDuration >= w.alertThreshold && !peer.AlertSent {
+				peer.IsOnline = false
+				peer.AlertSent = true
+				peer.DowntimeStart = peer.LastSeen
+
+				msg := fmt.Sprintf("Nessun heartbeat ricevuto da oltre %v (soglia: %v). Possibile blackout elettrico o caduta linea internet.",
+					silenceDuration.Round(time.Second), w.alertThreshold)
+
+				fmt.Printf("🔴 [Watchdog Receiver] ALLARME (HEARTBEAT_LOST): Il nodo %s non risponde da %v!\n",
+					peer.ID, silenceDuration.Round(time.Second))
+
+				if w.OnAlert != nil {
+					go w.OnAlert(peer.ID, msg, silenceDuration)
+				}
+			}
+		}
+	}
+}
+
+// StartReceiver launches the HTTP heartbeat receiver server and background dead man's watchdog ticker.
+func (w *Watcher) StartReceiver(port int, secretToken string) (*http.Server, error) {
+	if port <= 0 {
+		port = 8443
+	}
+	w.SetSecretToken(secretToken)
+
+	mux := http.NewServeMux()
+
+	// 1. Healthcheck endpoint
+	mux.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
+			"status":  "ok",
+			"service": "allod-watch",
+			"mode":    "receiver",
+			"time":    time.Now().Format(time.RFC3339),
+		})
+	})
+	mux.HandleFunc("/api/health", func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
+			"status":  "ok",
+			"service": "allod-watch",
+			"mode":    "receiver",
+			"time":    time.Now().Format(time.RFC3339),
+		})
+	})
+
+	// 2. Heartbeat push receiver
+	mux.HandleFunc("/api/heartbeat", func(rw http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(rw, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		token := r.Header.Get("X-Allod-Token")
+		if token == "" {
+			token = r.Header.Get("Authorization")
+		}
+
+		var payload NodeHealthPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(rw, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := w.HandleHeartbeat(&payload, token); err != nil {
+			if strings.Contains(err.Error(), "autenticazione fallita") {
+				http.Error(rw, err.Error(), http.StatusUnauthorized)
+				return
+			}
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		rw.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
+			"status":      "ok",
+			"message":     "heartbeat received",
+			"received_at": time.Now().Format(time.RFC3339),
+		})
+	})
+
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: mux,
+	}
+
+	w.mu.Lock()
+	w.receiverSrv = srv
+	w.mu.Unlock()
+
+	// Launch Dead Man's Watchdog loop in background
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-w.stopChan:
+				return
+			case <-ticker.C:
+				w.CheckDeadManTimeout()
+			}
+		}
+	}()
+
+	// Launch HTTP Server in background
+	go func() {
+		fmt.Printf("✓ [Watchdog Receiver] Server HTTP in ascolto sulla porta :%d (/api/heartbeat)\n", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("❌ [Watchdog Receiver] Errore server HTTP: %v\n", err)
+		}
+	}()
+
+	return srv, nil
+}
+
+// StopReceiver gracefully stops the receiver HTTP server.
+func (w *Watcher) StopReceiver(ctx context.Context) error {
+	w.mu.Lock()
+	srv := w.receiverSrv
+	w.mu.Unlock()
+
+	if srv != nil {
+		return srv.Shutdown(ctx)
+	}
+	return nil
+}
+

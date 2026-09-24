@@ -3599,6 +3599,7 @@ function openThemeSelector() {
 
 let currentWatchConfig = null;
 let currentWatchMeshIP = '--';
+let currentWatchMode = 'receiver';
 
 async function openWatchSentinelModal() {
   const modal = document.getElementById('watch-sentinel-modal');
@@ -3613,6 +3614,9 @@ async function openWatchSentinelModal() {
       currentWatchConfig = json.data.config || {};
       currentWatchMeshIP = json.data.mesh_ip || '--';
 
+      // Mode: default to receiver (push mode)
+      currentWatchMode = (currentWatchConfig.mode === 'poller' || currentWatchConfig.mode === 'mesh') ? 'poller' : 'receiver';
+
       // Populate Telegram Tab
       const tokenInput = document.getElementById('watch-telegram-token');
       const chatIdInput = document.getElementById('watch-telegram-chat-id');
@@ -3625,11 +3629,27 @@ async function openWatchSentinelModal() {
       const threshSelect = document.getElementById('watch-down-threshold');
       if (cityInput) cityInput.value = currentWatchConfig.weather_city || 'Roma';
       if (timeInput) timeInput.value = currentWatchConfig.digest_time || '08:30';
-      if (threshSelect && currentWatchConfig.down_threshold_seconds) {
-        threshSelect.value = String(currentWatchConfig.down_threshold_seconds);
+      if (threshSelect) {
+        threshSelect.value = String(currentWatchConfig.down_threshold_seconds || (currentWatchMode === 'receiver' ? 300 : 180));
       }
 
-      // Populate Mesh / VPS Tab
+      // Populate Push Settings
+      const hostInput = document.getElementById('watch-vps-host');
+      const portInput = document.getElementById('watch-vps-port');
+      const secretTokenInput = document.getElementById('watch-secret-token');
+      const pushIntervalSelect = document.getElementById('watch-push-interval');
+
+      if (hostInput) hostInput.value = currentWatchConfig.vps_host || '';
+      if (portInput) portInput.value = currentWatchConfig.vps_port || 8443;
+      if (secretTokenInput) secretTokenInput.value = currentWatchConfig.secret_token || '';
+      if (pushIntervalSelect) pushIntervalSelect.value = String(currentWatchConfig.push_interval_seconds || 60);
+
+      // If in push mode and secret token is empty, auto-generate one
+      if (currentWatchMode === 'receiver' && (!currentWatchConfig.secret_token || currentWatchConfig.secret_token === '')) {
+        await generateWatchSecretToken(false);
+      }
+
+      // Populate Mesh Settings
       const vpsKeyInput = document.getElementById('watch-vps-setup-key');
       if (vpsKeyInput) vpsKeyInput.value = currentWatchConfig.vps_setup_key || '';
 
@@ -3638,7 +3658,7 @@ async function openWatchSentinelModal() {
         meshIpDisplay.textContent = currentWatchMeshIP;
       }
 
-      updateWatchDeployCommand();
+      setWatchMode(currentWatchMode);
     }
   } catch (err) {
     console.error('Failed to load sentinel config:', err);
@@ -3671,10 +3691,81 @@ function switchWatchTab(tabName) {
   });
 }
 
+function setWatchMode(mode) {
+  currentWatchMode = (mode === 'poller' || mode === 'mesh') ? 'poller' : 'receiver';
+
+  const cardPush = document.getElementById('watch-card-push');
+  const cardMesh = document.getElementById('watch-card-mesh');
+  const sectionPush = document.getElementById('watch-section-push');
+  const sectionMesh = document.getElementById('watch-section-mesh');
+
+  const step1 = document.getElementById('watch-instruction-step1');
+  const step2 = document.getElementById('watch-instruction-step2');
+  const step3 = document.getElementById('watch-instruction-step3');
+
+  if (currentWatchMode === 'receiver') {
+    if (cardPush) {
+      cardPush.style.border = '2px solid var(--primary)';
+      cardPush.style.background = 'rgba(56,189,248,0.08)';
+    }
+    if (cardMesh) {
+      cardMesh.style.border = '1px solid var(--card-border)';
+      cardMesh.style.background = 'rgba(15,23,42,0.4)';
+    }
+    if (sectionPush) sectionPush.classList.remove('hidden');
+    if (sectionMesh) sectionMesh.classList.add('hidden');
+
+    if (step1) step1.innerHTML = '1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code>';
+    if (step2) step2.innerHTML = '2. Incolla il comando copiato qui sopra e premi <b>Invio</b>.';
+    if (step3) step3.innerHTML = '3. La VPS scarica allod-watch, configura il ricevitore HTTP sulla porta specificata, apre il firewall e invia la conferma su Telegram!';
+  } else {
+    if (cardMesh) {
+      cardMesh.style.border = '2px solid var(--primary)';
+      cardMesh.style.background = 'rgba(56,189,248,0.08)';
+    }
+    if (cardPush) {
+      cardPush.style.border = '1px solid var(--card-border)';
+      cardPush.style.background = 'rgba(15,23,42,0.4)';
+    }
+    if (sectionMesh) sectionMesh.classList.remove('hidden');
+    if (sectionPush) sectionPush.classList.add('hidden');
+
+    if (step1) step1.innerHTML = '1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code>';
+    if (step2) step2.innerHTML = '2. Incolla il comando copiato qui sopra e premi <b>Invio</b>.';
+    if (step3) step3.innerHTML = '3. La VPS entra nella rete mesh NetBird, scarica la sentinella Allod, attiva systemd e invia subito una conferma su Telegram!';
+  }
+
+  updateWatchDeployCommand();
+}
+
 function toggleWatchTokenVisibility() {
   const input = document.getElementById('watch-telegram-token');
   if (input) {
     input.type = input.type === 'password' ? 'text' : 'password';
+  }
+}
+
+function toggleWatchSecretTokenVisibility() {
+  const input = document.getElementById('watch-secret-token');
+  if (input) {
+    input.type = input.type === 'password' ? 'text' : 'password';
+  }
+}
+
+async function generateWatchSecretToken(save = true) {
+  try {
+    const res = await fetch('/api/watch/generate-token', { method: 'POST' });
+    const json = await res.json();
+    if (json.status === 'ok' && json.token) {
+      const input = document.getElementById('watch-secret-token');
+      if (input) input.value = json.token;
+      updateWatchDeployCommand();
+      if (save) {
+        await saveWatchConfig(false);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to generate secret token:', err);
   }
 }
 
@@ -3812,15 +3903,87 @@ async function testWatchTelegram() {
   }
 }
 
+async function testWatchPush() {
+  const host = (document.getElementById('watch-vps-host')?.value || '').trim();
+  const port = parseInt(document.getElementById('watch-vps-port')?.value || '8443', 10);
+  const token = (document.getElementById('watch-secret-token')?.value || '').trim();
+  const feedback = document.getElementById('watch-push-feedback');
+  const btn = document.getElementById('btn-test-watch-push');
+
+  if (!host) {
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.style.background = 'rgba(239,68,68,0.15)';
+      feedback.style.color = '#f87171';
+      feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+      feedback.textContent = '❌ Inserisci prima l\'Host o IP Pubblico della tua VPS.';
+    }
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (feedback) {
+    feedback.style.display = 'block';
+    feedback.style.background = 'rgba(56,189,248,0.15)';
+    feedback.style.color = '#38bdf8';
+    feedback.style.border = '1px solid rgba(56,189,248,0.3)';
+    feedback.textContent = '⏳ Invio richiesta heartbeat di prova verso la VPS...';
+  }
+
+  try {
+    const res = await fetch('/api/watch/test-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vps_host: host, vps_port: port, secret_token: token })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      if (feedback) {
+        feedback.style.background = 'rgba(16,185,129,0.15)';
+        feedback.style.color = '#34d399';
+        feedback.style.border = '1px solid rgba(16,185,129,0.3)';
+        feedback.innerHTML = `✅ <strong>${json.message}</strong>`;
+      }
+      await saveWatchConfig(false);
+    } else {
+      if (feedback) {
+        feedback.style.background = 'rgba(239,68,68,0.15)';
+        feedback.style.color = '#f87171';
+        feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+        feedback.innerHTML = `❌ <strong>${json.message}</strong>`;
+      }
+    }
+  } catch (err) {
+    if (feedback) {
+      feedback.style.background = 'rgba(239,68,68,0.15)';
+      feedback.style.color = '#f87171';
+      feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+      feedback.textContent = '❌ Errore invio test push: ' + err.message;
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function saveWatchConfig(showNotification = true) {
   const token = (document.getElementById('watch-telegram-token')?.value || '').trim();
   const chatId = (document.getElementById('watch-telegram-chat-id')?.value || '').trim();
   const city = (document.getElementById('watch-weather-city')?.value || '').trim() || 'Roma';
   const time = (document.getElementById('watch-digest-time')?.value || '').trim() || '08:30';
-  const thresh = parseInt(document.getElementById('watch-down-threshold')?.value || '180', 10);
+  const thresh = parseInt(document.getElementById('watch-down-threshold')?.value || '300', 10);
+
+  const host = (document.getElementById('watch-vps-host')?.value || '').trim();
+  const port = parseInt(document.getElementById('watch-vps-port')?.value || '8443', 10);
+  const secretToken = (document.getElementById('watch-secret-token')?.value || '').trim();
+  const pushInterval = parseInt(document.getElementById('watch-push-interval')?.value || '60', 10);
   const setupKey = (document.getElementById('watch-vps-setup-key')?.value || '').trim();
 
   const payload = {
+    mode: currentWatchMode,
+    vps_host: host,
+    vps_port: port,
+    secret_token: secretToken,
+    push_interval_seconds: pushInterval,
     telegram_bot_token: token,
     telegram_chat_id: chatId,
     weather_city: city,
@@ -3840,7 +4003,7 @@ async function saveWatchConfig(showNotification = true) {
       currentWatchConfig = payload;
       updateWatchDeployCommand();
       if (showNotification && typeof showAlert === 'function') {
-        showAlert('✓ Impostazioni Sentinella e Telegram salvate con successo!', 'success');
+        showAlert('✓ Impostazioni Sentinella salvate con successo!', 'success');
       }
     }
   } catch (err) {
@@ -3857,24 +4020,87 @@ async function saveWatchConfigAndAdvance(nextTab) {
 }
 
 function updateWatchDeployCommand() {
-  const setupKeyInput = document.getElementById('watch-vps-setup-key');
-  const alreadyMeshCheck = document.getElementById('watch-vps-already-mesh');
   const codeEl = document.getElementById('watch-deploy-command-code');
   if (!codeEl) return;
 
-  const meshIP = (currentWatchMeshIP && currentWatchMeshIP !== '--') ? currentWatchMeshIP : '<IP-MESH-ALLOD>';
-  const setupKey = setupKeyInput ? setupKeyInput.value.trim() : '';
-  const alreadyMesh = alreadyMeshCheck ? alreadyMeshCheck.checked : false;
+  const botToken = (document.getElementById('watch-telegram-token')?.value || '').trim();
+  const chatId = (document.getElementById('watch-telegram-chat-id')?.value || '').trim();
+  const city = (document.getElementById('watch-weather-city')?.value || '').trim() || 'Roma';
+  const digestTime = (document.getElementById('watch-digest-time')?.value || '').trim() || '08:30';
+  const threshold = parseInt(document.getElementById('watch-down-threshold')?.value || '300', 10);
 
-  let cmd = '';
-  if (alreadyMesh) {
-    cmd = `curl -fsSL http://${meshIP}:8080/api/watch/install.sh | sudo bash`;
+  if (currentWatchMode === 'receiver') {
+    const port = parseInt(document.getElementById('watch-vps-port')?.value || '8443', 10);
+    const secret = (document.getElementById('watch-secret-token')?.value || '').trim() || '<SECRET_TOKEN>';
+    const tgEnabled = Boolean(botToken && chatId);
+
+    const cmd = `sudo bash -c '
+ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")
+echo "⬇️ Scaricamento Allod Watch Sentinel (${ARCH})..."
+curl -fsSL "https://raw.githubusercontent.com/asfaltobollente/allod/main/bin/allod-watch-linux-\${ARCH}" -o /usr/local/bin/allod-watch
+chmod 755 /usr/local/bin/allod-watch
+mkdir -p /etc/allod
+cat << '\''EOF'\'' > /etc/allod/watch.yaml
+mode: receiver
+receiver:
+  port: ${port}
+  secret_token: "${secret}"
+intervals:
+  down_threshold_seconds: ${threshold}
+telegram:
+  enabled: ${tgEnabled}
+  bot_token: "${botToken}"
+  chat_id: "${chatId}"
+weather:
+  enabled: true
+  city: "${city}"
+digest:
+  enabled: true
+  time: "${digestTime}"
+EOF
+chmod 600 /etc/allod/watch.yaml
+if command -v ufw >/dev/null 2>&1; then ufw allow ${port}/tcp || true; fi
+cat << '\''EOF'\'' > /etc/systemd/system/allod-watch.service
+[Unit]
+Description=Allod Watch External Sentinel Daemon (Push Receiver)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/allod-watch run -c /etc/allod/watch.yaml
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65535
+ProtectSystem=full
+ProtectHome=true
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now allod-watch.service
+echo "✅ Allod Watch Sentinel è ora in ascolto sulla porta ${port}!"
+/usr/local/bin/allod-watch test-telegram -c /etc/allod/watch.yaml || true
+'`;
+    codeEl.textContent = cmd.trim();
   } else {
-    const keyPlaceholder = setupKey || '<NETBIRD_SETUP_KEY>';
-    cmd = `curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key ${keyPlaceholder} && curl -fsSL http://${meshIP}:8080/api/watch/install.sh | sudo bash`;
-  }
+    // Mesh Mode
+    const setupKeyInput = document.getElementById('watch-vps-setup-key');
+    const alreadyMeshCheck = document.getElementById('watch-vps-already-mesh');
+    const meshIP = (currentWatchMeshIP && currentWatchMeshIP !== '--') ? currentWatchMeshIP : '<IP-MESH-ALLOD>';
+    const setupKey = setupKeyInput ? setupKeyInput.value.trim() : '';
+    const alreadyMesh = alreadyMeshCheck ? alreadyMeshCheck.checked : false;
 
-  codeEl.textContent = cmd;
+    let cmd = '';
+    if (alreadyMesh) {
+      cmd = `curl -fsSL "http://${meshIP}:8080/api/watch/install.sh?mode=mesh" | sudo bash`;
+    } else {
+      const keyPlaceholder = setupKey || '<NETBIRD_SETUP_KEY>';
+      cmd = `curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key ${keyPlaceholder} && curl -fsSL "http://${meshIP}:8080/api/watch/install.sh?mode=mesh" | sudo bash`;
+    }
+    codeEl.textContent = cmd;
+  }
 }
 
 function copyWatchDeployCommand() {
@@ -3890,7 +4116,7 @@ function copyWatchDeployCommand() {
       setTimeout(() => { btn.innerHTML = origText; }, 2500);
     }
     if (typeof showAlert === 'function') {
-      showAlert('✓ Comando di deploy copiato negli appunti! Incollalo nel terminale della tua VPS.', 'success');
+      showAlert('✓ Comando di deploy copiato negli appunti! Incollalo nel terminale SSH della tua VPS.', 'success');
     }
   }).catch(() => {
     prompt('Copia il comando con Ctrl+C:', text);
@@ -3901,10 +4127,14 @@ function copyWatchDeployCommand() {
 window.openWatchSentinelModal = openWatchSentinelModal;
 window.closeWatchSentinelModal = closeWatchSentinelModal;
 window.switchWatchTab = switchWatchTab;
+window.setWatchMode = setWatchMode;
 window.toggleWatchTokenVisibility = toggleWatchTokenVisibility;
+window.toggleWatchSecretTokenVisibility = toggleWatchSecretTokenVisibility;
+window.generateWatchSecretToken = generateWatchSecretToken;
 window.onWatchTokenInput = onWatchTokenInput;
 window.detectWatchChatID = detectWatchChatID;
 window.testWatchTelegram = testWatchTelegram;
+window.testWatchPush = testWatchPush;
 window.saveWatchConfig = saveWatchConfig;
 window.saveWatchConfigAndAdvance = saveWatchConfigAndAdvance;
 window.updateWatchDeployCommand = updateWatchDeployCommand;

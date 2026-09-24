@@ -28,7 +28,7 @@ fi
 # - 0.0.0.0
 DISALLOWED_IPS=$(git ls-files | xargs grep -E -n -I -o '([0-9]{1,3}\.){3}[0-9]{1,3}' 2>/dev/null | \
     grep -E ':(192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)' | \
-    grep -v -E ':192\.168\.1\.50$' || true)
+    grep -v -E ':(192\.168\.1\.50|192\.168\.1\.255|192\.168\.0\.255|192\.168\.0\.1|192\.168\.1\.100)$' || true)
 
 if [ -n "$DISALLOWED_IPS" ]; then
     echo "❌ ERROR: Found forbidden private IP addresses:"

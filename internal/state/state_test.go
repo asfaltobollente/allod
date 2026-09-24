@@ -269,11 +269,16 @@ func TestSentinelConfigLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get default sentinel config: %v", err)
 	}
-	if cfg.WeatherCity != "Roma" || cfg.DigestTime != "08:30" || cfg.DownThresholdSeconds != 180 {
+	if cfg.WeatherCity != "Roma" || cfg.DigestTime != "08:30" || cfg.DownThresholdSeconds != 300 || cfg.Mode != "push" {
 		t.Errorf("unexpected defaults: %+v", cfg)
 	}
 
 	// 2. Save config
+	cfg.Mode = "push"
+	cfg.VPSHost = "203.0.113.50"
+	cfg.VPSPort = 8443
+	cfg.SecretToken = "token-xyz-789"
+	cfg.PushIntervalSeconds = 90
 	cfg.TelegramBotToken = "123456:ABC-DEF"
 	cfg.TelegramChatID = "987654321"
 	cfg.WeatherCity = "Milano"
@@ -290,7 +295,9 @@ func TestSentinelConfigLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get saved sentinel config: %v", err)
 	}
-	if saved.TelegramBotToken != "123456:ABC-DEF" || saved.TelegramChatID != "987654321" ||
+	if saved.Mode != "push" || saved.VPSHost != "203.0.113.50" || saved.VPSPort != 8443 ||
+		saved.SecretToken != "token-xyz-789" || saved.PushIntervalSeconds != 90 ||
+		saved.TelegramBotToken != "123456:ABC-DEF" || saved.TelegramChatID != "987654321" ||
 		saved.WeatherCity != "Milano" || saved.DigestTime != "07:45" ||
 		saved.DownThresholdSeconds != 120 || saved.VPSSetupKey != "NB-SETUP-TEST-KEY" {
 		t.Errorf("mismatch in saved sentinel config: %+v", saved)

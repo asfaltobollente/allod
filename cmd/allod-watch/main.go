@@ -78,14 +78,32 @@ func main() {
 				}
 			}
 
-			for _, n := range cfg.Nodes {
-				watcher.AddNode(n.ID, n.URL, n.Token)
-				fmt.Printf("✓ Monitoraggio registrato: [%s] -> %s\n", n.ID, n.URL)
+			if cfg.IsReceiverMode() {
+				fmt.Printf("✓ Modalità operativa: PUSH HTTP / Zero-Mesh (Dead Man's Snitch)\n")
+				port := cfg.Receiver.Port
+				if port <= 0 {
+					port = 8443
+				}
+				_, err := watcher.StartReceiver(port, cfg.Receiver.SecretToken)
+				if err != nil {
+					log.Fatalf("Errore avvio ricevitore HTTP su porta %d: %v", port, err)
+				}
+				if cfg.Receiver.SecretToken != "" {
+					fmt.Println("✓ Autenticazione Heartbeat: Abilitata (Token segreto configurato)")
+				} else {
+					fmt.Println("ℹ️  Autenticazione Heartbeat: Disabilitata (accetta qualsiasi heartbeat)")
+				}
+				fmt.Printf("✓ Soglia allarme blackout: %v di assenza di segnale\n", cfg.Intervals.DownThresholdDuration())
+			} else {
+				fmt.Printf("✓ Modalità operativa: PULL MESH (Active WireGuard Polling)\n")
+				for _, n := range cfg.Nodes {
+					watcher.AddNode(n.ID, n.URL, n.Token)
+					fmt.Printf("✓ Monitoraggio registrato: [%s] -> %s\n", n.ID, n.URL)
+				}
+				watcher.Start()
+				fmt.Printf("✓ Ciclo di controllo attivo (intervallo: %v, soglia allarme: %v)\n",
+					cfg.Intervals.CheckDuration(), cfg.Intervals.DownThresholdDuration())
 			}
-
-			watcher.Start()
-			fmt.Printf("✓ Ciclo di controllo attivo (intervallo: %v, soglia allarme: %v)\n",
-				cfg.Intervals.CheckDuration(), cfg.Intervals.DownThresholdDuration())
 
 			var digestScheduler *watch.DailyDigestScheduler
 			if cfg.Digest.Enabled && tg != nil {
@@ -104,6 +122,7 @@ func main() {
 
 			fmt.Println("\nRicevuto segnale di arresto, chiusura sentinella...")
 			watcher.Stop()
+			_ = watcher.StopReceiver(cmd.Context())
 			if digestScheduler != nil {
 				digestScheduler.Stop()
 			}

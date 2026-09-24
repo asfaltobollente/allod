@@ -1481,7 +1481,7 @@ sudo systemctl enable --now allod-helperd</pre>
           <span data-i18n="watch_tab_weather">☀️ Meteo & Resoconto</span>
         </button>
         <button type="button" class="btn btn-sm" id="btn-tab-watch-mesh" onclick="switchWatchTab('mesh')" style="padding:5px 12px; font-size:11.5px; font-weight:600; background:transparent; color:var(--text-muted); border-radius:6px;">
-          <span data-i18n="watch_tab_mesh">☁️ Messa in Mesh & Deploy VPS</span>
+          <span data-i18n="watch_tab_deploy">🛡️ Architettura & Deploy VPS</span>
         </button>
       </div>
 
@@ -1566,15 +1566,15 @@ sudo systemctl enable --now allod-helperd</pre>
 
           <div class="form-group mb-3">
             <label for="watch-down-threshold" style="font-size:12px; font-weight:600;" data-i18n="watch_threshold_label">Soglia Rilevamento Blackout / Assenza Rete:</label>
-            <select id="watch-down-threshold" class="form-control" style="max-width:320px;">
+            <select id="watch-down-threshold" class="form-control" style="max-width:320px;" onchange="updateWatchDeployCommand()">
               <option value="60" data-i18n="watch_threshold_1m">1 minuto (Ultra-reattivo)</option>
               <option value="120" data-i18n="watch_threshold_2m">2 minuti (Veloce)</option>
-              <option value="180" selected data-i18n="watch_threshold_3m">3 minuti (Predefinito - consigliato)</option>
-              <option value="300" data-i18n="watch_threshold_5m">5 minuti (Tollerante)</option>
+              <option value="180" data-i18n="watch_threshold_3m">3 minuti (Veloce / Standard)</option>
+              <option value="300" selected data-i18n="watch_threshold_5m">5 minuti (Consigliato per Push)</option>
               <option value="600" data-i18n="watch_threshold_10m">10 minuti (Solo blackout prolungati)</option>
             </select>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;" data-i18n="watch_threshold_sub">
-              Tempo di mancata risposta del server domestico prima di notificare il blackout.
+              Tempo di assenza heartbeat dal server prima che il VPS invii l'allarme blackout su Telegram.
             </div>
           </div>
 
@@ -1590,44 +1590,115 @@ sudo systemctl enable --now allod-helperd</pre>
           </div>
         </div>
 
-        <!-- PANE 3: MESH SETUP & VPS DEPLOY (PLUG & PLAY) -->
+        <!-- PANE 3: ARCHITECTURE SELECTION & VPS DEPLOY (PUSH vs MESH) -->
         <div id="pane-watch-mesh" class="hidden">
           <div style="margin-bottom:14px;">
-            <strong style="color:var(--text-main); font-size:13px;" data-i18n="watch_mesh_title">Messa in Mesh della VPS & Deploy in 1 Comando</strong>
-            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);" data-i18n="watch_mesh_desc">Poiché Allod si trova dietro CGNAT con zero porte aperte, la VPS esterna deve entrare nella rete mesh NetBird per raggiungere l'endpoint di stato cifrato.</p>
+            <strong style="color:var(--text-main); font-size:13px;" data-i18n="watch_mesh_title">Architettura Sentinella Esterna & Deploy VPS</strong>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);" data-i18n="watch_mesh_desc">Scegli come far comunicare il server domestico con la tua VPS esterna Always-Free:</p>
           </div>
 
-          <!-- Allod Node Mesh IP Status Badge -->
-          <div style="background:#0f172a; border-radius:8px; padding:10px 14px; border:1px solid rgba(255,255,255,0.08); margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-            <div>
-              <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600;" data-i18n="watch_mesh_ip_label">IP Mesh del Nodo Allod:</div>
-              <code id="watch-mesh-ip-display" style="font-size:13px; font-weight:700; color:var(--success); font-family:monospace;">--</code>
+          <!-- Mode Selector Segmented Cards -->
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:16px;">
+            <!-- Option A: Push Mode (Recommended) -->
+            <div id="watch-card-push" onclick="setWatchMode('receiver')" style="cursor:pointer; border:2px solid var(--primary); background:rgba(56,189,248,0.08); border-radius:8px; padding:12px; transition:all 0.2s;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+                <strong style="font-size:12.5px; color:var(--primary);">📡 Push HTTP (Dead Man's Snitch)</strong>
+                <span style="font-size:10px; background:var(--success); color:#000; font-weight:700; padding:2px 6px; border-radius:4px;">CONSIGLIATO</span>
+              </div>
+              <p style="margin:0; font-size:11px; color:var(--text-muted); line-height:1.4;">
+                Allod invia statistiche e heartbeat ogni minuto alla porta della VPS pubblica. Zero mesh sul VPS, massimo isolamento.
+              </p>
             </div>
-            <div id="watch-mesh-ip-note" style="font-size:11px; color:var(--text-muted);">
-              Rete mesh WireGuard punto-punto cifrata
+
+            <!-- Option B: Mesh Mode -->
+            <div id="watch-card-mesh" onclick="setWatchMode('poller')" style="cursor:pointer; border:1px solid var(--card-border); background:rgba(15,23,42,0.4); border-radius:8px; padding:12px; transition:all 0.2s;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+                <strong style="font-size:12.5px; color:var(--text-main);">☁️ Pull Mesh (NetBird)</strong>
+                <span style="font-size:10px; background:rgba(255,255,255,0.1); color:var(--text-muted); font-weight:600; padding:2px 6px; border-radius:4px;">OPZIONALE</span>
+              </div>
+              <p style="margin:0; font-size:11px; color:var(--text-muted); line-height:1.4;">
+                La VPS entra nella rete mesh WireGuard NetBird ed effettua polling periodico dell'IP interno di Allod.
+              </p>
             </div>
           </div>
 
-          <!-- Setup Key Input -->
-          <div class="form-group mb-3" id="watch-setup-key-group">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <label for="watch-vps-setup-key" style="font-size:12px; font-weight:600; margin:0;" data-i18n="watch_mesh_key_label">NetBird Setup Key per la VPS:</label>
-              <a href="https://app.netbird.io/setup-keys" target="_blank" style="color:var(--primary); font-size:11px; text-decoration:none; font-weight:600;" data-i18n="watch_mesh_key_link">↗ Genera Setup Key su NetBird</a>
+          <!-- SECTION A: PUSH MODE SETTINGS -->
+          <div id="watch-section-push">
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom:12px;">
+              <div class="form-group">
+                <label for="watch-vps-host" style="font-size:12px; font-weight:600;" data-i18n="watch_vps_host_label">Host / IP Pubblico della tua VPS:</label>
+                <input type="text" id="watch-vps-host" class="form-control" placeholder="es. 129.150.x.x o vps.tuodominio.org" oninput="updateWatchDeployCommand()" />
+              </div>
+              <div class="form-group">
+                <label for="watch-vps-port" style="font-size:12px; font-weight:600;" data-i18n="watch_vps_port_label">Porta Ricevitore:</label>
+                <input type="number" id="watch-vps-port" class="form-control" value="8443" min="1" max="65535" oninput="updateWatchDeployCommand()" />
+              </div>
             </div>
-            <input type="text" id="watch-vps-setup-key" class="form-control" placeholder="es. 4A8B7C21-DF34-45F2-..." oninput="updateWatchDeployCommand()" />
+
+            <div class="form-group mb-3">
+              <label for="watch-secret-token" style="font-size:12px; font-weight:600;" data-i18n="watch_secret_token_label">Token Segreto di Autenticazione (X-Allod-Token):</label>
+              <div style="display:flex; gap:6px;">
+                <input type="password" id="watch-secret-token" class="form-control" placeholder="Token alfanumerico casuale a 32 caratteri" oninput="updateWatchDeployCommand()" />
+                <button type="button" class="btn btn-sm btn-secondary" onclick="toggleWatchSecretTokenVisibility()" style="padding:0 10px;" title="Mostra/Nascondi Token">👁️</button>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="generateWatchSecretToken()" style="white-space:nowrap; padding:0 12px; font-weight:600;" data-i18n="watch_btn_generate_token">⚡ Genera</button>
+              </div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                Autentica le notifiche push in modo che il VPS accetti heartbeat solo ed esclusivamente dal tuo server Allod.
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label for="watch-push-interval" style="font-size:12px; font-weight:600; margin:0;" data-i18n="watch_push_interval_label">Invio Heartbeat ogni:</label>
+                <select id="watch-push-interval" class="form-control form-control-sm" style="width:130px;" onchange="updateWatchDeployCommand()">
+                  <option value="30">30 secondi</option>
+                  <option value="60" selected>60 secondi</option>
+                  <option value="120">2 minuti</option>
+                  <option value="300">5 minuti</option>
+                </select>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-warning" id="btn-test-watch-push" onclick="testWatchPush()" style="font-weight:600; padding:6px 14px;">
+                📡 <span data-i18n="watch_btn_test_push">Verifica Connessione VPS (Test Push)</span>
+              </button>
+            </div>
+
+            <div id="watch-push-feedback" style="display:none; padding:8px 12px; border-radius:6px; font-size:11.5px; margin-bottom:12px;"></div>
           </div>
 
-          <!-- Already in Mesh Toggle -->
-          <div class="form-group mb-3">
-            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:11.5px; color:var(--text-main);">
-              <input type="checkbox" id="watch-vps-already-mesh" onchange="updateWatchDeployCommand()" style="cursor:pointer; width:15px; height:15px; accent-color:var(--primary);" />
-              <span data-i18n="watch_vps_already_mesh_label">La VPS è già connessa alla rete NetBird</span>
-            </label>
+          <!-- SECTION B: MESH MODE SETTINGS -->
+          <div id="watch-section-mesh" class="hidden">
+            <!-- Allod Node Mesh IP Status Badge -->
+            <div style="background:#0f172a; border-radius:8px; padding:10px 14px; border:1px solid rgba(255,255,255,0.08); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600;" data-i18n="watch_mesh_ip_label">IP Mesh del Nodo Allod:</div>
+                <code id="watch-mesh-ip-display" style="font-size:13px; font-weight:700; color:var(--success); font-family:monospace;">--</code>
+              </div>
+              <div id="watch-mesh-ip-note" style="font-size:11px; color:var(--text-muted);">
+                Rete mesh WireGuard punto-punto cifrata
+              </div>
+            </div>
+
+            <!-- Setup Key Input -->
+            <div class="form-group mb-3" id="watch-setup-key-group">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label for="watch-vps-setup-key" style="font-size:12px; font-weight:600; margin:0;" data-i18n="watch_mesh_key_label">NetBird Setup Key per la VPS:</label>
+                <a href="https://app.netbird.io/setup-keys" target="_blank" style="color:var(--primary); font-size:11px; text-decoration:none; font-weight:600;" data-i18n="watch_mesh_key_link">↗ Genera Setup Key su NetBird</a>
+              </div>
+              <input type="text" id="watch-vps-setup-key" class="form-control" placeholder="es. 4A8B7C21-DF34-45F2-..." oninput="updateWatchDeployCommand()" />
+            </div>
+
+            <!-- Already in Mesh Toggle -->
+            <div class="form-group mb-3">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:11.5px; color:var(--text-main);">
+                <input type="checkbox" id="watch-vps-already-mesh" onchange="updateWatchDeployCommand()" style="cursor:pointer; width:15px; height:15px; accent-color:var(--primary);" />
+                <span data-i18n="watch_vps_already_mesh_label">La VPS è già connessa alla rete NetBird</span>
+              </label>
+            </div>
           </div>
 
           <!-- Generated Single Command Box -->
           <div style="margin-bottom:14px;">
-            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;" data-i18n="watch_vps_cmd_label">Comando All-in-One per la VPS (Copia & Incolla):</label>
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;" data-i18n="watch_vps_cmd_label">Comando All-in-One per la VPS (Copia & Incolla via SSH):</label>
             <div style="position:relative; background:#0b1120; border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:12px 14px;">
               <pre style="margin:0; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; white-space:pre-wrap; word-break:break-all; line-height:1.5;"><code id="watch-deploy-command-code">curl -fsSL ... | bash</code></pre>
             </div>
@@ -1641,11 +1712,12 @@ sudo systemctl enable --now allod-helperd</pre>
           <!-- Simple 3-step Instructions -->
           <div style="background:#0b1120; border-radius:8px; padding:12px 14px; border:1px solid rgba(255,255,255,0.08); font-size:11.5px; line-height:1.6;">
             <strong style="color:var(--text-main); display:block; margin-bottom:4px;" data-i18n="watch_vps_instructions_title">Come installare sulla VPS in 10 secondi:</strong>
-            <div data-i18n="watch_vps_step1">1. Connettiti via SSH alla tua VPS esterna (Oracle Cloud Always-Free, Hetzner, ecc.): <code>ssh utente@ip-vps</code></div>
-            <div data-i18n="watch_vps_step2">2. Incolla il comando copiato qui sopra e premi <b>Invio</b>.</div>
-            <div data-i18n="watch_vps_step3">3. La VPS entra nel mesh, scarica la sentinella Allod, attiva systemd e invia subito una conferma su Telegram!</div>
+            <div id="watch-instruction-step1" data-i18n="watch_vps_step1">1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code></div>
+            <div id="watch-instruction-step2" data-i18n="watch_vps_step2">2. Incolla il comando copiato qui sopra e premi <b>Invio</b>.</div>
+            <div id="watch-instruction-step3" data-i18n="watch_vps_step3">3. La VPS configura la sentinella Allod, apre il firewall, attiva systemd e invia subito una conferma su Telegram!</div>
           </div>
         </div>
+      </div>
       </div>
 
       <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">

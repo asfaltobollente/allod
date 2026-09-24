@@ -17,6 +17,12 @@ type SentinelNodeConfig struct {
 	Token string `yaml:"token,omitempty"`
 }
 
+// ReceiverConfig defines HTTP receiver settings for push heartbeat mode.
+type ReceiverConfig struct {
+	Port        int    `yaml:"port"`
+	SecretToken string `yaml:"secret_token"`
+}
+
 // TelegramConfig defines Telegram Bot settings.
 type TelegramConfig struct {
 	Enabled  bool   `yaml:"enabled"`
@@ -45,6 +51,8 @@ type DigestConfig struct {
 
 // SentinelConfig is the root configuration structure for allod-watch.
 type SentinelConfig struct {
+	Mode      string               `yaml:"mode"` // "receiver" (push mode, default) or "poller" (mesh mode)
+	Receiver  ReceiverConfig       `yaml:"receiver"`
 	Nodes     []SentinelNodeConfig `yaml:"nodes"`
 	Telegram  TelegramConfig       `yaml:"telegram"`
 	Weather   WeatherConfig        `yaml:"weather"`
@@ -70,6 +78,17 @@ func LoadConfig(path string) (*SentinelConfig, error) {
 	}
 
 	// Environment variable overrides (useful in containerized / cloud VPS environments)
+	if mode := os.Getenv("ALLOD_WATCH_MODE"); mode != "" {
+		cfg.Mode = mode
+	}
+	if portStr := os.Getenv("ALLOD_WATCH_PORT"); portStr != "" {
+		if p, err := strconv.Atoi(portStr); err == nil && p > 0 {
+			cfg.Receiver.Port = p
+		}
+	}
+	if secret := os.Getenv("ALLOD_WATCH_SECRET_TOKEN"); secret != "" {
+		cfg.Receiver.SecretToken = secret
+	}
 	if token := os.Getenv("TELEGRAM_BOT_TOKEN"); token != "" {
 		cfg.Telegram.BotToken = token
 		cfg.Telegram.Enabled = true
@@ -95,11 +114,29 @@ func LoadConfig(path string) (*SentinelConfig, error) {
 	return cfg, nil
 }
 
+// IsReceiverMode returns true if the sentinel should listen for incoming heartbeats (Push mode).
+func (c *SentinelConfig) IsReceiverMode() bool {
+	mode := strings.ToLower(strings.TrimSpace(c.Mode))
+	if mode == "receiver" || mode == "push" {
+		return true
+	}
+	if mode == "poller" || mode == "mesh" {
+		return false
+	}
+	// Default to receiver mode if receiver port is specified or nodes are empty
+	return c.Receiver.Port > 0 && len(c.Nodes) == 0
+}
+
 // DefaultConfig provides sensible defaults.
 func DefaultConfig() *SentinelConfig {
 	return &SentinelConfig{
+		Mode: "receiver",
+		Receiver: ReceiverConfig{
+			Port:        8443,
+			SecretToken: "",
+		},
 		Nodes: []SentinelNodeConfig{
-			{ID: "mio-allod", URL: "http://127.0.0.1:8080/api/health"},
+			{ID: "allod-casa", URL: "http://127.0.0.1:8080/api/health"},
 		},
 		Telegram: TelegramConfig{
 			Enabled:  false,
@@ -113,7 +150,7 @@ func DefaultConfig() *SentinelConfig {
 		},
 		Intervals: IntervalsConfig{
 			CheckSeconds:         60,
-			DownThresholdSeconds: 180, // 3 minutes
+			DownThresholdSeconds: 300, // 5 minutes default
 		},
 		Digest: DigestConfig{
 			Enabled: true,

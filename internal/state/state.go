@@ -46,6 +46,11 @@ type Session struct {
 }
 
 type SentinelConfigRecord struct {
+	Mode                 string    `json:"mode"`
+	VPSHost              string    `json:"vps_host"`
+	VPSPort              int       `json:"vps_port"`
+	SecretToken          string    `json:"secret_token"`
+	PushIntervalSeconds  int       `json:"push_interval_seconds"`
 	TelegramBotToken     string    `json:"telegram_bot_token"`
 	TelegramChatID       string    `json:"telegram_chat_id"`
 	WeatherCity          string    `json:"weather_city"`
@@ -119,11 +124,16 @@ func Open(dbPath string) (*Store, error) {
 
 	CREATE TABLE IF NOT EXISTS sentinel_config (
 		id INTEGER PRIMARY KEY CHECK (id = 1),
+		mode TEXT DEFAULT 'push',
+		vps_host TEXT DEFAULT '',
+		vps_port INTEGER DEFAULT 8443,
+		secret_token TEXT DEFAULT '',
+		push_interval_seconds INTEGER DEFAULT 60,
 		telegram_bot_token TEXT DEFAULT '',
 		telegram_chat_id TEXT DEFAULT '',
 		weather_city TEXT DEFAULT 'Roma',
 		digest_time TEXT DEFAULT '08:30',
-		down_threshold_seconds INTEGER DEFAULT 180,
+		down_threshold_seconds INTEGER DEFAULT 300,
 		vps_setup_key TEXT DEFAULT '',
 		updated_at DATETIME NOT NULL
 	);
@@ -147,6 +157,11 @@ func Open(dbPath string) (*Store, error) {
 	_, _ = db.Exec("ALTER TABLE family_members ADD COLUMN password_hash TEXT DEFAULT ''")
 	_, _ = db.Exec("ALTER TABLE family_members ADD COLUMN password_salt TEXT DEFAULT ''")
 	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN vps_setup_key TEXT DEFAULT ''")
+	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN mode TEXT DEFAULT 'push'")
+	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN vps_host TEXT DEFAULT ''")
+	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN vps_port INTEGER DEFAULT 8443")
+	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN secret_token TEXT DEFAULT ''")
+	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN push_interval_seconds INTEGER DEFAULT 60")
 
 	return &Store{db: db}, nil
 }
@@ -530,28 +545,46 @@ func (s *Store) ClearAdminAuth() error {
 
 // --- Watch Sentinel Methods ---
 
-// GetSentinelConfig returns the saved sentinel config or defaults.
+// GetSentinelConfig returns the persisted sentinel configuration singleton.
 func (s *Store) GetSentinelConfig() (*SentinelConfigRecord, error) {
 	query := `
-	SELECT telegram_bot_token, telegram_chat_id, weather_city, digest_time, down_threshold_seconds, vps_setup_key, updated_at
+	SELECT mode, vps_host, vps_port, secret_token, push_interval_seconds,
+	       telegram_bot_token, telegram_chat_id, weather_city, digest_time,
+	       down_threshold_seconds, vps_setup_key, updated_at
 	FROM sentinel_config WHERE id = 1
 	`
 	row := s.db.QueryRow(query)
 	var cfg SentinelConfigRecord
 	var updatedStr string
-	err := row.Scan(&cfg.TelegramBotToken, &cfg.TelegramChatID, &cfg.WeatherCity, &cfg.DigestTime, &cfg.DownThresholdSeconds, &cfg.VPSSetupKey, &updatedStr)
+	err := row.Scan(
+		&cfg.Mode, &cfg.VPSHost, &cfg.VPSPort, &cfg.SecretToken, &cfg.PushIntervalSeconds,
+		&cfg.TelegramBotToken, &cfg.TelegramChatID, &cfg.WeatherCity, &cfg.DigestTime,
+		&cfg.DownThresholdSeconds, &cfg.VPSSetupKey, &updatedStr,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &SentinelConfigRecord{
+				Mode:                 "push",
+				VPSPort:              8443,
+				PushIntervalSeconds:  60,
 				WeatherCity:          "Roma",
 				DigestTime:           "08:30",
-				DownThresholdSeconds: 180,
+				DownThresholdSeconds: 300,
 				UpdatedAt:            time.Now(),
 			}, nil
 		}
 		return nil, err
 	}
 	cfg.UpdatedAt, _ = time.Parse(time.RFC3339, updatedStr)
+	if cfg.Mode == "" {
+		cfg.Mode = "push"
+	}
+	if cfg.VPSPort <= 0 {
+		cfg.VPSPort = 8443
+	}
+	if cfg.PushIntervalSeconds <= 0 {
+		cfg.PushIntervalSeconds = 60
+	}
 	if cfg.WeatherCity == "" {
 		cfg.WeatherCity = "Roma"
 	}
@@ -559,7 +592,7 @@ func (s *Store) GetSentinelConfig() (*SentinelConfigRecord, error) {
 		cfg.DigestTime = "08:30"
 	}
 	if cfg.DownThresholdSeconds <= 0 {
-		cfg.DownThresholdSeconds = 180
+		cfg.DownThresholdSeconds = 300
 	}
 	return &cfg, nil
 }
@@ -569,6 +602,15 @@ func (s *Store) SaveSentinelConfig(cfg *SentinelConfigRecord) error {
 	if cfg == nil {
 		return fmt.Errorf("configurazione sentinella nulla")
 	}
+	if cfg.Mode == "" {
+		cfg.Mode = "push"
+	}
+	if cfg.VPSPort <= 0 {
+		cfg.VPSPort = 8443
+	}
+	if cfg.PushIntervalSeconds <= 0 {
+		cfg.PushIntervalSeconds = 60
+	}
 	if cfg.WeatherCity == "" {
 		cfg.WeatherCity = "Roma"
 	}
@@ -576,15 +618,20 @@ func (s *Store) SaveSentinelConfig(cfg *SentinelConfigRecord) error {
 		cfg.DigestTime = "08:30"
 	}
 	if cfg.DownThresholdSeconds <= 0 {
-		cfg.DownThresholdSeconds = 180
+		cfg.DownThresholdSeconds = 300
 	}
 	now := time.Now()
 	cfg.UpdatedAt = now
 
 	query := `
-	INSERT INTO sentinel_config (id, telegram_bot_token, telegram_chat_id, weather_city, digest_time, down_threshold_seconds, vps_setup_key, updated_at)
-	VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO sentinel_config (id, mode, vps_host, vps_port, secret_token, push_interval_seconds, telegram_bot_token, telegram_chat_id, weather_city, digest_time, down_threshold_seconds, vps_setup_key, updated_at)
+	VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
+		mode = excluded.mode,
+		vps_host = excluded.vps_host,
+		vps_port = excluded.vps_port,
+		secret_token = excluded.secret_token,
+		push_interval_seconds = excluded.push_interval_seconds,
 		telegram_bot_token = excluded.telegram_bot_token,
 		telegram_chat_id = excluded.telegram_chat_id,
 		weather_city = excluded.weather_city,
@@ -593,7 +640,11 @@ func (s *Store) SaveSentinelConfig(cfg *SentinelConfigRecord) error {
 		vps_setup_key = excluded.vps_setup_key,
 		updated_at = excluded.updated_at;
 	`
-	_, err := s.db.Exec(query, cfg.TelegramBotToken, cfg.TelegramChatID, cfg.WeatherCity, cfg.DigestTime, cfg.DownThresholdSeconds, cfg.VPSSetupKey, now.Format(time.RFC3339))
+	_, err := s.db.Exec(query,
+		cfg.Mode, cfg.VPSHost, cfg.VPSPort, cfg.SecretToken, cfg.PushIntervalSeconds,
+		cfg.TelegramBotToken, cfg.TelegramChatID, cfg.WeatherCity, cfg.DigestTime,
+		cfg.DownThresholdSeconds, cfg.VPSSetupKey, now.Format(time.RFC3339),
+	)
 	return err
 }
 

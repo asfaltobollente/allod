@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -165,6 +166,49 @@ func getLocalNetBirdIP() string {
 	return ""
 }
 
+func buildNodeHealthPayload() watch.NodeHealthPayload {
+	nodeName := "allod-node"
+	cfg, _ := config.LoadConfig(getConfigPath())
+	if cfg != nil && cfg.Node.Name != "" {
+		nodeName = cfg.Node.Name
+	}
+
+	vitals := preflight.GetServerVitals()
+	ram := preflight.GetRealRAMStats()
+	storageTopo := preflight.DetectStorageTopology()
+
+	storageOK := !storageTopo.HasWarning
+	storageUsed := storageTopo.ModeSummary
+	storageFree := ""
+	freePct := 100
+	if !storageTopo.IsMounted && len(storageTopo.DataDisks) > 0 {
+		storageOK = false
+	}
+
+	var activeMods []string
+	if cfg != nil {
+		for name, m := range cfg.Modules {
+			if m.Level != "off" && m.Level != "" {
+				activeMods = append(activeMods, name)
+			}
+		}
+	}
+
+	return watch.NodeHealthPayload{
+		Status:         "ok",
+		NodeName:       nodeName,
+		UptimeSeconds:  vitals.UptimeSeconds,
+		StorageOK:      storageOK,
+		StorageUsed:    storageUsed,
+		StorageFree:    storageFree,
+		StorageFreePct: freePct,
+		CPULoad:        vitals.LoadAvg1,
+		CPUTemp:        vitals.CPUTempC,
+		MemoryUsedMB:   ram.UsedMB,
+		MemoryTotalMB:  ram.TotalMB,
+		ActiveModules:  activeMods,
+	}
+}
 
 func getStorageInfo(modID string) (string, string, int64, bool, []VolumeMountInfo) {
 	baseDir := "/mnt/allod-storage"
@@ -561,47 +605,7 @@ func main() {
 	// 2c. API Health (sentinel prober endpoint for external watchdog)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		cfg, _ := config.LoadConfig(getConfigPath())
-		nodeName := "allod-node"
-		if cfg != nil && cfg.Node.Name != "" {
-			nodeName = cfg.Node.Name
-		}
-
-		vitals := preflight.GetServerVitals()
-		ram := preflight.GetRealRAMStats()
-		storageTopo := preflight.DetectStorageTopology()
-
-		storageOK := !storageTopo.HasWarning
-		storageUsed := storageTopo.ModeSummary
-		storageFree := ""
-		freePct := 100
-		if !storageTopo.IsMounted && len(storageTopo.DataDisks) > 0 {
-			storageOK = false
-		}
-
-		var activeMods []string
-		if cfg != nil {
-			for name, m := range cfg.Modules {
-				if m.Level != "off" && m.Level != "" {
-					activeMods = append(activeMods, name)
-				}
-			}
-		}
-
-		payload := watch.NodeHealthPayload{
-			Status:         "ok",
-			NodeName:       nodeName,
-			UptimeSeconds:  vitals.UptimeSeconds,
-			StorageOK:      storageOK,
-			StorageUsed:    storageUsed,
-			StorageFree:    storageFree,
-			StorageFreePct: freePct,
-			CPULoad:        vitals.LoadAvg1,
-			MemoryUsedMB:   ram.UsedMB,
-			MemoryTotalMB:  ram.TotalMB,
-			ActiveModules:  activeMods,
-		}
-
+		payload := buildNodeHealthPayload()
 		json.NewEncoder(w).Encode(payload)
 	})
 
@@ -619,6 +623,33 @@ func main() {
 		if err != nil {
 			http.Error(w, "Failed to load sentinel config: "+err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if cfg == nil {
+			cfg = &state.SentinelConfigRecord{
+				Mode:                 "receiver",
+				VPSPort:              8443,
+				PushIntervalSeconds:  60,
+				WeatherCity:          "Roma",
+				DigestTime:           "08:30",
+				DownThresholdSeconds: 300,
+			}
+		} else {
+			if cfg.Mode == "" {
+				cfg.Mode = "receiver"
+			}
+			if cfg.VPSPort <= 0 {
+				cfg.VPSPort = 8443
+			}
+			if cfg.PushIntervalSeconds <= 0 {
+				cfg.PushIntervalSeconds = 60
+			}
+			if cfg.DownThresholdSeconds <= 0 {
+				if cfg.Mode == "receiver" || cfg.Mode == "push" {
+					cfg.DownThresholdSeconds = 300
+				} else {
+					cfg.DownThresholdSeconds = 180
+				}
+			}
 		}
 
 		meshIP := getLocalNetBirdIP()
@@ -770,9 +801,12 @@ func main() {
 		}
 		if cfg == nil {
 			cfg = &state.SentinelConfigRecord{
+				Mode:                 "receiver",
+				VPSPort:              8443,
+				PushIntervalSeconds:  60,
 				WeatherCity:          "Roma",
 				DigestTime:           "08:30",
-				DownThresholdSeconds: 180,
+				DownThresholdSeconds: 300,
 			}
 		}
 
@@ -792,21 +826,181 @@ func main() {
 
 		tgEnabled := cfg.TelegramBotToken != "" && cfg.TelegramChatID != ""
 
-		script := fmt.Sprintf(`#!/usr/bin/env bash
+		mode := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("mode")))
+		if mode == "" {
+			if cfg.Mode != "" {
+				mode = strings.ToLower(strings.TrimSpace(cfg.Mode))
+			} else {
+				mode = "receiver"
+			}
+		}
+
+		if mode == "receiver" || mode == "push" {
+			vpsPort := cfg.VPSPort
+			if vpsPort <= 0 {
+				vpsPort = 8443
+			}
+			downThreshold := cfg.DownThresholdSeconds
+			if downThreshold <= 0 {
+				downThreshold = 300
+			}
+
+			script := fmt.Sprintf(`#!/usr/bin/env bash
 # ==============================================================================
-# Allod Watch Sentinel - One-Click VPS Deploy
+# Allod Watch Sentinel - Push Mode (Receiver) VPS Deploy
 # ==============================================================================
 set -e
 
 echo ""
 echo "=========================================================="
-echo "🛡️  Installazione e Avvio Allod Watch Sentinel su VPS"
+echo "🛡️  Installazione Allod Watch Sentinel su VPS (Push Mode)"
 echo "=========================================================="
 echo ""
 
 if [ "$EUID" -ne 0 ]; then
   echo "❌ Errore: questo script deve essere eseguito come root."
-  echo "   Rilancia con: curl -fsSL http://%s/api/watch/install.sh | sudo bash"
+  echo "   Rilancia con: curl -fsSL "http://%s/api/watch/install.sh?mode=push" | sudo bash"
+  exit 1
+fi
+
+# 1. Rilevamento Architettura CPU
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64) GOARCH="amd64" ;;
+  aarch64|arm64) GOARCH="arm64" ;;
+  *)
+    echo "❌ Architettura CPU $ARCH non supportata per l'installazione automatica."
+    exit 1
+    ;;
+esac
+echo "✓ Architettura CPU rilevata: $ARCH ($GOARCH)"
+
+# 2. Download Binario
+echo "⬇️  Scaricamento binario allod-watch..."
+if ! curl -fsSL "https://raw.githubusercontent.com/asfaltobollente/allod/main/bin/allod-watch-linux-${GOARCH}" -o /usr/local/bin/allod-watch; then
+  echo "⚠️ Download da GitHub non riuscito, provo dal nodo Allod..."
+  curl -fsSL "http://%s/api/watch/binary?arch=${GOARCH}" -o /usr/local/bin/allod-watch
+fi
+chmod 755 /usr/local/bin/allod-watch
+echo "✓ Binario installato con successo in /usr/local/bin/allod-watch"
+
+# 3. Creazione Configurazione
+mkdir -p /etc/allod
+cat << 'ALLOD_EOF' > /etc/allod/watch.yaml
+mode: receiver
+
+receiver:
+  port: %d
+  secret_token: "%s"
+
+intervals:
+  down_threshold_seconds: %d
+
+telegram:
+  enabled: %t
+  bot_token: "%s"
+  chat_id: "%s"
+
+weather:
+  enabled: true
+  city: "%s"
+
+digest:
+  enabled: true
+  time: "%s"
+ALLOD_EOF
+
+chmod 600 /etc/allod/watch.yaml
+echo "✓ Configurazione salvata in /etc/allod/watch.yaml"
+
+# 4. Firewall UFW (se attivo)
+if command -v ufw >/dev/null 2>&1; then
+  if ufw status 2>/dev/null | grep -q "Status: active"; then
+    echo "🔓 Apertura porta %d nel firewall UFW..."
+    ufw allow %d/tcp || true
+  fi
+fi
+
+# 5. Creazione Unit Systemd
+cat << 'ALLOD_EOF' > /etc/systemd/system/allod-watch.service
+[Unit]
+Description=Allod Watch External Sentinel Daemon (Push Receiver)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/allod-watch run -c /etc/allod/watch.yaml
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65535
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+ALLOD_EOF
+
+# 6. Avvio e Abilitazione Servizio
+systemctl daemon-reload
+systemctl enable --now allod-watch.service
+
+echo ""
+echo "=========================================================="
+echo "✅ Allod Watch Sentinel è ora in ascolto sulla porta %d!"
+echo "   Stato servizio: systemctl status allod-watch"
+echo "   Log in tempo reale: journalctl -u allod-watch -f"
+echo "=========================================================="
+echo ""
+
+# 7. Notifica Telegram
+if [ -n "%s" ] && [ -n "%s" ]; then
+  echo "💬 Invio messaggio di conferma su Telegram..."
+  /usr/local/bin/allod-watch test-telegram -c /etc/allod/watch.yaml || true
+fi
+`,
+				allodHost,
+				allodHost,
+				vpsPort,
+				cfg.SecretToken,
+				downThreshold,
+				tgEnabled,
+				cfg.TelegramBotToken,
+				cfg.TelegramChatID,
+				cfg.WeatherCity,
+				cfg.DigestTime,
+				vpsPort,
+				vpsPort,
+				vpsPort,
+				cfg.TelegramBotToken,
+				cfg.TelegramChatID,
+			)
+			w.Write([]byte(script))
+			return
+		}
+
+		downThreshold := cfg.DownThresholdSeconds
+		if downThreshold <= 0 {
+			downThreshold = 180
+		}
+
+		script := fmt.Sprintf(`#!/usr/bin/env bash
+# ==============================================================================
+# Allod Watch Sentinel - Mesh Mode (Poller) VPS Deploy
+# ==============================================================================
+set -e
+
+echo ""
+echo "=========================================================="
+echo "🛡️  Installazione e Avvio Allod Watch Sentinel su VPS (Mesh Mode)"
+echo "=========================================================="
+echo ""
+
+if [ "$EUID" -ne 0 ]; then
+  echo "❌ Errore: questo script deve essere eseguito come root."
+  echo "   Rilancia con: curl -fsSL "http://%s/api/watch/install.sh?mode=mesh" | sudo bash"
   exit 1
 fi
 
@@ -824,13 +1018,18 @@ echo "✓ Architettura CPU rilevata: $ARCH ($GOARCH)"
 
 # 2. Download Binario dal nodo Allod
 echo "⬇️  Scaricamento binario allod-watch da http://%s..."
-curl -fsSL "http://%s/api/watch/binary?arch=${GOARCH}" -o /usr/local/bin/allod-watch
+if ! curl -fsSL "http://%s/api/watch/binary?arch=${GOARCH}" -o /usr/local/bin/allod-watch; then
+  echo "⚠️ Download dal nodo Allod non riuscito, provo da GitHub..."
+  curl -fsSL "https://raw.githubusercontent.com/asfaltobollente/allod/main/bin/allod-watch-linux-${GOARCH}" -o /usr/local/bin/allod-watch
+fi
 chmod 755 /usr/local/bin/allod-watch
 echo "✓ Binario installato con successo in /usr/local/bin/allod-watch"
 
 # 3. Creazione Configurazione
 mkdir -p /etc/allod
 cat << 'ALLOD_EOF' > /etc/allod/watch.yaml
+mode: poller
+
 server:
   port: 9099
 
@@ -860,7 +1059,7 @@ echo "✓ Configurazione salvata in /etc/allod/watch.yaml"
 # 4. Creazione Unit Systemd
 cat << 'ALLOD_EOF' > /etc/systemd/system/allod-watch.service
 [Unit]
-Description=Allod Watch External Sentinel Daemon
+Description=Allod Watch External Sentinel Daemon (Mesh Poller)
 After=network-online.target netbird.service
 Wants=network-online.target
 
@@ -902,7 +1101,7 @@ fi
 			allodHost,
 			nodeName,
 			allodHost,
-			cfg.DownThresholdSeconds,
+			downThreshold,
 			tgEnabled,
 			cfg.TelegramBotToken,
 			cfg.TelegramChatID,
@@ -961,7 +1160,126 @@ fi
 		http.ServeFile(w, r, targetPath)
 	})
 
-	// 2j. API Wake-on-LAN Devices (GET/POST/DELETE /api/wol/devices)
+	// 2j. API Watch Generate Secret Token (POST /api/watch/generate-token)
+	mux.HandleFunc("/api/watch/generate-token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore generazione token: " + err.Error()})
+			return
+		}
+		token := hex.EncodeToString(b)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "ok",
+			"token":  token,
+		})
+	})
+
+	// 2k. API Watch Test Push (POST /api/watch/test-push)
+	mux.HandleFunc("/api/watch/test-push", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+
+		var req struct {
+			VPSHost     string `json:"vps_host"`
+			VPSPort     int    `json:"vps_port"`
+			SecretToken string `json:"secret_token"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		host := strings.TrimSpace(req.VPSHost)
+		port := req.VPSPort
+		token := strings.TrimSpace(req.SecretToken)
+
+		if host == "" {
+			st, err := state.Open(dbPath)
+			if err == nil {
+				cfg, _ := st.GetSentinelConfig()
+				st.Close()
+				if cfg != nil {
+					host = strings.TrimSpace(cfg.VPSHost)
+					if port <= 0 {
+						port = cfg.VPSPort
+					}
+					if token == "" {
+						token = strings.TrimSpace(cfg.SecretToken)
+					}
+				}
+			}
+		}
+
+		if host == "" {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Host o indirizzo IP del VPS non configurato."})
+			return
+		}
+		if port <= 0 {
+			port = 8443
+		}
+
+		var endpoint string
+		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
+			endpoint = fmt.Sprintf("%s:%d/api/heartbeat", strings.TrimRight(host, "/"), port)
+		} else {
+			endpoint = fmt.Sprintf("http://%s:%d/api/heartbeat", host, port)
+		}
+
+		payload := buildNodeHealthPayload()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore serializzazione payload: " + err.Error()})
+			return
+		}
+
+		httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(data))
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore creazione richiesta HTTP: " + err.Error()})
+			return
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			httpReq.Header.Set("X-Allod-Token", token)
+		}
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Impossibile raggiungere il VPS (%s): %v. Verifica che allod-watch sia attivo e la porta %d sia aperta.", endpoint, err, port),
+			})
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: "Il VPS ha risposto 401 Unauthorized: il Token Segreto non corrisponde a quello impostato sulla Sentinella.",
+			})
+			return
+		}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Il VPS ha risposto con codice HTTP imprevisto: %d", resp.StatusCode),
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Heartbeat push inviato e confermato con successo dal VPS (HTTP %d)!", resp.StatusCode),
+		})
+	})
+
+	// 2l. API Wake-on-LAN Devices (GET/POST/DELETE /api/wol/devices)
 	mux.HandleFunc("/api/wol/devices", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		st, err := state.Open(dbPath)
@@ -3726,6 +4044,9 @@ WantedBy=default.target
 		}
 	}()
 
+	// Background Heartbeat Pusher for external sentinel watchdog
+	go startHeartbeatPusher(dbPath)
+
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintf(os.Stderr, "Errore server: %v\n", err)
 		os.Exit(1)
@@ -3757,4 +4078,74 @@ func checkHelperConnectivity() (connected bool, permissionDenied bool) {
 	}
 
 	return false, false
+}
+
+// startHeartbeatPusher periodically pushes node vitals to the external sentinel VPS in Push mode.
+func startHeartbeatPusher(dbPath string) {
+	time.Sleep(5 * time.Second)
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	for {
+		interval := 60
+		func() {
+			st, err := state.Open(dbPath)
+			if err != nil {
+				return
+			}
+			defer st.Close()
+
+			cfg, err := st.GetSentinelConfig()
+			if err != nil || cfg == nil {
+				return
+			}
+
+			if cfg.PushIntervalSeconds >= 10 {
+				interval = cfg.PushIntervalSeconds
+			}
+
+			mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
+			if mode == "poller" || mode == "mesh" {
+				return
+			}
+
+			vpsHost := strings.TrimSpace(cfg.VPSHost)
+			if vpsHost == "" {
+				return
+			}
+
+			port := cfg.VPSPort
+			if port <= 0 {
+				port = 8443
+			}
+
+			var endpoint string
+			if strings.HasPrefix(vpsHost, "http://") || strings.HasPrefix(vpsHost, "https://") {
+				endpoint = fmt.Sprintf("%s:%d/api/heartbeat", strings.TrimRight(vpsHost, "/"), port)
+			} else {
+				endpoint = fmt.Sprintf("http://%s:%d/api/heartbeat", vpsHost, port)
+			}
+
+			payload := buildNodeHealthPayload()
+			data, err := json.Marshal(payload)
+			if err != nil {
+				return
+			}
+
+			req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(data))
+			if err != nil {
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			if cfg.SecretToken != "" {
+				req.Header.Set("X-Allod-Token", cfg.SecretToken)
+			}
+
+			resp, err := client.Do(req)
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
+
+		time.Sleep(time.Duration(interval) * time.Second)
+	}
 }
