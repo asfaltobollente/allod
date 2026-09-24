@@ -85,6 +85,8 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update, hardware telemetry vitals pill, and streamlined navigation. |
 | **Web Panel Auth Gate** | **Funzionante oggi** *(Working Today)* | Dedicated session authentication (`/login`, `/setup`), PBKDF2-SHA256, cryptographically secure memory session tokens, and CLI emergency recovery. |
 | **Family User Self-Service Portal** | **Funzionante oggi** *(Working Today)* | Dedicated family dashboard (`/portal`) with private Samba paths (`\\allod\<user>`), personal app launchpad, and autonomous password change synced via `allod-helperd`. |
+| **Telemetry & Performance History** | **Funzionante oggi** *(Working Today)* | Continuous background time-series telemetry (CPU temp, CPU load, RAM, storage) in local SQLite WAL with interactive HTML5 `<canvas>` charts (1h, 24h, 7d, 30d) and zero external JS libraries. |
+| **Wake-on-LAN Hub** | **Funzionante oggi** *(Working Today)* | Multi-subnet broadcast Magic Packet sender (`allod wol wake <mac>`, Web UI manager) for waking workstations and homelab nodes without SSH. |
 | **External Watch Sentinel** | **Funzionante oggi** *(Working Today)* | Dedicated daemon (<15MB RAM) for cloud VPS/free-tier with instant outage & recovery Telegram alerts, and daily morning digest with weather. |
 | **NetBird Sovereign Mesh** | **Funzionante oggi** *(Working Today)* | Native WireGuard overlay mesh with automated WebRTC NAT traversal, zero open router ports, EU Cloud (Frankfurt) & Self-Hosted sovereign modes. |
 | **Media & Photos Modules** | **In sviluppo** *(In Development)* | Immich standard/full and Jellyfin container orchestration functional; automated mobile client integration in refinement. |
@@ -451,6 +453,10 @@ In case of issues or configuration updates, you can inspect logs and restart ser
 | `allod ring status` | Displays ring federation health and verifies 2-replica dataset placement. |
 | `allod ring add <id> <ip>` | Connects a friend's node to the encrypted federation Ring. |
 | `allod ring simulate --remove <id>` | Calculates emergency rebalance plan if a peer leaves the ring. |
+| `allod wol list` | Lists saved Wake-on-LAN devices, MAC addresses, and last wake times. |
+| `allod wol wake <mac\|name>` | Broadcasts an AMD Magic Packet over all local interfaces to wake a PC. |
+| `allod wol add <name> <mac>` | Registers a new device into the persistent Wake-on-LAN database. |
+| `allod wol delete <id>` | Removes a device from the persistent Wake-on-LAN database. |
 | `allod sbom` | Generates CycloneDX JSON Software Bill of Materials (CRA compliant). |
 | `allod admin-password reset [password]` | Emergency reset or initialization of Web Panel administrator password. |
 | `allod install <hostname>` | Generates zero-touch cloud-init deployment configuration. |
@@ -464,6 +470,8 @@ Complete documentation according to the official project structure is available 
 * **Tutorials**:
   * [Your First Allod Node in 15 Minutes](docs/en/tutorial/first-node.md)
 * **How-to Guides**:
+  * [Telemetry & Historical Metrics](docs/en/howto/telemetry-history-metrics.md) / [🇮🇹 Telemetria & Storico Prestazioni](docs/it/howto/storico-prestazioni-e-metriche.md)
+  * [Native Wake-on-LAN (WoL) Hub](docs/en/howto/wake-on-lan.md) / [🇮🇹 Guida Wake-on-LAN](docs/it/howto/wake-on-lan.md)
   * [Sovereign Remote Access via NetBird Mesh](docs/en/howto/remote-access-hybrid.md) / [🇮🇹 Accesso Remoto Sovrano NetBird](docs/it/howto/accesso-remoto-netbird.md)
   * [External Watch Sentinel with Telegram & Weather](docs/en/howto/watch-external-sentinel.md) / [🇮🇹 Watch Sentinel Esterna & Telegram](docs/it/howto/watch-sentinella-esterna.md)
   * [Storage Profiles Guide (Nextcloud vs Samba + Immich vs Hybrid)](docs/en/howto/storage-profiles-guide.md) / [🇮🇹 Guida Profili Storage](docs/it/howto/guida-profili-storage.md)

@@ -60,6 +60,25 @@ const i18n = {
     vitals_cores: "Cores",
     vitals_no_sensors: "No dedicated thermal sensors detected (virtualized or containerized environment)",
 
+    // Historical Metrics & Telemetry
+    metrics_history_title: "Telemetry & Performance History",
+    metrics_history_badge: "SQLite TS",
+    metrics_history_subtitle: "Continuous local time-series monitoring at ultra-low footprint",
+    metrics_range_1h: "1h",
+    metrics_range_24h: "24h",
+    metrics_range_7d: "7d",
+    metrics_range_30d: "30d",
+    chart_cpu_temp_title: "CPU Temperature (°C)",
+    chart_cpu_usage_title: "CPU Utilization (%)",
+    chart_ram_title: "RAM Usage (MB)",
+    chart_storage_title: "Storage Pool Allocation (GB)",
+    metrics_no_data: "No telemetry data collected yet. Collecting samples every 60 seconds...",
+    metrics_loading: "Loading telemetry history...",
+    metrics_avg: "Avg",
+    metrics_max: "Max",
+    metrics_min: "Min",
+    metrics_latest: "Latest",
+
     // Metrics
     metric_ram: "RAM Memory",
     metric_ram_footer: "Core reserved: 600 MB",
@@ -334,8 +353,8 @@ const i18n = {
     // Wake-on-LAN
     wol_title: "Wake-on-LAN (WoL)",
     wol_subtitle: "Power on PCs and LAN devices remotely via UDP Magic Packet",
-    wol_btn_open: "⚡ Wake-on-LAN",
-    wol_card_title: "⚡ Wake-on-LAN Hub",
+    wol_btn_open: "Wake-on-LAN",
+    wol_card_title: "Wake-on-LAN Hub",
     wol_card_desc: "Power on your primary PC or network workstations with a single click",
     wol_btn_wake_now: "⚡ Power On",
     wol_btn_wake_sending: "Waking...",
@@ -470,6 +489,25 @@ const i18n = {
     vitals_loadavg: "Media Carico (1m, 5m, 15m)",
     vitals_cores: "Core",
     vitals_no_sensors: "Nessun sensore termico dedicato rilevato (ambiente virtualizzato o container)",
+
+    // Historical Metrics & Telemetry
+    metrics_history_title: "Telemetria & Storico Prestazioni",
+    metrics_history_badge: "SQLite TS",
+    metrics_history_subtitle: "Monitoraggio cronologico continuo archiviato localmente ad impatto ultra-leggero",
+    metrics_range_1h: "1h",
+    metrics_range_24h: "24h",
+    metrics_range_7d: "7d",
+    metrics_range_30d: "30d",
+    chart_cpu_temp_title: "Temperatura CPU (°C)",
+    chart_cpu_usage_title: "Utilizzo CPU (%)",
+    chart_ram_title: "Utilizzo RAM (MB)",
+    chart_storage_title: "Allocazione Storage Pool (GB)",
+    metrics_no_data: "Nessun dato di telemetria ancora archiviato. Campionamento in corso ogni 60 secondi...",
+    metrics_loading: "Caricamento storico metriche...",
+    metrics_avg: "Media",
+    metrics_max: "Max",
+    metrics_min: "Min",
+    metrics_latest: "Attuale",
 
     // Metrics
     metric_ram: "Memoria RAM",
@@ -745,8 +783,8 @@ const i18n = {
     // Wake-on-LAN
     wol_title: "Wake-on-LAN (WoL)",
     wol_subtitle: "Accendi PC e dispositivi della rete locale via Magic Packet UDP",
-    wol_btn_open: "⚡ Wake-on-LAN",
-    wol_card_title: "⚡ Wake-on-LAN",
+    wol_btn_open: "Wake-on-LAN",
+    wol_card_title: "Wake-on-LAN",
     wol_card_desc: "Accendi il tuo computer principale o altre workstation con un solo clic",
     wol_btn_wake_now: "⚡ Accendi Ora",
     wol_btn_wake_sending: "Invio in corso...",
@@ -871,5 +909,6 @@ function setLanguage(lang) {
   if (typeof renderRing === 'function') renderRing();
   if (typeof renderResilience === 'function') renderResilience();
   if (typeof renderWoLDevices === 'function') renderWoLDevices();
+  if (typeof renderAllMetricsCharts === 'function') renderAllMetricsCharts();
   if (typeof updateThemeBadge === 'function') updateThemeBadge();
 }
