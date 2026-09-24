@@ -181,7 +181,7 @@
             <div style="display:flex; align-items:center; gap:10px;">
               <span style="font-size:22px;">⚡</span>
               <div>
-                <h4 style="margin:0; font-size:14px; font-weight:700; color:var(--text-main);" data-i18n="wol_card_title">⚡ Wake-on-LAN</h4>
+                <h4 style="margin:0; font-size:14px; font-weight:700; color:var(--text-main);" data-i18n="wol_card_title">Wake-on-LAN</h4>
                 <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);" data-i18n="wol_card_desc">Accendi il tuo computer principale o altre workstation con un solo clic</p>
               </div>
             </div>
@@ -355,6 +355,78 @@ systemctl --user enable --now allod-panel</pre>
               </h4>
               <div id="vitals-sensors-list" class="vitals-sensors-grid">
                 <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Telemetry & Historical Metrics Card -->
+        <div class="card mt-4" id="card-metrics-history">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <h3 data-i18n="metrics_history_title" style="margin-bottom:2px;">📈 Telemetria & Storico Prestazioni</h3>
+              <p class="text-muted" style="font-size:12px; margin:0;" data-i18n="metrics_history_subtitle">Monitoraggio cronologico continuo archiviato localmente ad impatto ultra-leggero</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge badge-primary" data-i18n="metrics_history_badge">SQLite TS</span>
+              <div class="metrics-range-switcher" role="group">
+                <button type="button" class="metrics-range-btn" data-range="1h" onclick="changeMetricsRange('1h')">1h</button>
+                <button type="button" class="metrics-range-btn active" data-range="24h" onclick="changeMetricsRange('24h')">24h</button>
+                <button type="button" class="metrics-range-btn" data-range="7d" onclick="changeMetricsRange('7d')">7d</button>
+                <button type="button" class="metrics-range-btn" data-range="30d" onclick="changeMetricsRange('30d')">30d</button>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="metrics-history-loading" class="hidden" style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;" data-i18n="metrics_loading">
+              Caricamento storico metriche...
+            </div>
+            <div id="metrics-history-empty" class="hidden" style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px;" data-i18n="metrics_no_data">
+              Nessun dato di telemetria ancora archiviato. Campionamento in corso ogni 60 secondi...
+            </div>
+            <div id="metrics-charts-grid" class="metrics-charts-grid">
+              <!-- Chart 1: CPU Temperature -->
+              <div class="metrics-chart-box">
+                <div class="metrics-chart-header">
+                  <div class="metrics-chart-title" data-i18n="chart_cpu_temp_title">Temperatura CPU (°C)</div>
+                  <div class="metrics-chart-stat" id="stat-cpu-temp">--</div>
+                </div>
+                <div class="chart-canvas-wrap" id="wrap-canvas-cpu-temp">
+                  <canvas id="canvas-cpu-temp"></canvas>
+                </div>
+              </div>
+
+              <!-- Chart 2: CPU Usage -->
+              <div class="metrics-chart-box">
+                <div class="metrics-chart-header">
+                  <div class="metrics-chart-title" data-i18n="chart_cpu_usage_title">Utilizzo CPU (%)</div>
+                  <div class="metrics-chart-stat" id="stat-cpu-usage">--</div>
+                </div>
+                <div class="chart-canvas-wrap" id="wrap-canvas-cpu-usage">
+                  <canvas id="canvas-cpu-usage"></canvas>
+                </div>
+              </div>
+
+              <!-- Chart 3: RAM Usage -->
+              <div class="metrics-chart-box">
+                <div class="metrics-chart-header">
+                  <div class="metrics-chart-title" data-i18n="chart_ram_title">Utilizzo RAM (MB)</div>
+                  <div class="metrics-chart-stat" id="stat-ram-usage">--</div>
+                </div>
+                <div class="chart-canvas-wrap" id="wrap-canvas-ram-usage">
+                  <canvas id="canvas-ram-usage"></canvas>
+                </div>
+              </div>
+
+              <!-- Chart 4: Storage Pool Allocation -->
+              <div class="metrics-chart-box">
+                <div class="metrics-chart-header">
+                  <div class="metrics-chart-title" data-i18n="chart_storage_title">Allocazione Storage Pool (GB)</div>
+                  <div class="metrics-chart-stat" id="stat-storage-usage">--</div>
+                </div>
+                <div class="chart-canvas-wrap" id="wrap-canvas-storage-usage">
+                  <canvas id="canvas-storage-usage"></canvas>
+                </div>
               </div>
             </div>
           </div>
@@ -1830,6 +1902,9 @@ sudo systemctl enable --now allod-helperd</pre>
       </div>
     </div>
   </div>
+
+  <!-- Floating Telemetry Chart Tooltip -->
+  <div id="metrics-chart-tooltip" class="metrics-tooltip hidden"></div>
 
   <script src="qrcode.js?v=2.5"></script>
   <script src="i18n.js?v=2.5"></script>

@@ -46,6 +46,26 @@ document.addEventListener('DOMContentLoaded', () => {
       fetchLiveVitals();
     }
   }, 10000);
+
+  // Periodic metrics history update every 60s if Overview tab is active
+  setInterval(() => {
+    const activeTab = document.querySelector('.nav-item.active');
+    if (activeTab && activeTab.dataset.tab === 'overview') {
+      if (typeof loadMetricsHistory === 'function') {
+        loadMetricsHistory(currentMetricsRange, true);
+      }
+    }
+  }, 60000);
+
+  // Redraw charts on window resize
+  window.addEventListener('resize', () => {
+    if (window._metricsResizeTimer) clearTimeout(window._metricsResizeTimer);
+    window._metricsResizeTimer = setTimeout(() => {
+      if (typeof renderAllMetricsCharts === 'function') {
+        renderAllMetricsCharts();
+      }
+    }, 150);
+  });
 });
 
 function switchToTab(tab) {
@@ -68,6 +88,10 @@ function switchToTab(tab) {
 
   if (pageTitle) pageTitle.textContent = t(`page_${tab}_title`, 'Node Overview');
   if (pageSubtitle) pageSubtitle.textContent = t(`page_${tab}_sub`, 'System state, hardware resources, and security boundary');
+
+  if (tab === 'overview' && typeof loadMetricsHistory === 'function') {
+    loadMetricsHistory(currentMetricsRange);
+  }
 }
 
 function setupTabs() {
@@ -4473,5 +4497,429 @@ window.handleWoLSave = handleWoLSave;
 window.editWoLDevice = editWoLDevice;
 window.resetWoLForm = resetWoLForm;
 window.deleteWoLDevice = deleteWoLDevice;
+
+// ==========================================================================
+// Historical Telemetry & Lightweight Native HTML5 Canvas Metrics
+// ==========================================================================
+let currentMetricsRange = '24h';
+let currentMetricsData = null;
+let currentMetricsLoading = false;
+
+function hexToRgba(hex, alpha) {
+  let c = hex.replace('#', '');
+  if (c.length === 3) {
+    c = c.split('').map(x => x + x).join('');
+  }
+  const num = parseInt(c, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+async function loadMetricsHistory(rangeStr, isBackgroundRefresh = false) {
+  if (rangeStr) {
+    currentMetricsRange = rangeStr;
+  }
+
+  // Update button active state
+  document.querySelectorAll('.metrics-range-btn').forEach(btn => {
+    if (btn.dataset.range === currentMetricsRange) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  const loadingEl = document.getElementById('metrics-history-loading');
+  const emptyEl = document.getElementById('metrics-history-empty');
+  const gridEl = document.getElementById('metrics-charts-grid');
+
+  if (!isBackgroundRefresh && (!currentMetricsData || currentMetricsData.length === 0)) {
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (emptyEl) emptyEl.classList.add('hidden');
+  }
+
+  currentMetricsLoading = true;
+  try {
+    const res = await fetch(`/api/system/history?range=${encodeURIComponent(currentMetricsRange)}`);
+    const json = await res.json();
+    if (json && json.status === 'ok' && json.data) {
+      currentMetricsData = json.data.points || [];
+    } else {
+      currentMetricsData = [];
+    }
+  } catch (err) {
+    console.error('Error fetching metrics history:', err);
+    if (!currentMetricsData) currentMetricsData = [];
+  } finally {
+    currentMetricsLoading = false;
+    if (loadingEl) loadingEl.classList.add('hidden');
+  }
+
+  if (!currentMetricsData || currentMetricsData.length === 0) {
+    if (emptyEl) emptyEl.classList.remove('hidden');
+    if (gridEl) gridEl.classList.add('hidden');
+  } else {
+    if (emptyEl) emptyEl.classList.add('hidden');
+    if (gridEl) gridEl.classList.remove('hidden');
+    renderAllMetricsCharts();
+  }
+}
+
+function changeMetricsRange(rangeStr) {
+  if (rangeStr === currentMetricsRange && currentMetricsData && currentMetricsData.length > 0) return;
+  loadMetricsHistory(rangeStr);
+}
+
+function renderAllMetricsCharts() {
+  if (!currentMetricsData || currentMetricsData.length === 0) return;
+
+  // 1. CPU Temperature Chart
+  drawMetricsChart({
+    canvasId: 'canvas-cpu-temp',
+    wrapId: 'wrap-canvas-cpu-temp',
+    statId: 'stat-cpu-temp',
+    points: currentMetricsData,
+    valGetter: p => p.cpu_temp,
+    color: '#f59e0b',
+    label: (typeof t === 'function' ? t('chart_cpu_temp_title', 'Temperatura CPU') : 'Temperatura CPU'),
+    unit: '°C',
+    decimals: 1,
+    minValFloor: 20
+  });
+
+  // 2. CPU Usage Chart
+  drawMetricsChart({
+    canvasId: 'canvas-cpu-usage',
+    wrapId: 'wrap-canvas-cpu-usage',
+    statId: 'stat-cpu-usage',
+    points: currentMetricsData,
+    valGetter: p => p.cpu_usage,
+    color: '#38bdf8',
+    label: (typeof t === 'function' ? t('chart_cpu_usage_title', 'Utilizzo CPU') : 'Utilizzo CPU'),
+    unit: '%',
+    decimals: 1,
+    fixedMin: 0,
+    fixedMax: 100
+  });
+
+  // 3. RAM Usage Chart
+  drawMetricsChart({
+    canvasId: 'canvas-ram-usage',
+    wrapId: 'wrap-canvas-ram-usage',
+    statId: 'stat-ram-usage',
+    points: currentMetricsData,
+    valGetter: p => p.ram_used_mb,
+    maxValGetter: p => p.ram_total_mb,
+    color: '#a855f7',
+    label: (typeof t === 'function' ? t('chart_ram_title', 'RAM') : 'RAM'),
+    unit: 'MB',
+    decimals: 0,
+    fixedMin: 0
+  });
+
+  // 4. Storage Usage Chart
+  drawMetricsChart({
+    canvasId: 'canvas-storage-usage',
+    wrapId: 'wrap-canvas-storage-usage',
+    statId: 'stat-storage-usage',
+    points: currentMetricsData,
+    valGetter: p => (p.storage_used_bytes > 0 ? (p.storage_used_bytes / (1024 * 1024 * 1024)) : 0),
+    maxValGetter: p => (p.storage_total_bytes > 0 ? (p.storage_total_bytes / (1024 * 1024 * 1024)) : 0),
+    color: '#10b981',
+    label: (typeof t === 'function' ? t('chart_storage_title', 'Storage') : 'Storage'),
+    unit: 'GB',
+    decimals: 1,
+    fixedMin: 0
+  });
+}
+
+function drawMetricsChart(cfg, hoverIdx = -1) {
+  const canvas = document.getElementById(cfg.canvasId);
+  const wrap = document.getElementById(cfg.wrapId);
+  if (!canvas || !wrap) return;
+
+  wrap._latestCfg = cfg;
+
+  const rect = wrap.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(rect.width * dpr);
+  canvas.height = Math.floor(rect.height * dpr);
+
+  const ctx = canvas.getContext('2d');
+  if (ctx.resetTransform) ctx.resetTransform();
+  ctx.scale(dpr, dpr);
+
+  const width = rect.width;
+  const height = rect.height;
+
+  const points = cfg.points || [];
+  const valGetter = cfg.valGetter;
+  const color = cfg.color;
+  const unit = cfg.unit;
+  const decimals = cfg.decimals !== undefined ? cfg.decimals : 1;
+
+  // Extract valid numerical points
+  const valid = [];
+  for (let i = 0; i < points.length; i++) {
+    const v = valGetter(points[i]);
+    if (typeof v === 'number' && !isNaN(v)) {
+      valid.push({ t: points[i].t, v: v, raw: points[i], origIdx: i });
+    }
+  }
+
+  if (valid.length === 0) return;
+
+  // Statistics calculation
+  const values = valid.map(p => p.v);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+  const latestVal = valid[valid.length - 1].v;
+  const avgVal = values.reduce((a, b) => a + b, 0) / values.length;
+
+  // Update stat summary header
+  const statEl = document.getElementById(cfg.statId);
+  if (statEl) {
+    let maxTotalText = '';
+    if (cfg.maxValGetter) {
+      const maxTotal = cfg.maxValGetter(valid[valid.length - 1].raw);
+      if (maxTotal && maxTotal > 0) {
+        maxTotalText = ` / ${maxTotal.toFixed(decimals)} ${unit}`;
+      }
+    }
+    const avgLabel = typeof t === 'function' ? t('metrics_avg', 'Media') : 'Media';
+    const maxLabel = typeof t === 'function' ? t('metrics_max', 'Max') : 'Max';
+    statEl.innerHTML = `<span style="color:${color}">${latestVal.toFixed(decimals)} ${unit}${maxTotalText}</span>` +
+      `<span style="font-size:10px; color:var(--text-muted); font-weight:normal; margin-left:6px;">(${avgLabel}: ${avgVal.toFixed(decimals)}${unit} | ${maxLabel}: ${maxVal.toFixed(decimals)}${unit})</span>`;
+  }
+
+  // Padding
+  const padLeft = 40;
+  const padRight = 12;
+  const padTop = 15;
+  const padBottom = 20;
+
+  const chartW = width - padLeft - padRight;
+  const chartH = height - padTop - padBottom;
+  if (chartW <= 0 || chartH <= 0) return;
+
+  // Y-axis bounds
+  let yMin = cfg.fixedMin !== undefined ? cfg.fixedMin : minVal;
+  let yMax = cfg.fixedMax !== undefined ? cfg.fixedMax : maxVal;
+
+  if (cfg.maxValGetter) {
+    const lastTotal = cfg.maxValGetter(valid[valid.length - 1].raw);
+    if (lastTotal && lastTotal > 0) {
+      yMax = Math.max(yMax, lastTotal);
+    }
+  }
+
+  if (cfg.fixedMin === undefined) {
+    const margin = (yMax - yMin) * 0.12 || 2;
+    yMin = Math.max(cfg.minValFloor !== undefined ? cfg.minValFloor : 0, Math.floor(yMin - margin));
+    yMax = Math.ceil(yMax + margin);
+  }
+
+  if (yMax <= yMin) {
+    yMax = yMin + 1;
+  }
+
+  // Time bounds
+  const tMin = valid[0].t;
+  const tMax = valid[valid.length - 1].t;
+  const tSpan = (tMax - tMin) || 1;
+
+  const getX = t => padLeft + ((t - tMin) / tSpan) * chartW;
+  const getY = v => padTop + chartH - ((v - yMin) / (yMax - yMin)) * chartH;
+
+  // Horizontal Grid Lines & Y-labels
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 1;
+
+  const gridSteps = 3;
+  for (let s = 0; s <= gridSteps; s++) {
+    const frac = s / gridSteps;
+    const yVal = yMin + frac * (yMax - yMin);
+    const yCoord = padTop + chartH - frac * chartH;
+
+    ctx.beginPath();
+    ctx.moveTo(padLeft, yCoord);
+    ctx.lineTo(padLeft + chartW, yCoord);
+    ctx.stroke();
+
+    ctx.fillText(`${yVal.toFixed(decimals > 0 && yVal < 10 ? 1 : 0)}${unit}`, padLeft - 6, yCoord);
+  }
+
+  // Time Labels on X-axis
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const timeSteps = 3;
+  for (let s = 0; s <= timeSteps; s++) {
+    const frac = s / timeSteps;
+    const tVal = tMin + frac * tSpan;
+    const xCoord = padLeft + frac * chartW;
+
+    const date = new Date(tVal * 1000);
+    let timeLabel = '';
+    if (currentMetricsRange === '1h' || currentMetricsRange === '24h') {
+      timeLabel = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    } else {
+      timeLabel = `${date.getDate()}/${date.getMonth() + 1} ${date.getHours().toString().padStart(2, '0')}:00`;
+    }
+
+    if (s === 0) ctx.textAlign = 'left';
+    else if (s === timeSteps) ctx.textAlign = 'right';
+    else ctx.textAlign = 'center';
+
+    ctx.fillText(timeLabel, xCoord, padTop + chartH + 6);
+  }
+  ctx.restore();
+
+  // Plot Points
+  const mappedPoints = valid.map(p => ({
+    x: getX(p.t),
+    y: getY(p.v),
+    t: p.t,
+    v: p.v
+  }));
+  wrap._chartPoints = mappedPoints;
+
+  // Gradient Fill Area
+  const grad = ctx.createLinearGradient(0, padTop, 0, padTop + chartH);
+  grad.addColorStop(0, hexToRgba(color, 0.35));
+  grad.addColorStop(1, hexToRgba(color, 0.01));
+
+  ctx.beginPath();
+  ctx.moveTo(mappedPoints[0].x, padTop + chartH);
+  ctx.lineTo(mappedPoints[0].x, mappedPoints[0].y);
+  for (let i = 1; i < mappedPoints.length; i++) {
+    ctx.lineTo(mappedPoints[i].x, mappedPoints[i].y);
+  }
+  ctx.lineTo(mappedPoints[mappedPoints.length - 1].x, padTop + chartH);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Draw Line
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(mappedPoints[0].x, mappedPoints[0].y);
+  for (let i = 1; i < mappedPoints.length; i++) {
+    ctx.lineTo(mappedPoints[i].x, mappedPoints[i].y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 4;
+  ctx.stroke();
+  ctx.restore();
+
+  // Hover Crosshair & Point Highlight
+  if (hoverIdx >= 0 && hoverIdx < mappedPoints.length) {
+    const hp = mappedPoints[hoverIdx];
+
+    // Vertical dashed guideline
+    ctx.save();
+    ctx.beginPath();
+    ctx.setLineDash([3, 3]);
+    ctx.moveTo(hp.x, padTop);
+    ctx.lineTo(hp.x, padTop + chartH);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Outer glow ring
+    ctx.beginPath();
+    ctx.arc(hp.x, hp.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = hexToRgba(color, 0.35);
+    ctx.fill();
+
+    // Inner bright point
+    ctx.beginPath();
+    ctx.arc(hp.x, hp.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Bind mouse/touch events once per wrapper
+  if (!wrap._hasHoverListener) {
+    wrap._hasHoverListener = true;
+
+    const onPointerMove = (e) => {
+      const activeCfg = wrap._latestCfg || cfg;
+      const pts = wrap._chartPoints;
+      if (!pts || pts.length === 0) return;
+
+      const rect = wrap.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const mouseX = clientX - rect.left;
+
+      // Find closest point by x coordinate
+      let closestIdx = 0;
+      let minDiff = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const diff = Math.abs(pts[i].x - mouseX);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIdx = i;
+        }
+      }
+
+      // Re-draw with highlighted index
+      drawMetricsChart(activeCfg, closestIdx);
+
+      // Position and show tooltip
+      const tooltip = document.getElementById('metrics-chart-tooltip');
+      if (tooltip) {
+        const pt = pts[closestIdx];
+        const date = new Date(pt.t * 1000);
+        const dateStr = date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+        tooltip.innerHTML = `
+          <div style="font-weight:700; font-size:12px; color:${activeCfg.color}; margin-bottom:2px;">
+            ${pt.v.toFixed(activeCfg.decimals !== undefined ? activeCfg.decimals : 1)} ${activeCfg.unit}
+          </div>
+          <div style="font-size:10.5px; color:#cbd5e1;">${dateStr} ${timeStr}</div>
+        `;
+        tooltip.style.left = `${clientX}px`;
+        tooltip.style.top = `${clientY}px`;
+        tooltip.classList.remove('hidden');
+      }
+    };
+
+    const onPointerLeave = () => {
+      const activeCfg = wrap._latestCfg || cfg;
+      drawMetricsChart(activeCfg, -1);
+      const tooltip = document.getElementById('metrics-chart-tooltip');
+      if (tooltip) tooltip.classList.add('hidden');
+    };
+
+    wrap.addEventListener('mousemove', onPointerMove);
+    wrap.addEventListener('mouseleave', onPointerLeave);
+    wrap.addEventListener('touchmove', onPointerMove, { passive: true });
+    wrap.addEventListener('touchend', onPointerLeave);
+  }
+}
+
+// Telemetry Metrics Window Bindings
+window.loadMetricsHistory = loadMetricsHistory;
+window.changeMetricsRange = changeMetricsRange;
+window.renderAllMetricsCharts = renderAllMetricsCharts;
+window.drawMetricsChart = drawMetricsChart;
+
 
 

@@ -2122,3 +2122,123 @@ body {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Telemetry History & Historical Metrics Charts
+   ========================================================================== */
+.metrics-range-switcher {
+  display: inline-flex;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.metrics-range-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+}
+
+.metrics-range-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.metrics-range-btn.active {
+  background: var(--primary);
+  color: var(--primary-text, #0f172a);
+}
+
+.metrics-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.metrics-chart-box {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 12px 14px 10px 14px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.metrics-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.metrics-chart-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.metrics-chart-stat {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-main);
+}
+
+.chart-canvas-wrap {
+  width: 100%;
+  height: 145px;
+  position: relative;
+  cursor: crosshair;
+}
+
+.chart-canvas-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+.metrics-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #fff;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transform: translate(-50%, -120%);
+  transition: opacity 0.1s ease;
+}
+
+[data-theme="cia"] .metrics-range-switcher {
+  background: rgba(8, 19, 13, 0.85);
+  border-color: #1a3824;
+}
+
+[data-theme="cia"] .metrics-chart-box {
+  background: rgba(8, 19, 13, 0.7);
+  border-color: #1a3824;
+}
+
+[data-theme="cia"] .metrics-tooltip {
+  background: rgba(8, 19, 13, 0.95);
+  border-color: #00ff66;
+  box-shadow: 0 0 12px rgba(0, 255, 102, 0.3);
+}

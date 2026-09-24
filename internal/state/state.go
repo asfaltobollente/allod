@@ -70,6 +70,16 @@ type WoLDevice struct {
 	LastWakeAt  *time.Time `json:"last_wake_at,omitempty"`
 }
 
+type SystemMetricRecord struct {
+	Timestamp         int64   `json:"t"`
+	CPUTempC          float64 `json:"cpu_temp"`
+	CPUUsagePct       float64 `json:"cpu_usage"`
+	RAMUsedMB         int64   `json:"ram_used_mb"`
+	RAMTotalMB        int64   `json:"ram_total_mb"`
+	StorageUsedBytes  int64   `json:"storage_used_bytes"`
+	StorageTotalBytes int64   `json:"storage_total_bytes"`
+}
+
 type Store struct {
 	db *sql.DB
 }
@@ -147,6 +157,18 @@ func Open(dbPath string) (*Store, error) {
 		created_at DATETIME NOT NULL,
 		last_wake_at DATETIME
 	);
+
+	CREATE TABLE IF NOT EXISTS metrics_history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp INTEGER NOT NULL,
+		cpu_temp_c REAL,
+		cpu_usage_pct REAL,
+		ram_used_mb INTEGER,
+		ram_total_mb INTEGER,
+		storage_used_bytes INTEGER,
+		storage_total_bytes INTEGER
+	);
+	CREATE INDEX IF NOT EXISTS idx_metrics_history_ts ON metrics_history(timestamp);
 	`
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
@@ -761,6 +783,98 @@ func (s *Store) RecordWoLWake(id int64) error {
 	now := time.Now().Format(time.RFC3339)
 	query := `UPDATE wol_devices SET last_wake_at = ? WHERE id = ?`
 	_, err := s.db.Exec(query, now, id)
+	return err
+}
+
+// RecordSystemMetric inserts a new telemetry data point into metrics_history.
+func (s *Store) RecordSystemMetric(m *SystemMetricRecord) error {
+	if m == nil {
+		return fmt.Errorf("metric record cannot be nil")
+	}
+	ts := m.Timestamp
+	if ts <= 0 {
+		ts = time.Now().Unix()
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO metrics_history (timestamp, cpu_temp_c, cpu_usage_pct, ram_used_mb, ram_total_mb, storage_used_bytes, storage_total_bytes)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, ts, m.CPUTempC, m.CPUUsagePct, m.RAMUsedMB, m.RAMTotalMB, m.StorageUsedBytes, m.StorageTotalBytes)
+	return err
+}
+
+// GetMetricsHistory retrieves historical telemetry aggregated over the specified duration.
+// Supported ranges: "1h", "24h", "7d", "30d" (default: "24h").
+func (s *Store) GetMetricsHistory(rangeStr string) ([]SystemMetricRecord, error) {
+	now := time.Now().Unix()
+	var since int64
+	var step int64
+
+	switch strings.ToLower(strings.TrimSpace(rangeStr)) {
+	case "1h":
+		since = now - 3600
+		step = 0 // raw points (1 per minute)
+	case "7d":
+		since = now - (7 * 86400)
+		step = 1800 // 30-minute buckets (~336 points)
+	case "30d":
+		since = now - (30 * 86400)
+		step = 7200 // 2-hour buckets (~360 points)
+	case "24h":
+		fallthrough
+	default:
+		since = now - 86400
+		step = 300 // 5-minute buckets (~288 points)
+	}
+
+	var rows *sql.Rows
+	var err error
+
+	if step <= 0 {
+		rows, err = s.db.Query(`
+			SELECT timestamp, cpu_temp_c, cpu_usage_pct, ram_used_mb, ram_total_mb, storage_used_bytes, storage_total_bytes
+			FROM metrics_history
+			WHERE timestamp >= ?
+			ORDER BY timestamp ASC
+		`, since)
+	} else {
+		rows, err = s.db.Query(`
+			SELECT (timestamp / ?) * ? AS bucket,
+			       ROUND(AVG(cpu_temp_c), 1),
+			       ROUND(AVG(cpu_usage_pct), 1),
+			       CAST(AVG(ram_used_mb) AS INTEGER),
+			       CAST(MAX(ram_total_mb) AS INTEGER),
+			       CAST(AVG(storage_used_bytes) AS INTEGER),
+			       CAST(MAX(storage_total_bytes) AS INTEGER)
+			FROM metrics_history
+			WHERE timestamp >= ?
+			GROUP BY bucket
+			ORDER BY bucket ASC
+		`, step, step, since)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []SystemMetricRecord
+	for rows.Next() {
+		var r SystemMetricRecord
+		if err := rows.Scan(&r.Timestamp, &r.CPUTempC, &r.CPUUsagePct, &r.RAMUsedMB, &r.RAMTotalMB, &r.StorageUsedBytes, &r.StorageTotalBytes); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
+// PruneMetricsHistory removes telemetry points older than the specified retention days.
+func (s *Store) PruneMetricsHistory(retentionDays int) error {
+	if retentionDays <= 0 {
+		retentionDays = 30
+	}
+	cutoff := time.Now().Unix() - int64(retentionDays*86400)
+	_, err := s.db.Exec("DELETE FROM metrics_history WHERE timestamp < ?", cutoff)
 	return err
 }
 

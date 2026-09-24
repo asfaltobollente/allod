@@ -602,6 +602,40 @@ func main() {
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: vitals})
 	})
 
+	// 2b-2. API System Metrics History (GET /api/system/history?range=1h|24h|7d|30d)
+	mux.HandleFunc("/api/system/history", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		rangeStr := r.URL.Query().Get("range")
+		if rangeStr == "" {
+			rangeStr = "24h"
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore DB: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		points, err := st.GetMetricsHistory(rangeStr)
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore lettura metriche: " + err.Error()})
+			return
+		}
+		if points == nil {
+			points = []state.SystemMetricRecord{}
+		}
+
+		resp := map[string]interface{}{
+			"status": "ok",
+			"data": map[string]interface{}{
+				"range":  rangeStr,
+				"points": points,
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
 	// 2c. API Health (sentinel prober endpoint for external watchdog)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -4047,6 +4081,9 @@ WantedBy=default.target
 	// Background Heartbeat Pusher for external sentinel watchdog
 	go startHeartbeatPusher(dbPath)
 
+	// Background Hardware & System Metrics Collector (1m interval, 30d auto-prune)
+	go startMetricsCollector(dbPath)
+
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintf(os.Stderr, "Errore server: %v\n", err)
 		os.Exit(1)
@@ -4147,5 +4184,51 @@ func startHeartbeatPusher(dbPath string) {
 		}()
 
 		time.Sleep(time.Duration(interval) * time.Second)
+	}
+}
+
+// startMetricsCollector periodically collects hardware vitals and disk usage into state.db metrics_history.
+func startMetricsCollector(dbPath string) {
+	time.Sleep(3 * time.Second) // Let server settle
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	// Initial immediate sample
+	collectSample := func() {
+		vitals := preflight.GetServerVitals()
+		ram := preflight.GetRealRAMStats()
+		totBytes, usedBytes, _ := preflight.GetDiskUsage("/mnt/allod-storage")
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			return
+		}
+		defer st.Close()
+
+		sample := &state.SystemMetricRecord{
+			Timestamp:         time.Now().Unix(),
+			CPUTempC:          vitals.CPUTempC,
+			CPUUsagePct:       vitals.CPUUsagePercent,
+			RAMUsedMB:         int64(ram.UsedMB),
+			RAMTotalMB:        int64(ram.TotalMB),
+			StorageUsedBytes:  usedBytes,
+			StorageTotalBytes: totBytes,
+		}
+		_ = st.RecordSystemMetric(sample)
+	}
+
+	collectSample()
+
+	pruneCounter := 0
+	for range ticker.C {
+		collectSample()
+		pruneCounter++
+		if pruneCounter >= 60 { // Prune once per hour
+			pruneCounter = 0
+			if st, err := state.Open(dbPath); err == nil {
+				_ = st.PruneMetricsHistory(30)
+				st.Close()
+			}
+		}
 	}
 }
