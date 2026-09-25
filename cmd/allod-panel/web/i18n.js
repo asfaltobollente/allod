@@ -385,7 +385,7 @@ const i18n = {
     wol_quick_section: "Wake-on-LAN",
 
     // Watch Sentinel & Push / Mesh
-    watch_modal_title: "🛡️ Allod Watch Sentinel — Cloud Sentinel & Telegram Alerts",
+    watch_modal_title: "Allod Watch Sentinel — Cloud Sentinel & Telegram Alerts",
     watch_modal_subtitle: "Continuous monitoring from external VPS (Always-Free Tier) with zero open ports at home",
     watch_tab_telegram: "🤖 Telegram Bot & Chat ID",
     watch_tab_weather: "☀️ Weather & Morning Digest",
@@ -816,7 +816,7 @@ const i18n = {
     wol_quick_section: "Wake-on-LAN",
 
     // Watch Sentinel & Push / Mesh
-    watch_modal_title: "🛡️ Allod Watch Sentinel — Sentinella Cloud & Allarmi Telegram",
+    watch_modal_title: "Allod Watch Sentinel — Sentinella Cloud & Allarmi Telegram",
     watch_modal_subtitle: "Monitoraggio continuo da VPS esterna (Always-Free) a zero porte aperte sul router",
     watch_tab_telegram: "🤖 Bot Telegram & Chat ID",
     watch_tab_weather: "☀️ Meteo & Resoconto",

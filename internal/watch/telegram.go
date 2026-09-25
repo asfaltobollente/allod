@@ -204,8 +204,18 @@ func (t *TelegramNotifier) Test() error {
 	return t.Send(msg)
 }
 
-// GetChatIDs queries the Telegram Bot API getUpdates endpoint to help users find their chat ID.
-func GetChatIDs(botToken string) ([]string, error) {
+// TelegramChat contains information about an active chat discovered via Telegram Bot API updates.
+type TelegramChat struct {
+	ChatID    string `json:"chat_id"`
+	Type      string `json:"type"`
+	FirstName string `json:"first_name,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Label     string `json:"label"`
+}
+
+// GetChats queries the Telegram Bot API getUpdates endpoint to find active chats.
+func GetChats(botToken string) ([]TelegramChat, error) {
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates", strings.TrimSpace(botToken))
 	resp, err := http.Get(apiURL)
 	if err != nil {
@@ -216,18 +226,39 @@ func GetChatIDs(botToken string) ([]string, error) {
 	body, _ := io.ReadAll(resp.Body)
 
 	type updateMsg struct {
-		Message struct {
+		Message *struct {
 			Chat struct {
-				ID       int64  `json:"id"`
-				Type     string `json:"type"`
-				Username string `json:"username,omitempty"`
-				Title    string `json:"title,omitempty"`
+				ID        int64  `json:"id"`
+				Type      string `json:"type"`
+				Username  string `json:"username,omitempty"`
+				Title     string `json:"title,omitempty"`
+				FirstName string `json:"first_name,omitempty"`
 			} `json:"chat"`
 			From struct {
 				FirstName string `json:"first_name"`
 				Username  string `json:"username,omitempty"`
 			} `json:"from"`
 		} `json:"message"`
+		MyChatMember *struct {
+			Chat struct {
+				ID        int64  `json:"id"`
+				Type      string `json:"type"`
+				Username  string `json:"username,omitempty"`
+				Title     string `json:"title,omitempty"`
+				FirstName string `json:"first_name,omitempty"`
+			} `json:"chat"`
+			From struct {
+				FirstName string `json:"first_name"`
+				Username  string `json:"username,omitempty"`
+			} `json:"from"`
+		} `json:"my_chat_member"`
+		ChannelPost *struct {
+			Chat struct {
+				ID    int64  `json:"id"`
+				Type  string `json:"type"`
+				Title string `json:"title,omitempty"`
+			} `json:"chat"`
+		} `json:"channel_post"`
 	}
 
 	type getUpdatesResponse struct {
@@ -240,26 +271,81 @@ func GetChatIDs(botToken string) ([]string, error) {
 		return nil, fmt.Errorf("errore parsing getUpdates: %w", err)
 	}
 
-	var found []string
+	var chats []TelegramChat
 	seen := make(map[int64]bool)
 
 	for _, u := range res.Result {
-		id := u.Message.Chat.ID
+		var id int64
+		var chatType, username, title, firstName string
+
+		if u.Message != nil && u.Message.Chat.ID != 0 {
+			id = u.Message.Chat.ID
+			chatType = u.Message.Chat.Type
+			username = u.Message.Chat.Username
+			if username == "" {
+				username = u.Message.From.Username
+			}
+			title = u.Message.Chat.Title
+			firstName = u.Message.Chat.FirstName
+			if firstName == "" {
+				firstName = u.Message.From.FirstName
+			}
+		} else if u.MyChatMember != nil && u.MyChatMember.Chat.ID != 0 {
+			id = u.MyChatMember.Chat.ID
+			chatType = u.MyChatMember.Chat.Type
+			username = u.MyChatMember.Chat.Username
+			if username == "" {
+				username = u.MyChatMember.From.Username
+			}
+			title = u.MyChatMember.Chat.Title
+			firstName = u.MyChatMember.Chat.FirstName
+			if firstName == "" {
+				firstName = u.MyChatMember.From.FirstName
+			}
+		} else if u.ChannelPost != nil && u.ChannelPost.Chat.ID != 0 {
+			id = u.ChannelPost.Chat.ID
+			chatType = u.ChannelPost.Chat.Type
+			title = u.ChannelPost.Chat.Title
+		}
+
 		if id != 0 && !seen[id] {
 			seen[id] = true
-			label := fmt.Sprintf("ID: %d (Tipo: %s", id, u.Message.Chat.Type)
-			if u.Message.Chat.Title != "" {
-				label += fmt.Sprintf(", Gruppo: %s", u.Message.Chat.Title)
+			label := fmt.Sprintf("ID: %d (Tipo: %s", id, chatType)
+			if title != "" {
+				label += fmt.Sprintf(", Gruppo: %s", title)
 			}
-			if u.Message.From.FirstName != "" {
-				label += fmt.Sprintf(", Utente: %s", u.Message.From.FirstName)
+			if firstName != "" {
+				label += fmt.Sprintf(", Utente: %s", firstName)
+			} else if username != "" {
+				label += fmt.Sprintf(", Utente: @%s", username)
 			}
 			label += ")"
-			found = append(found, label)
+
+			chats = append(chats, TelegramChat{
+				ChatID:    fmt.Sprintf("%d", id),
+				Type:      chatType,
+				FirstName: firstName,
+				Username:  username,
+				Title:     title,
+				Label:     label,
+			})
 		}
 	}
 
-	return found, nil
+	return chats, nil
+}
+
+// GetChatIDs queries the Telegram Bot API getUpdates endpoint to help users find their chat ID (returns formatted strings for CLI).
+func GetChatIDs(botToken string) ([]string, error) {
+	chats, err := GetChats(botToken)
+	if err != nil {
+		return nil, err
+	}
+	var res []string
+	for _, c := range chats {
+		res = append(res, c.Label)
+	}
+	return res, nil
 }
 
 func formatDuration(d time.Duration) string {

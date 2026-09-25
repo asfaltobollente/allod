@@ -3645,7 +3645,10 @@ async function openWatchSentinelModal() {
       const tokenInput = document.getElementById('watch-telegram-token');
       const chatIdInput = document.getElementById('watch-telegram-chat-id');
       if (tokenInput) tokenInput.value = currentWatchConfig.telegram_bot_token || '';
-      if (chatIdInput) chatIdInput.value = currentWatchConfig.telegram_chat_id || '';
+      if (chatIdInput) {
+        const savedChatId = (currentWatchConfig.telegram_chat_id || '').trim();
+        chatIdInput.value = (savedChatId === 'undefined') ? '' : savedChatId;
+      }
 
       // Populate Weather Tab
       const cityInput = document.getElementById('watch-weather-city');
@@ -3829,20 +3832,42 @@ async function detectWatchChatID() {
 
     if (json.status === 'ok' && json.data && json.data.length > 0) {
       const firstChat = json.data[0];
-      const chatIdInput = document.getElementById('watch-telegram-chat-id');
-      if (chatIdInput) {
-        chatIdInput.value = firstChat.chat_id;
+      let cid = '';
+      let userName = 'Utente';
+
+      if (typeof firstChat === 'object' && firstChat !== null) {
+        cid = String(firstChat.chat_id || '').trim();
+        userName = firstChat.first_name || firstChat.username || firstChat.title || 'Utente';
+      } else if (typeof firstChat === 'string') {
+        const match = firstChat.match(/ID:\s*(-?\d+)/i);
+        if (match) cid = match[1].trim();
+        const userMatch = firstChat.match(/Utente:\s*([^,\)]+)/i);
+        if (userMatch) userName = userMatch[1].trim();
       }
-      if (feedback) {
-        feedback.style.display = 'block';
-        feedback.style.background = 'rgba(16,185,129,0.15)';
-        feedback.style.color = '#34d399';
-        feedback.style.border = '1px solid rgba(16,185,129,0.3)';
-        const name = firstChat.first_name || firstChat.username || 'Utente';
-        feedback.innerHTML = `✅ <strong>Chat ID Rilevato con successo!</strong><br>👤 Utente: <b>${name}</b> (ID: <code>${firstChat.chat_id}</code>)`;
+
+      if (cid && cid !== 'undefined') {
+        const chatIdInput = document.getElementById('watch-telegram-chat-id');
+        if (chatIdInput) {
+          chatIdInput.value = cid;
+        }
+        if (feedback) {
+          feedback.style.display = 'block';
+          feedback.style.background = 'rgba(16,185,129,0.15)';
+          feedback.style.color = '#34d399';
+          feedback.style.border = '1px solid rgba(16,185,129,0.3)';
+          feedback.innerHTML = `✅ <strong>Chat ID Rilevato con successo!</strong><br>👤 Utente: <b>${userName}</b> (ID: <code>${cid}</code>)`;
+        }
+        // Auto-save progress
+        await saveWatchConfig(false);
+      } else {
+        if (feedback) {
+          feedback.style.display = 'block';
+          feedback.style.background = 'rgba(245,158,11,0.15)';
+          feedback.style.color = '#fbbf24';
+          feedback.style.border = '1px solid rgba(245,158,11,0.3)';
+          feedback.innerHTML = `⚠️ <strong>Nessun Chat ID valido trovato</strong><br>1. Apri Telegram e cerca il tuo bot<br>2. Clicca su <b>AVVIA</b> (oppure inviagli <code>/start</code>)<br>3. Clicca nuovamente su 'Rileva Chat ID'`;
+        }
       }
-      // Auto-save progress
-      await saveWatchConfig(false);
     } else {
       if (feedback) {
         feedback.style.display = 'block';
@@ -3991,7 +4016,8 @@ async function testWatchPush() {
 
 async function saveWatchConfig(showNotification = true) {
   const token = (document.getElementById('watch-telegram-token')?.value || '').trim();
-  const chatId = (document.getElementById('watch-telegram-chat-id')?.value || '').trim();
+  let chatId = (document.getElementById('watch-telegram-chat-id')?.value || '').trim();
+  if (chatId === 'undefined') chatId = '';
   const city = (document.getElementById('watch-weather-city')?.value || '').trim() || 'Roma';
   const time = (document.getElementById('watch-digest-time')?.value || '').trim() || '08:30';
   const thresh = parseInt(document.getElementById('watch-down-threshold')?.value || '300', 10);
