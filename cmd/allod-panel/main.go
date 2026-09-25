@@ -756,7 +756,7 @@ func main() {
 			return
 		}
 
-		chats, err := watch.GetChatIDs(token)
+		chats, err := watch.GetChats(token)
 		if err != nil {
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore durante l'interrogazione dell'API Telegram: " + err.Error()})
 			return
