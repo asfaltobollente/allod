@@ -4447,7 +4447,7 @@ function editWoLDevice(id) {
   if (macInput) macInput.value = d.mac_address;
   if (bcastInput) bcastInput.value = d.broadcast_ip || '255.255.255.255';
   if (portInput) portInput.value = d.port || 9;
-  if (saveBtn) saveBtn.innerHTML = '💾 ' + t('wol_btn_save', 'Salva Modifiche');
+  if (saveBtn) saveBtn.innerHTML = '💾 ' + t('wol_btn_save_changes', 'Salva Modifiche');
 
   if (nameInput) nameInput.focus();
 }
