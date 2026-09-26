@@ -166,6 +166,34 @@ func getLocalNetBirdIP() string {
 	return ""
 }
 
+// buildPushEndpoint normalizes VPS host/IP and port into a valid HTTP/HTTPS heartbeat URL.
+func buildPushEndpoint(rawHost string, port int) string {
+	raw := strings.TrimSpace(rawHost)
+	if raw == "" {
+		return ""
+	}
+	if port <= 0 {
+		port = 8443
+	}
+
+	scheme := "http"
+	if strings.HasPrefix(raw, "https://") {
+		scheme = "https"
+		raw = strings.TrimPrefix(raw, "https://")
+	} else if strings.HasPrefix(raw, "http://") {
+		scheme = "http"
+		raw = strings.TrimPrefix(raw, "http://")
+	}
+
+	raw = strings.TrimRight(raw, "/")
+
+	if strings.Contains(raw, ":") && !strings.HasSuffix(raw, "]") {
+		return fmt.Sprintf("%s://%s/api/heartbeat", scheme, raw)
+	}
+
+	return fmt.Sprintf("%s://%s:%d/api/heartbeat", scheme, raw, port)
+}
+
 func buildNodeHealthPayload() watch.NodeHealthPayload {
 	nodeName := "allod-node"
 	cfg, _ := config.LoadConfig(getConfigPath())
@@ -1257,12 +1285,7 @@ fi
 			port = 8443
 		}
 
-		var endpoint string
-		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
-			endpoint = fmt.Sprintf("%s:%d/api/heartbeat", strings.TrimRight(host, "/"), port)
-		} else {
-			endpoint = fmt.Sprintf("http://%s:%d/api/heartbeat", host, port)
-		}
+		endpoint := buildPushEndpoint(host, port)
 
 		payload := buildNodeHealthPayload()
 		data, err := json.Marshal(payload)
@@ -1286,7 +1309,7 @@ fi
 		if err != nil {
 			json.NewEncoder(w).Encode(PanelResponse{
 				Status:  "error",
-				Message: fmt.Sprintf("Impossibile raggiungere il VPS (%s): %v. Verifica che allod-watch sia attivo e la porta %d sia aperta.", endpoint, err, port),
+				Message: fmt.Sprintf("Impossibile raggiungere il VPS (%s): %v. Assicurati di aver prima eseguito il comando del Passo 2 sulla tua VPS e che la porta %d sia aperta nel firewall.", endpoint, err, port),
 			})
 			return
 		}
@@ -4155,12 +4178,7 @@ func startHeartbeatPusher(dbPath string) {
 				port = 8443
 			}
 
-			var endpoint string
-			if strings.HasPrefix(vpsHost, "http://") || strings.HasPrefix(vpsHost, "https://") {
-				endpoint = fmt.Sprintf("%s:%d/api/heartbeat", strings.TrimRight(vpsHost, "/"), port)
-			} else {
-				endpoint = fmt.Sprintf("http://%s:%d/api/heartbeat", vpsHost, port)
-			}
+			endpoint := buildPushEndpoint(vpsHost, port)
 
 			payload := buildNodeHealthPayload()
 			data, err := json.Marshal(payload)
