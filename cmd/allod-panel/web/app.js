@@ -3691,6 +3691,7 @@ async function openWatchSentinelModal() {
     console.error('Failed to load sentinel config:', err);
   }
 
+  updateWatchDeployCommand();
   modal.classList.remove('hidden');
 }
 
@@ -3716,6 +3717,10 @@ function switchWatchTab(tabName) {
       }
     }
   });
+
+  if (tabName === 'mesh') {
+    updateWatchDeployCommand();
+  }
 }
 
 function setWatchMode(mode) {
@@ -3725,6 +3730,7 @@ function setWatchMode(mode) {
   const cardMesh = document.getElementById('watch-card-mesh');
   const sectionPush = document.getElementById('watch-section-push');
   const sectionMesh = document.getElementById('watch-section-mesh');
+  const verifyContainer = document.getElementById('watch-step3-verify-container');
 
   const step1 = document.getElementById('watch-instruction-step1');
   const step2 = document.getElementById('watch-instruction-step2');
@@ -3741,9 +3747,10 @@ function setWatchMode(mode) {
     }
     if (sectionPush) sectionPush.classList.remove('hidden');
     if (sectionMesh) sectionMesh.classList.add('hidden');
+    if (verifyContainer) verifyContainer.classList.remove('hidden');
 
     if (step1) step1.innerHTML = '1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code>';
-    if (step2) step2.innerHTML = '2. Incolla il comando copiato qui sopra e premi <b>Invio</b>.';
+    if (step2) step2.innerHTML = '2. Incolla il comando copiato qui sotto e premi <b>Invio</b>.';
     if (step3) step3.innerHTML = '3. La VPS scarica allod-watch, configura il ricevitore HTTP sulla porta specificata, apre il firewall e invia la conferma su Telegram!';
   } else {
     if (cardMesh) {
@@ -3756,9 +3763,10 @@ function setWatchMode(mode) {
     }
     if (sectionMesh) sectionMesh.classList.remove('hidden');
     if (sectionPush) sectionPush.classList.add('hidden');
+    if (verifyContainer) verifyContainer.classList.add('hidden');
 
     if (step1) step1.innerHTML = '1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code>';
-    if (step2) step2.innerHTML = '2. Incolla il comando copiato qui sopra e premi <b>Invio</b>.';
+    if (step2) step2.innerHTML = '2. Incolla il comando copiato qui sotto e premi <b>Invio</b>.';
     if (step3) step3.innerHTML = '3. La VPS entra nella rete mesh NetBird, scarica la sentinella Allod, attiva systemd e invia subito una conferma su Telegram!';
   }
 
@@ -3797,6 +3805,18 @@ async function generateWatchSecretToken(save = true) {
 }
 
 function onWatchTokenInput() {
+  updateWatchDeployCommand();
+}
+
+function onWatchVpsHostInput() {
+  const hostInput = document.getElementById('watch-vps-host');
+  if (hostInput) {
+    let val = hostInput.value.trim();
+    if (val.startsWith('http://') || val.startsWith('https://') || val.endsWith('/')) {
+      val = val.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      hostInput.value = val;
+    }
+  }
   updateWatchDeployCommand();
 }
 
@@ -3953,7 +3973,8 @@ async function testWatchTelegram() {
 }
 
 async function testWatchPush() {
-  const host = (document.getElementById('watch-vps-host')?.value || '').trim();
+  let host = (document.getElementById('watch-vps-host')?.value || '').trim();
+  host = host.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   const port = parseInt(document.getElementById('watch-vps-port')?.value || '8443', 10);
   const token = (document.getElementById('watch-secret-token')?.value || '').trim();
   const feedback = document.getElementById('watch-push-feedback');
@@ -4022,7 +4043,8 @@ async function saveWatchConfig(showNotification = true) {
   const time = (document.getElementById('watch-digest-time')?.value || '').trim() || '08:30';
   const thresh = parseInt(document.getElementById('watch-down-threshold')?.value || '300', 10);
 
-  const host = (document.getElementById('watch-vps-host')?.value || '').trim();
+  let host = (document.getElementById('watch-vps-host')?.value || '').trim();
+  host = host.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   const port = parseInt(document.getElementById('watch-vps-port')?.value || '8443', 10);
   const secretToken = (document.getElementById('watch-secret-token')?.value || '').trim();
   const pushInterval = parseInt(document.getElementById('watch-push-interval')?.value || '60', 10);
@@ -4086,7 +4108,7 @@ function updateWatchDeployCommand() {
 
     const cmd = `sudo bash -c '
 ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")
-echo "⬇️ Scaricamento Allod Watch Sentinel (${ARCH})..."
+echo "⬇️ Scaricamento Allod Watch Sentinel (\${ARCH})..."
 curl -fsSL "https://raw.githubusercontent.com/asfaltobollente/allod/main/bin/allod-watch-linux-\${ARCH}" -o /usr/local/bin/allod-watch
 chmod 755 /usr/local/bin/allod-watch
 mkdir -p /etc/allod
@@ -4153,13 +4175,41 @@ echo "✅ Allod Watch Sentinel è ora in ascolto sulla porta ${port}!"
   }
 }
 
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      const successful = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (successful) resolve();
+      else reject(new Error('execCommand copy failed'));
+    } catch (err) {
+      document.body.removeChild(ta);
+      reject(err);
+    }
+  });
+}
+
 function copyWatchDeployCommand() {
   const codeEl = document.getElementById('watch-deploy-command-code');
   const btn = document.getElementById('btn-copy-watch-cmd');
   if (!codeEl) return;
 
-  const text = codeEl.textContent;
-  navigator.clipboard.writeText(text).then(() => {
+  const text = codeEl.textContent.trim();
+  if (!text) return;
+
+  const onSuccess = () => {
     if (btn) {
       const origText = btn.innerHTML;
       btn.innerHTML = '✓ Copiato!';
@@ -4168,8 +4218,10 @@ function copyWatchDeployCommand() {
     if (typeof showAlert === 'function') {
       showAlert('✓ Comando di deploy copiato negli appunti! Incollalo nel terminale SSH della tua VPS.', 'success');
     }
-  }).catch(() => {
-    prompt('Copia il comando con Ctrl+C:', text);
+  };
+
+  copyToClipboard(text).then(onSuccess).catch(() => {
+    prompt('Copia il comando con Ctrl+C (o tieni premuto su smartphone):', text);
   });
 }
 
@@ -4182,6 +4234,7 @@ window.toggleWatchTokenVisibility = toggleWatchTokenVisibility;
 window.toggleWatchSecretTokenVisibility = toggleWatchSecretTokenVisibility;
 window.generateWatchSecretToken = generateWatchSecretToken;
 window.onWatchTokenInput = onWatchTokenInput;
+window.onWatchVpsHostInput = onWatchVpsHostInput;
 window.detectWatchChatID = detectWatchChatID;
 window.testWatchTelegram = testWatchTelegram;
 window.testWatchPush = testWatchPush;
