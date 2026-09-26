@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -81,6 +83,12 @@ func main() {
 			if cfg.IsReceiverMode() {
 				fmt.Printf("✓ Modalità operativa: PUSH HTTP / Zero-Mesh (Dead Man's Snitch)\n")
 				port := cfg.Receiver.Port
+				if envPort := strings.TrimSpace(os.Getenv("PORT")); envPort != "" {
+					if p, err := strconv.Atoi(envPort); err == nil && p > 0 {
+						port = p
+						fmt.Printf("ℹ️  Rilevata porta dall'ambiente PORT=%d (compatibile Alwaysdata / PaaS)\n", port)
+					}
+				}
 				if port <= 0 {
 					port = 8443
 				}

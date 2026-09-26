@@ -177,17 +177,31 @@ func buildPushEndpoint(rawHost string, port int) string {
 	}
 
 	scheme := "http"
+	hasScheme := false
 	if strings.HasPrefix(raw, "https://") {
 		scheme = "https"
+		hasScheme = true
 		raw = strings.TrimPrefix(raw, "https://")
 	} else if strings.HasPrefix(raw, "http://") {
 		scheme = "http"
+		hasScheme = true
 		raw = strings.TrimPrefix(raw, "http://")
+	}
+
+	// Auto-upgrade to https if port is 443 or host contains alwaysdata.net and no explicit scheme was given
+	if !hasScheme {
+		if port == 443 || strings.Contains(strings.ToLower(raw), "alwaysdata.net") {
+			scheme = "https"
+		}
 	}
 
 	raw = strings.TrimRight(raw, "/")
 
 	if strings.Contains(raw, ":") && !strings.HasSuffix(raw, "]") {
+		return fmt.Sprintf("%s://%s/api/heartbeat", scheme, raw)
+	}
+
+	if (scheme == "https" && port == 443) || (scheme == "http" && port == 80) {
 		return fmt.Sprintf("%s://%s/api/heartbeat", scheme, raw)
 	}
 

@@ -3685,6 +3685,14 @@ async function openWatchSentinelModal() {
         meshIpDisplay.textContent = currentWatchMeshIP;
       }
 
+      // Detect if VPS host is an Alwaysdata host
+      const hostVal = (currentWatchConfig.vps_host || '').trim();
+      if (hostVal.toLowerCase().includes('alwaysdata.net')) {
+        setWatchDeployTarget('rootless');
+      } else {
+        setWatchDeployTarget('root');
+      }
+
       setWatchMode(currentWatchMode);
     }
   } catch (err) {
@@ -3736,6 +3744,10 @@ function setWatchMode(mode) {
   const step2 = document.getElementById('watch-instruction-step2');
   const step3 = document.getElementById('watch-instruction-step3');
 
+  const envPills = document.getElementById('watch-env-root')?.parentElement;
+  const infoRoot = document.getElementById('watch-instructions-root');
+  const infoRootless = document.getElementById('watch-instructions-rootless');
+
   if (currentWatchMode === 'receiver') {
     if (cardPush) {
       cardPush.style.border = '2px solid var(--primary)';
@@ -3748,10 +3760,15 @@ function setWatchMode(mode) {
     if (sectionPush) sectionPush.classList.remove('hidden');
     if (sectionMesh) sectionMesh.classList.add('hidden');
     if (verifyContainer) verifyContainer.classList.remove('hidden');
+    if (envPills) envPills.style.display = 'flex';
 
-    if (step1) step1.innerHTML = '1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code>';
-    if (step2) step2.innerHTML = '2. Incolla il comando copiato qui sotto e premi <b>Invio</b>.';
-    if (step3) step3.innerHTML = '3. La VPS scarica allod-watch, configura il ricevitore HTTP sulla porta specificata, apre il firewall e invia la conferma su Telegram!';
+    if (currentWatchDeployEnv === 'rootless') {
+      if (infoRoot) infoRoot.classList.add('hidden');
+      if (infoRootless) infoRootless.classList.remove('hidden');
+    } else {
+      if (infoRoot) infoRoot.classList.remove('hidden');
+      if (infoRootless) infoRootless.classList.add('hidden');
+    }
   } else {
     if (cardMesh) {
       cardMesh.style.border = '2px solid var(--primary)';
@@ -3764,10 +3781,9 @@ function setWatchMode(mode) {
     if (sectionMesh) sectionMesh.classList.remove('hidden');
     if (sectionPush) sectionPush.classList.add('hidden');
     if (verifyContainer) verifyContainer.classList.add('hidden');
-
-    if (step1) step1.innerHTML = '1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code>';
-    if (step2) step2.innerHTML = '2. Incolla il comando copiato qui sotto e premi <b>Invio</b>.';
-    if (step3) step3.innerHTML = '3. La VPS entra nella rete mesh NetBird, scarica la sentinella Allod, attiva systemd e invia subito una conferma su Telegram!';
+    if (envPills) envPills.style.display = 'none';
+    if (infoRoot) infoRoot.classList.remove('hidden');
+    if (infoRootless) infoRootless.classList.add('hidden');
   }
 
   updateWatchDeployCommand();
@@ -3815,6 +3831,20 @@ function onWatchVpsHostInput() {
     if (val.startsWith('http://') || val.startsWith('https://') || val.endsWith('/')) {
       val = val.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
       hostInput.value = val;
+    }
+    // Auto-detect Alwaysdata domain
+    if (val.toLowerCase().includes('alwaysdata.net')) {
+      const match = val.match(/(?:ssh-)?([^.]+)\.alwaysdata\.net/i);
+      if (match && match[1]) {
+        document.querySelectorAll('.watch-ad-user').forEach(el => el.textContent = match[1]);
+      }
+      if (currentWatchDeployEnv === 'root') {
+        setWatchDeployTarget('rootless');
+      }
+      const portInput = document.getElementById('watch-vps-port');
+      if (portInput && (portInput.value === '8443' || portInput.value === '')) {
+        portInput.value = '443';
+      }
     }
   }
   updateWatchDeployCommand();
@@ -4091,6 +4121,65 @@ async function saveWatchConfigAndAdvance(nextTab) {
   switchWatchTab(nextTab);
 }
 
+let currentWatchDeployEnv = 'root'; // 'root' | 'rootless'
+
+function setWatchDeployTarget(target) {
+  currentWatchDeployEnv = target;
+  const btnRoot = document.getElementById('watch-env-root');
+  const btnRootless = document.getElementById('watch-env-rootless');
+  const infoRoot = document.getElementById('watch-instructions-root');
+  const infoRootless = document.getElementById('watch-instructions-rootless');
+  const btnCopyText = document.getElementById('btn-copy-watch-cmd-text');
+  const portInput = document.getElementById('watch-vps-port');
+
+  if (target === 'rootless') {
+    if (btnRoot) {
+      btnRoot.style.background = 'transparent';
+      btnRoot.style.color = 'var(--text-muted)';
+    }
+    if (btnRootless) {
+      btnRootless.style.background = 'var(--primary)';
+      btnRootless.style.color = '#fff';
+    }
+    if (infoRoot) infoRoot.classList.add('hidden');
+    if (infoRootless) infoRootless.classList.remove('hidden');
+    if (btnCopyText) {
+      btnCopyText.setAttribute('data-i18n', 'watch_btn_copy_cmd_rootless');
+      btnCopyText.textContent = (typeof t === 'function') ? t('watch_btn_copy_cmd_rootless', 'Copia Comando per Alwaysdata / PaaS') : 'Copia Comando per Alwaysdata / PaaS';
+    }
+    if (portInput && (portInput.value === '8443' || portInput.value === '')) {
+      portInput.value = '443';
+    }
+
+    const hostVal = (document.getElementById('watch-vps-host')?.value || '').trim();
+    if (hostVal.toLowerCase().includes('alwaysdata.net')) {
+      const match = hostVal.match(/(?:ssh-)?([^.]+)\.alwaysdata\.net/i);
+      if (match && match[1]) {
+        document.querySelectorAll('.watch-ad-user').forEach(el => el.textContent = match[1]);
+      }
+    }
+  } else {
+    if (btnRoot) {
+      btnRoot.style.background = 'var(--primary)';
+      btnRoot.style.color = '#fff';
+    }
+    if (btnRootless) {
+      btnRootless.style.background = 'transparent';
+      btnRootless.style.color = 'var(--text-muted)';
+    }
+    if (infoRoot) infoRoot.classList.remove('hidden');
+    if (infoRootless) infoRootless.classList.add('hidden');
+    if (btnCopyText) {
+      btnCopyText.setAttribute('data-i18n', 'watch_btn_copy_cmd');
+      btnCopyText.textContent = (typeof t === 'function') ? t('watch_btn_copy_cmd', 'Copia Comando per VPS') : 'Copia Comando per VPS';
+    }
+    if (portInput && portInput.value === '443') {
+      portInput.value = '8443';
+    }
+  }
+  updateWatchDeployCommand();
+}
+
 function updateWatchDeployCommand() {
   const codeEl = document.getElementById('watch-deploy-command-code');
   if (!codeEl) return;
@@ -4106,7 +4195,37 @@ function updateWatchDeployCommand() {
     const secret = (document.getElementById('watch-secret-token')?.value || '').trim() || '<SECRET_TOKEN>';
     const tgEnabled = Boolean(botToken && chatId);
 
-    const cmd = `sudo bash -c '
+    if (currentWatchDeployEnv === 'rootless') {
+      const cmd = `mkdir -p ~/bin ~/.config/allod
+ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")
+echo "⬇️ Scaricamento Allod Watch Sentinel (\${ARCH})..."
+curl -fsSL "https://raw.githubusercontent.com/asfaltobollente/allod/main/bin/allod-watch-linux-\${ARCH}" -o ~/bin/allod-watch
+chmod 755 ~/bin/allod-watch
+cat << 'EOF' > ~/.config/allod/watch.yaml
+mode: receiver
+receiver:
+  port: ${port}
+  secret_token: "${secret}"
+intervals:
+  down_threshold_seconds: ${threshold}
+telegram:
+  enabled: ${tgEnabled}
+  bot_token: "${botToken}"
+  chat_id: "${chatId}"
+weather:
+  enabled: true
+  city: "${city}"
+digest:
+  enabled: true
+  time: "${digestTime}"
+EOF
+chmod 600 ~/.config/allod/watch.yaml
+echo "💬 Invio messaggio di test Telegram..."
+~/bin/allod-watch test-telegram -c ~/.config/allod/watch.yaml || true
+echo "✅ Binario e configurazione installati con successo in ~/bin/allod-watch!"`;
+      codeEl.textContent = cmd.trim();
+    } else {
+      const cmd = `sudo bash -c '
 ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/")
 echo "⬇️ Scaricamento Allod Watch Sentinel (\${ARCH})..."
 curl -fsSL "https://raw.githubusercontent.com/asfaltobollente/allod/main/bin/allod-watch-linux-\${ARCH}" -o /usr/local/bin/allod-watch
@@ -4155,7 +4274,8 @@ systemctl enable --now allod-watch.service
 echo "✅ Allod Watch Sentinel è ora in ascolto sulla porta ${port}!"
 /usr/local/bin/allod-watch test-telegram -c /etc/allod/watch.yaml || true
 '`;
-    codeEl.textContent = cmd.trim();
+      codeEl.textContent = cmd.trim();
+    }
   } else {
     // Mesh Mode
     const setupKeyInput = document.getElementById('watch-vps-setup-key');
@@ -4242,6 +4362,7 @@ window.saveWatchConfig = saveWatchConfig;
 window.saveWatchConfigAndAdvance = saveWatchConfigAndAdvance;
 window.updateWatchDeployCommand = updateWatchDeployCommand;
 window.copyWatchDeployCommand = copyWatchDeployCommand;
+window.setWatchDeployTarget = setWatchDeployTarget;
 
 // ==========================================
 // --- WAKE-ON-LAN (WoL) IMPLEMENTATION ---

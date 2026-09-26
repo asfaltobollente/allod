@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -468,8 +469,13 @@ func (w *Watcher) StartReceiver(port int, secretToken string) (*http.Server, err
 		})
 	})
 
+	bindAddr := fmt.Sprintf(":%d", port)
+	if envIP := strings.TrimSpace(os.Getenv("IP")); envIP != "" {
+		bindAddr = fmt.Sprintf("%s:%d", envIP, port)
+	}
+
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    bindAddr,
 		Handler: mux,
 	}
 
