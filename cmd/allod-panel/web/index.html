@@ -1769,17 +1769,40 @@ sudo systemctl enable --now allod-helperd</pre>
             </div>
           </div>
 
-          <!-- STEP 2: INSTALL ON VPS VIA SSH -->
+          <!-- STEP 2: INSTALL ON VPS / PAAS VIA SSH -->
           <div style="background:rgba(15,23,42,0.6); border:1px solid var(--card-border); border-radius:8px; padding:12px 14px; margin-bottom:14px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
-              <strong style="color:var(--text-main); font-size:12.5px;" data-i18n="watch_step2_deploy_title">Passo 2: Installa la Sentinella sulla VPS (SSH)</strong>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+              <strong style="color:var(--text-main); font-size:12.5px;" data-i18n="watch_step2_deploy_title">Passo 2: Installa la Sentinella (SSH)</strong>
+              <!-- Environment Selector Pills -->
+              <div style="display:flex; gap:4px; background:#0b1120; padding:3px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);">
+                <button type="button" id="watch-env-root" class="btn btn-sm" onclick="setWatchDeployTarget('root')" style="font-size:11px; padding:3px 10px; border-radius:4px; font-weight:600; background:var(--primary); color:#fff; border:none;" data-i18n="watch_env_root_btn">
+                  🐧 VPS Linux (Root / Sudo)
+                </button>
+                <button type="button" id="watch-env-rootless" class="btn btn-sm" onclick="setWatchDeployTarget('rootless')" style="font-size:11px; padding:3px 10px; border-radius:4px; font-weight:600; background:transparent; color:var(--text-muted); border:none;" data-i18n="watch_env_rootless_btn">
+                  ☁️ Alwaysdata / PaaS (Senza Root)
+                </button>
+              </div>
             </div>
 
-            <!-- Simple 3-step Instructions -->
-            <div style="background:#0b1120; border-radius:6px; padding:10px 12px; border:1px solid rgba(255,255,255,0.08); font-size:11.5px; line-height:1.6; margin-bottom:10px;">
-              <div id="watch-instruction-step1" data-i18n="watch_vps_step1">1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code></div>
+            <!-- Simple Instructions for Root -->
+            <div id="watch-instructions-root" style="background:#0b1120; border-radius:6px; padding:10px 12px; border:1px solid rgba(255,255,255,0.08); font-size:11.5px; line-height:1.6; margin-bottom:10px;">
+              <div id="watch-instruction-step1" data-i18n="watch_vps_step1">1. Connettiti via SSH alla tua VPS esterna: <code>ssh root@ip-vps</code> (oppure utente con sudo).</div>
               <div id="watch-instruction-step2" data-i18n="watch_vps_step2">2. Incolla il comando copiato qui sotto e premi <b>Invio</b>.</div>
               <div id="watch-instruction-step3" data-i18n="watch_vps_step3">3. La VPS configura la sentinella Allod, apre il firewall, attiva systemd e invia subito una conferma su Telegram!</div>
+            </div>
+
+            <!-- Simple Instructions for Rootless / Alwaysdata -->
+            <div id="watch-instructions-rootless" class="hidden" style="background:#0b1120; border-radius:6px; padding:10px 12px; border:1px solid rgba(56,189,248,0.25); font-size:11.5px; line-height:1.6; margin-bottom:10px;">
+              <div style="color:var(--primary); font-weight:600; margin-bottom:4px;" data-i18n="watch_env_rootless_title">☁️ Installazione Alwaysdata / PaaS (Nessun permesso root o sudo necessario):</div>
+              <div data-i18n="watch_env_rootless_step1">1. Connettiti via SSH al tuo account Alwaysdata (es. <code>ssh -l UTENTE ssh-UTENTE.alwaysdata.net</code>).</div>
+              <div data-i18n="watch_env_rootless_step2">2. Incolla il comando qui sotto: scarica il binario in <code>~/bin/allod-watch</code> e scrive la configurazione in <code>~/.config/allod/watch.yaml</code>.</div>
+              <div style="margin-top:2px;">
+                <span data-i18n="watch_env_rootless_step3">3. Nel pannello Alwaysdata (<b>Web &gt; Siti</b>): crea/modifica un sito di tipo <b>Programma utente</b> con comando:</span>
+                <br><code style="color:#38bdf8; background:rgba(0,0,0,0.5); padding:2px 6px; border-radius:4px; display:inline-block; margin-top:3px; word-break:break-all;">/home/<span class="watch-ad-user">utente</span>/bin/allod-watch run -c /home/<span class="watch-ad-user">utente</span>/.config/allod/watch.yaml</code>
+              </div>
+              <div style="margin-top:5px; color:var(--text-muted); font-size:11px;" data-i18n="watch_env_rootless_note">
+                💡 Alwaysdata instrada il traffico HTTPS pubblico (porta 443) direttamente al programma utente tramite le variabili d'ambiente $IP e $PORT.
+              </div>
             </div>
 
             <!-- Generated Single Command Box -->
@@ -1789,7 +1812,7 @@ sudo systemctl enable --now allod-helperd</pre>
             </div>
             <div style="display:flex; justify-content:flex-end; margin-top:8px;">
               <button type="button" class="btn btn-sm btn-success" id="btn-copy-watch-cmd" onclick="copyWatchDeployCommand()" style="font-weight:600; padding:6px 14px;">
-                📋 <span data-i18n="watch_btn_copy_cmd">Copia Comando per VPS</span>
+                📋 <span id="btn-copy-watch-cmd-text" data-i18n="watch_btn_copy_cmd">Copia Comando per VPS</span>
               </button>
             </div>
           </div>
