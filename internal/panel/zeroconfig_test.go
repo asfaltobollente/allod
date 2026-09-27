@@ -96,7 +96,7 @@ func TestBuildZeroConfigModes(t *testing.T) {
 
 func TestGenerateAvahiHosts(t *testing.T) {
 	out := GenerateAvahiHosts("192.168.1.50", "allod")
-	expected := "192.168.1.50 allod.local allod\n"
+	expected := "192.168.1.50 allod.local\n"
 	if !strings.Contains(out, expected) {
 		t.Errorf("expected %q to contain %q", out, expected)
 	}
@@ -123,7 +123,7 @@ func TestGenerateAvahiService(t *testing.T) {
 
 func TestGenerateWsddDefaultConfig(t *testing.T) {
 	conf := GenerateWsddDefaultConfig("allod", "workgroup")
-	if !strings.Contains(conf, `WSDD_PARAMS="-n ALLOD -w WORKGROUP"`) {
+	if !strings.Contains(conf, `WSDD_PARAMS="-n ALLOD -w WORKGROUP -4 -p"`) {
 		t.Errorf("unexpected wsdd config: %s", conf)
 	}
 }

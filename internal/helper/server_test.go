@@ -551,9 +551,12 @@ func TestPatchSambaConfig(t *testing.T) {
 
 	patched := PatchSambaConfig(sampleConf)
 
-	// Verify global section has access based share enum
+	// Verify global section has access based share enum and netbios name
 	if !strings.Contains(patched, "access based share enum = yes") {
 		t.Errorf("expected access based share enum = yes in patched config")
+	}
+	if !strings.Contains(patched, "netbios name = ALLOD") {
+		t.Errorf("expected netbios name = ALLOD in patched config")
 	}
 
 	// Verify alice and bob have access based share enum and hide unreadable
@@ -638,11 +641,23 @@ func TestPatchAvahiDaemonConfig(t *testing.T) {
 	if !strings.Contains(patched, "enable-reflector=yes") {
 		t.Errorf("expected enable-reflector=yes to be added")
 	}
+	if !strings.Contains(patched, "host-name=allod") {
+		t.Errorf("expected host-name=allod to be added")
+	}
+
+	// Custom hostname
+	patchedCustom := PatchAvahiDaemonConfig(conf, "mynas")
+	if !strings.Contains(patchedCustom, "host-name=mynas") {
+		t.Errorf("expected host-name=mynas, got %s", patchedCustom)
+	}
 
 	// Idempotency
 	patchedTwice := PatchAvahiDaemonConfig(patched)
 	if strings.Count(patchedTwice, "enable-reflector=yes") != 1 {
 		t.Errorf("expected exactly 1 enable-reflector=yes, got %d", strings.Count(patchedTwice, "enable-reflector=yes"))
+	}
+	if strings.Count(patchedTwice, "host-name=allod") != 1 {
+		t.Errorf("expected exactly 1 host-name=allod, got %d", strings.Count(patchedTwice, "host-name=allod"))
 	}
 }
 
