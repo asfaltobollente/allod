@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -407,6 +409,11 @@ func (w *Watcher) CheckDeadManTimeout() {
 
 // StartReceiver launches the HTTP heartbeat receiver server and background dead man's watchdog ticker.
 func (w *Watcher) StartReceiver(port int, secretToken string) (*http.Server, error) {
+	return w.StartReceiverOn(os.Getenv("IP"), port, secretToken)
+}
+
+// StartReceiverOn launches the HTTP heartbeat receiver bound to a specific IP/host and port.
+func (w *Watcher) StartReceiverOn(bindIP string, port int, secretToken string) (*http.Server, error) {
 	if port <= 0 {
 		port = 8443
 	}
@@ -414,8 +421,8 @@ func (w *Watcher) StartReceiver(port int, secretToken string) (*http.Server, err
 
 	mux := http.NewServeMux()
 
-	// 1. Healthcheck endpoint
-	mux.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
+	// 1. Healthcheck endpoints
+	healthHandler := func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
 			"status":  "ok",
@@ -423,16 +430,10 @@ func (w *Watcher) StartReceiver(port int, secretToken string) (*http.Server, err
 			"mode":    "receiver",
 			"time":    time.Now().Format(time.RFC3339),
 		})
-	})
-	mux.HandleFunc("/api/health", func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"status":  "ok",
-			"service": "allod-watch",
-			"mode":    "receiver",
-			"time":    time.Now().Format(time.RFC3339),
-		})
-	})
+	}
+	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/api/health", healthHandler)
 
 	// 2. Heartbeat push receiver
 	mux.HandleFunc("/api/heartbeat", func(rw http.ResponseWriter, r *http.Request) {
@@ -470,12 +471,17 @@ func (w *Watcher) StartReceiver(port int, secretToken string) (*http.Server, err
 	})
 
 	bindAddr := fmt.Sprintf(":%d", port)
-	if envIP := strings.TrimSpace(os.Getenv("IP")); envIP != "" {
-		bindAddr = fmt.Sprintf("%s:%d", envIP, port)
+	bindIP = strings.TrimSpace(bindIP)
+	if bindIP != "" {
+		bindAddr = net.JoinHostPort(bindIP, strconv.Itoa(port))
+	}
+
+	ln, err := net.Listen("tcp", bindAddr)
+	if err != nil {
+		return nil, fmt.Errorf("impossibile avviare il listener su %s: %w", bindAddr, err)
 	}
 
 	srv := &http.Server{
-		Addr:    bindAddr,
 		Handler: mux,
 	}
 
@@ -499,8 +505,8 @@ func (w *Watcher) StartReceiver(port int, secretToken string) (*http.Server, err
 
 	// Launch HTTP Server in background
 	go func() {
-		fmt.Printf("✓ [Watchdog Receiver] Server HTTP in ascolto sulla porta :%d (/api/heartbeat)\n", port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		fmt.Printf("✓ [Watchdog Receiver] Server HTTP in ascolto su %s (/api/heartbeat)\n", bindAddr)
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("❌ [Watchdog Receiver] Errore server HTTP: %v\n", err)
 		}
 	}()
