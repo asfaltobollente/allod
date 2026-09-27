@@ -3732,6 +3732,44 @@ WantedBy=default.target
 		})
 	})
 
+	// 5a-24. API Zero-Config Restart WSDD
+	mux.HandleFunc("/api/zeroconfig/restart-wsdd", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		res, err := client.Execute("service.restart", map[string]interface{}{
+			"unit": "wsdd",
+		}, false)
+		if err != nil {
+			client.SocketPath = "allod-helper.sock"
+			res, err = client.Execute("service.restart", map[string]interface{}{
+				"unit": "wsdd",
+			}, false)
+		}
+
+		if err != nil || !res.Ok {
+			errMsg := "Errore riavvio WSDD"
+			if err != nil {
+				errMsg = err.Error()
+			} else if res.Error != "" {
+				errMsg = res.Error
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Servizio WSDD riavviato con successo!",
+			Data:    res.Output,
+		})
+	})
+
 	// 5b. API Storage Init
 	mux.HandleFunc("/api/storage/init", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

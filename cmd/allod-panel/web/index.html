@@ -1492,10 +1492,14 @@ sudo systemctl enable --now allod-helperd</pre>
                 <span id="zeroconfig-mdns-badge" class="badge" style="background:#64748b; color:#fff; font-size:10px;">Verifica...</span>
                 <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">WSDD:</span>
                 <span id="zeroconfig-wsdd-badge" class="badge" style="background:#64748b; color:#fff; font-size:10px;">Verifica...</span>
+                <button id="zeroconfig-restart-wsdd-btn" class="btn btn-sm btn-outline-warning" type="button" onclick="restartWsddService()" style="padding:2px 8px; font-size:10px; font-weight:600; margin-left:4px;" title="Riavvia il servizio Windows Discovery (WSDD)">
+                  🔄 Riavvia WSDD
+                </button>
               </div>
+              <div id="zeroconfig-wsdd-error" style="display:none; margin-top:8px; font-size:11px; color:#fca5a5; background:rgba(239,68,68,0.12); border-radius:4px; padding:6px 8px; font-family:monospace; white-space:pre-wrap; max-height:80px; overflow-y:auto;"></div>
             </div>
-            <div>
-              <button id="zeroconfig-setup-btn" class="btn btn-sm btn-outline-info" onclick="setupZeroConfig()" style="padding:4px 10px; font-size:11px; font-weight:600;">
+            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+              <button id="zeroconfig-setup-btn" class="btn btn-sm btn-outline-info" onclick="setupZeroConfig()" style="padding:5px 12px; font-size:11px; font-weight:600;">
                 🚀 Configura / Ripara Zero-Config
               </button>
             </div>
