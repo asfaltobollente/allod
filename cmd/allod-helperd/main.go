@@ -29,6 +29,7 @@ func main() {
 
 	// Auto-heal Samba configuration for multi-user share privacy if smb.conf exists
 	_ = helper.AutoHealSambaConfig()
+	helper.AutoBindPhotos()
 
 	srv := helper.Server{
 		SocketPath: sockPath,

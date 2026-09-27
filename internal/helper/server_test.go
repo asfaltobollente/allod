@@ -708,4 +708,49 @@ func TestFindImmichPhotosSource(t *testing.T) {
 	}
 }
 
+func TestCountMediaFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	if cnt := countMediaFiles(tmpDir); cnt != 0 {
+		t.Errorf("expected 0 for empty dir, got %d", cnt)
+	}
+
+	// Non-media files
+	_ = os.WriteFile(filepath.Join(tmpDir, "notes.txt"), []byte("text"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "server.log"), []byte("log"), 0644)
+	if cnt := countMediaFiles(tmpDir); cnt != 0 {
+		t.Errorf("expected 0 for non-media files, got %d", cnt)
+	}
+
+	// Media files
+	_ = os.WriteFile(filepath.Join(tmpDir, "photo.jpg"), []byte("jpg"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "video.mp4"), []byte("mp4"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "apple.HEIC"), []byte("heic"), 0644)
+	if cnt := countMediaFiles(tmpDir); cnt != 3 {
+		t.Errorf("expected 3 media files, got %d", cnt)
+	}
+
+	// Thumbs and encoded-video subdirectories should be skipped
+	thumbsDir := filepath.Join(tmpDir, "thumbs")
+	_ = os.MkdirAll(thumbsDir, 0755)
+	_ = os.WriteFile(filepath.Join(thumbsDir, "thumb.jpg"), []byte("thumb"), 0644)
+
+	profileDir := filepath.Join(tmpDir, "profile")
+	_ = os.MkdirAll(profileDir, 0755)
+	_ = os.WriteFile(filepath.Join(profileDir, "avatar.png"), []byte("avatar"), 0644)
+
+	if cnt := countMediaFiles(tmpDir); cnt != 3 {
+		t.Errorf("expected still 3 media files after adding thumbs and profile, got %d", cnt)
+	}
+
+	// Nested user subfolder with media should be counted
+	subDir := filepath.Join(tmpDir, "2026", "09")
+	_ = os.MkdirAll(subDir, 0755)
+	_ = os.WriteFile(filepath.Join(subDir, "pic.png"), []byte("png"), 0644)
+
+	if cnt := countMediaFiles(tmpDir); cnt != 4 {
+		t.Errorf("expected 4 media files, got %d", cnt)
+	}
+}
+
 
