@@ -291,6 +291,8 @@ const i18n = {
     settings_theme_active_label: "Active Theme:",
     theme_default: "Default Slate",
     theme_default_sub: "Cyber Dark & Neon Cyan",
+    theme_cloud: "Modern Cloud",
+    theme_cloud_sub: "Apple & Linear aesthetic, deep obsidian glassmorphism, subtle glowing borders",
     theme_moderno: "Moderno",
     theme_moderno_sub: "Material Dashboard Creative Tim, rounded cards & pink glow",
     theme_cia: "CIA // Tactical (Tom Clancy)",
@@ -298,6 +300,21 @@ const i18n = {
     theme_allod: "Allod",
     theme_allod_sub: "Medieval freehold, aged oak, parchment & forged brass",
     btn_theme: "Theme",
+
+    // View Mode & Progressive Disclosure
+    view_mode_base: "Base View",
+    view_mode_expert: "Expert Mode",
+    view_mode_base_desc: "Clean, essential overview for daily use and family members",
+    view_mode_expert_desc: "Full technical details, Btrfs storage mounts, and internal metrics at a glance",
+    details_and_storage: "Technical Details & Storage",
+    details_and_storage_sub: "Paths, database engines, bind mounts & diagnostics",
+    btn_open_app: "Open Application",
+    label_level_short: "Level",
+    status_protected_short: "Protected",
+    status_unlocked_short: "Unlocked",
+    protected_pool_note: "Data Protected on NAS RAID 1 pool. Click Unlock to make changes.",
+    launchpad_toolbar_title: "Applications & Personal Cloud",
+    launchpad_toolbar_sub: "Launch or access your apps directly in local LAN or via encrypted mesh",
 
     // Watch Sentinel & Telegram Bot
     watch_sentinel_title: "Cloud Sentinel & Telegram Bot",
@@ -734,6 +751,8 @@ const i18n = {
     settings_theme_active_label: "Tema Attivo:",
     theme_default: "Default Slate",
     theme_default_sub: "Cyber dark ardesia e accenti ciano neon",
+    theme_cloud: "Modern Cloud Elegante",
+    theme_cloud_sub: "Stile Apple & Linear: glassmorphism scuro, bordi sottili e riflessi discreti",
     theme_moderno: "Moderno",
     theme_moderno_sub: "Material Dashboard Creative Tim, card arrotondate e gradiente rosa fucsia",
     theme_cia: "CIA // Tactical (Tom Clancy)",
@@ -741,6 +760,21 @@ const i18n = {
     theme_allod: "Allod",
     theme_allod_sub: "Terre libere medievali, rovere antico, pergamena e ottone battuto",
     btn_theme: "Tema",
+
+    // View Mode & Progressive Disclosure
+    view_mode_base: "Vista Base",
+    view_mode_expert: "Modalità Esperto",
+    view_mode_base_desc: "Vista essenziale e pulita per l'uso quotidiano e per tutta la famiglia",
+    view_mode_expert_desc: "Tutti i dettagli tecnici: percorsi Btrfs, bind mount, database e diagnostica a colpo d'occhio",
+    details_and_storage: "Dettagli Tecnici & Storage",
+    details_and_storage_sub: "Percorsi disco, database, bind mount e diagnostica",
+    btn_open_app: "Apri Applicazione",
+    label_level_short: "Livello",
+    status_protected_short: "Protetto",
+    status_unlocked_short: "Sbloccato",
+    protected_pool_note: "Dati Protetti su pool NAS RAID 1. Clicca Sblocca per modifiche.",
+    launchpad_toolbar_title: "Applicazioni & Cloud Personale",
+    launchpad_toolbar_sub: "Avvia o accedi direttamente alle tue app in LAN locale o via mesh cifrata",
 
     // Watch Sentinel & Telegram Bot
     watch_sentinel_title: "Sentinella Cloud & Bot Telegram",

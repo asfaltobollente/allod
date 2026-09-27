@@ -31,6 +31,45 @@ let currentRing = null;
 let unlockedModules = new Set();
 let startingModules = new Map(); // modID -> timestamp
 let photosSharesState = { enabled: false, mounted: false, shares_active: false };
+let currentViewMode = localStorage.getItem('allod_view_mode') || 'simple';
+
+function setViewMode(mode) {
+  if (mode !== 'simple' && mode !== 'expert') {
+    mode = 'simple';
+  }
+  currentViewMode = mode;
+  localStorage.setItem('allod_view_mode', mode);
+
+  const btnBase = document.getElementById('btn-view-base');
+  const btnExpert = document.getElementById('btn-view-expert');
+  if (btnBase && btnExpert) {
+    if (mode === 'simple') {
+      btnBase.classList.add('active');
+      btnExpert.classList.remove('active');
+    } else {
+      btnBase.classList.remove('active');
+      btnExpert.classList.add('active');
+    }
+  }
+
+  renderModules();
+}
+window.setViewMode = setViewMode;
+
+function getModuleIcon(modID) {
+  const icons = {
+    'storage': '💽',
+    'shares': '📁',
+    'backup': '🛡️',
+    'watch': '📡',
+    'network': '🌐',
+    'photos': '📸',
+    'cloud': '☁️',
+    'media': '🎬'
+  };
+  return icons[modID] || '📦';
+}
+window.getModuleIcon = getModuleIcon;
 
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
@@ -1078,7 +1117,8 @@ function getModuleTechInfo(modID, currentLevel) {
 
 function createModuleCard(mod) {
   const card = document.createElement('div');
-  card.className = 'module-card';
+  const isSimple = (currentViewMode === 'simple');
+  card.className = `module-card ${isSimple ? 'mode-simple' : 'mode-expert'}`;
 
   const isOff = !mod.current_level || mod.current_level === 'off';
   const tierBadge = mod.tier === 'core'
@@ -1088,6 +1128,7 @@ function createModuleCard(mod) {
   const levels = manifest.levels || manifest.Levels || {};
 
   const tech = getModuleTechInfo(mod.id, mod.current_level);
+  const icon = getModuleIcon(mod.id);
 
   let levelOptions = Object.keys(levels).map(lvl => {
     const selected = lvl === mod.current_level ? 'selected' : '';
@@ -1118,15 +1159,16 @@ function createModuleCard(mod) {
   const isLocked = isDataCritical && isRunningOrNAS && !isOrphan && !unlockedModules.has(mod.id);
   const isUnlocked = isDataCritical && isRunningOrNAS && !isOrphan && unlockedModules.has(mod.id);
 
+  const host = window.location.hostname || '127.0.0.1';
+
   if (isOrphan) {
-    card.className = 'module-card';
+    if (isLocked) { card.className += ' module-card-locked'; }
     statusBadge = `<span class="badge badge-warning" style="background:#f59e0b; color:#000; font-weight:700;">⚠️ ATTIVO (OFF)</span>`;
     actionButtons = `
       <button class="btn btn-sm btn-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;" title="Termina forzatamente il container Podman attivo">⏹ ${t('btn_stop')}</button>
       <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
     `;
     if (tech.linkPort) {
-      const host = window.location.hostname || '127.0.0.1';
       openLinkHtml = `
         <div style="margin-top:10px; padding:6px 10px; background:rgba(245,158,11,0.15); border-radius:6px; border:1px solid rgba(245,158,11,0.3);">
           <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:#f59e0b; font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
@@ -1137,7 +1179,7 @@ function createModuleCard(mod) {
       `;
     }
   } else if (isLocked) {
-    card.className = 'module-card module-card-locked';
+    card.className += ' module-card-locked';
     statusBadge = `<span class="badge badge-success">${t('status_protected')}</span>`;
     
     let diagBtn = (mod.id === 'storage')
@@ -1146,11 +1188,10 @@ function createModuleCard(mod) {
 
     actionButtons = `
       ${diagBtn}
-      <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔓 ${t('btn_unlock')}</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="${t('btn_unlock')}">🔓 ${t('btn_unlock')}</button>
     `;
 
     if (tech.linkPort) {
-      const host = window.location.hostname || '127.0.0.1';
       openLinkHtml = `
         <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
           <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
@@ -1161,7 +1202,6 @@ function createModuleCard(mod) {
       `;
     }
   } else if (isUnlocked) {
-    card.className = 'module-card';
     statusBadge = `<span class="badge badge-warning">${t('status_unlocked')}</span>`;
     
     let diagBtn = (mod.id === 'storage')
@@ -1171,11 +1211,10 @@ function createModuleCard(mod) {
     actionButtons = `
       ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>` : ''}
       ${diagBtn}
-      <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🔒 ${t('btn_lock')}</button>
+      <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="${t('btn_lock')}">🔒 ${t('btn_lock')}</button>
     `;
 
     if (tech.linkPort) {
-      const host = window.location.hostname || '127.0.0.1';
       openLinkHtml = `
         <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
           <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
@@ -1194,7 +1233,6 @@ function createModuleCard(mod) {
       `;
       
       if (tech.linkPort) {
-        const host = window.location.hostname || '127.0.0.1';
         openLinkHtml = `
           <div style="margin-top:10px; padding:6px 10px; background:rgba(56,189,248,0.1); border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
             <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" style="color:var(--primary); font-weight:600; font-size:12px; text-decoration:none; display:flex; justify-content:space-between; align-items:center;">
@@ -1221,12 +1259,13 @@ function createModuleCard(mod) {
   }
 
   // Check if module is currently starting (disable button and show spinner)
-  if (startingModules.has(mod.id)) {
+  const isStarting = startingModules.has(mod.id);
+  if (isStarting) {
     const elapsed = Date.now() - startingModules.get(mod.id);
     if (mod.runtime_status === 'running' || elapsed > 25000) {
       startingModules.delete(mod.id);
     } else {
-      statusBadge = `<span class="badge badge-info" style="opacity:0.9;">${t('status_starting')}</span>`;
+      statusBadge = `<span class="badge badge-info" style="opacity:0.9;">⏳ ${t('status_starting')}</span>`;
       actionButtons = `
         <button class="btn btn-sm btn-secondary" disabled style="opacity:0.65; cursor:wait; padding:2px 10px; font-size:11px; margin-left:8px;">${t('status_starting')}</button>
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
@@ -1383,12 +1422,125 @@ function createModuleCard(mod) {
   const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
   const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
 
+  // -----------------------------------------------------------------
+  // VISTA BASE (Semplice / Family & Daily use - Clean & Minimal)
+  // -----------------------------------------------------------------
+  if (isSimple) {
+    let primaryActionBtn = '';
+    const isRunning = (mod.runtime_status === 'running' || (mod.id === 'storage' && mod.is_on_nas_pool));
+
+    if (isStarting) {
+      primaryActionBtn = `<button class="btn btn-sm btn-secondary" disabled style="flex:1; opacity:0.75; cursor:wait; padding:7px 12px; font-size:12px; font-weight:600;">⏳ ${t('status_starting', 'Avvio in corso...')}</button>`;
+    } else if (isRunning) {
+      if (tech.linkPort) {
+        primaryActionBtn = `<a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" class="btn btn-sm btn-primary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none; padding:7px 12px; font-weight:600;">🌐 ${t('btn_open_app', 'Apri')} ↗</a>`;
+      } else if (mod.id === 'shares') {
+        primaryActionBtn = `<button class="btn btn-sm btn-primary" onclick="openSmbPasswordModal()" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🔑 ${t('btn_smb_password', 'Password SMB')}</button>`;
+      } else if (mod.id === 'watch') {
+        primaryActionBtn = `<button class="btn btn-sm btn-primary" onclick="openWatchSentinelModal()" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🤖 ${t('btn_configure_watch_sentinel', 'Configura Sentinella')}</button>`;
+      } else if (mod.id === 'network') {
+        primaryActionBtn = `<button class="btn btn-sm btn-primary" onclick="openNetworkPairingModal()" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">📱 ${t('network_pairing_btn', 'Connetti Dispositivo')}</button>`;
+      } else if (mod.id === 'storage') {
+        primaryActionBtn = `<button class="btn btn-sm btn-outline-info" onclick="showStorageDiagnostics()" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🔍 ${t('btn_inspect_btrfs', 'Salute Dischi & RAID')}</button>`;
+      } else {
+        primaryActionBtn = `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🩺 ${t('btn_diagnostics', 'Diagnostica')}</button>`;
+      }
+    } else if (mod.runtime_status === 'failed') {
+      primaryActionBtn = `<button class="btn btn-sm btn-danger" onclick="startModule('${mod.id}')" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">▶ ${t('btn_restart', 'Riavvia')}</button>`;
+    } else {
+      primaryActionBtn = `<button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">▶ ${t('btn_start', 'Avvia')}</button>`;
+    }
+
+    let lockPill = '';
+    if (isLocked) {
+      lockPill = `<button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:6px 10px; font-size:11px;" title="${t('btn_unlock', 'Sblocca')}">🔓</button>`;
+    } else if (isUnlocked) {
+      lockPill = `<button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:6px 10px; font-size:11px;" title="${t('btn_lock', 'Blocca')}">🔒</button>`;
+    }
+
+    card.innerHTML = `
+      <div>
+        <div class="module-simple-header">
+          <div class="module-simple-left">
+            <div class="module-simple-icon">${icon}</div>
+            <div class="module-simple-titles">
+              <div class="module-simple-name">${tech.product}</div>
+              <div class="module-simple-sub">
+                <span class="badge ${tierBadge}">${tierLabel}</span>
+                ${betaBadge}
+                ${isLocked ? `<span title="${t('status_protected_short', 'Protetto')}" style="cursor:help;">🔒</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div>
+            ${statusBadge}
+          </div>
+        </div>
+
+        <p class="module-simple-desc">
+          ${tech.desc}
+        </p>
+
+        <div class="module-simple-controls">
+          <div class="module-simple-level">
+            <label style="font-size:11.5px; color:var(--text-muted); font-weight:600;">${t('label_level_short', 'Livello')}:</label>
+            <select class="form-control" ${isLocked ? 'disabled style="opacity:0.6; cursor:not-allowed; padding:3px 8px; font-size:11.5px;"' : 'style="padding:3px 8px; font-size:11.5px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
+              ${levelOptions}
+            </select>
+            <span class="badge badge-info" style="font-size:10.5px;">${ramReq} MB RAM</span>
+          </div>
+        </div>
+
+        <div class="module-simple-actions">
+          ${primaryActionBtn}
+          ${lockPill}
+        </div>
+
+        <details class="module-tech-accordion">
+          <summary class="module-tech-summary">
+            <span>⚙️ ${t('details_and_storage', 'Dettagli Tecnici & Storage')}</span>
+            <span class="chevron">▾</span>
+          </summary>
+          <div class="module-tech-body">
+            ${dbInfoHtml}
+            ${storageBoxHtml}
+            ${grantsHtml}
+            ${photosSharesIntegrationHtml}
+            ${sharesSmbBoxHtml}
+            ${networkBoxHtml}
+            ${watchBoxHtml}
+            ${(mod.id === 'storage' && isUnlocked) ? `
+              <div style="margin-top:6px; padding:8px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
+                <p style="color:#fca5a5; font-size:10.5px; margin-bottom:6px;">Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici.</p>
+                <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:10.5px; padding:3px 8px;">🗑️ Re-inizializza Pool Storage</button>
+              </div>
+            ` : ''}
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-top:8px; border-top:1px dashed var(--card-border); padding-top:8px;">
+              <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                ${actionButtons}
+              </div>
+              <div style="font-size:10.5px; color:var(--text-muted); font-family:'JetBrains Mono',monospace;">
+                UserNS: ${priv.userns || 'rootless'}
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    `;
+
+    return card;
+  }
+
+  // -----------------------------------------------------------------
+  // MODALITÀ ESPERTO (Power User / DevOps - Tutto a portata di occhio)
+  // -----------------------------------------------------------------
   card.innerHTML = `
     <div>
       <div class="module-card-header">
         <div>
           <div class="module-title">
-            ${mod.id}
+            <span style="font-size:18px;">${icon}</span>
+            <span>${mod.id}</span>
             <span class="badge ${tierBadge}">${tierLabel}</span>
             ${betaBadge}
           </div>
@@ -1422,8 +1574,8 @@ function createModuleCard(mod) {
       ${networkBoxHtml}
       ${watchBoxHtml}
       ${isLocked ? `
-        <div style="margin-top:8px; padding:6px 10px; background:rgba(148, 163, 184, 0.08); border-radius:6px; border:1px solid rgba(148, 163, 184, 0.2); font-size:11px; color:var(--text-muted);">
-          🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.
+        <div class="card-protected-bar">
+          <span>🔒 <strong>${t('status_protected_short', 'Dati Protetti')}:</strong> ${t('protected_pool_note', 'Salvati su pool NAS RAID 1. Clicca Sblocca per modifiche.')}</span>
         </div>
       ` : ''}
       ${(mod.id === 'storage' && isUnlocked) ? `
@@ -1471,6 +1623,19 @@ function createModuleCard(mod) {
 function renderModules() {
   const container = document.getElementById('modules-grid');
   if (!container || !Array.isArray(currentModules)) return;
+
+  // Sync view mode buttons
+  const btnBase = document.getElementById('btn-view-base');
+  const btnExpert = document.getElementById('btn-view-expert');
+  if (btnBase && btnExpert) {
+    if (currentViewMode === 'simple') {
+      btnBase.classList.add('active');
+      btnExpert.classList.remove('active');
+    } else {
+      btnBase.classList.remove('active');
+      btnExpert.classList.add('active');
+    }
+  }
 
   container.innerHTML = '';
 
@@ -3555,7 +3720,7 @@ function selectTheme(themeName) {
 }
 
 function applyTheme(themeName, save = true) {
-  const validThemes = ['default', 'moderno', 'cia', 'allod'];
+  const validThemes = ['default', 'cloud', 'moderno', 'cia', 'allod'];
   if (!validThemes.includes(themeName)) {
     themeName = 'default';
   }
@@ -3594,6 +3759,7 @@ function updateThemeBadge(themeName) {
   if (badge) {
     const names = {
       default: (typeof t === 'function' ? t('theme_default', 'Default Slate') : 'Default Slate'),
+      cloud: (typeof t === 'function' ? t('theme_cloud', 'Modern Cloud Elegante') : 'Modern Cloud Elegante'),
       moderno: (typeof t === 'function' ? t('theme_moderno', 'Moderno') : 'Moderno'),
       cia: (typeof t === 'function' ? t('theme_cia', 'CIA // Tactical (Tom Clancy)') : 'CIA // Tactical (Tom Clancy)'),
       allod: (typeof t === 'function' ? t('theme_allod', 'Allod') : 'Allod')
