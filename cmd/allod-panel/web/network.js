@@ -402,9 +402,49 @@ export async function loadZeroConfigStatus() {
           wsddBadge.style.color = '#fff';
         }
       }
+
+      const errBox = document.getElementById('zeroconfig-wsdd-error');
+      if (errBox) {
+        if (!d.wsdd_active && d.wsdd_error) {
+          errBox.textContent = '⚠️ Log WSDD:\n' + d.wsdd_error;
+          errBox.style.display = 'block';
+        } else {
+          errBox.style.display = 'none';
+        }
+      }
     }
   } catch (err) {
     console.warn('Impossibile verificare stato Zero-Config:', err);
+  }
+}
+
+export async function restartWsddService() {
+  const btn = document.getElementById('zeroconfig-restart-wsdd-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Riavvio...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/zeroconfig/restart-wsdd', { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      if (typeof showAlert === 'function') {
+        showAlert('Servizio WSDD riavviato con successo!', 'success');
+      }
+    } else {
+      if (typeof showAlert === 'function') {
+        showAlert('Errore riavvio WSDD: ' + (data.message || 'Verifica log'), 'danger');
+      }
+    }
+  } catch (err) {
+    if (typeof showAlert === 'function') showAlert('Errore di connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🔄 Riavvia WSDD';
+    }
+    await loadZeroConfigStatus();
   }
 }
 
@@ -451,3 +491,4 @@ window.stopManagedServer = stopManagedServer;
 window.restartNetworkModule = restartNetworkModule;
 window.loadZeroConfigStatus = loadZeroConfigStatus;
 window.setupZeroConfig = setupZeroConfig;
+window.restartWsddService = restartWsddService;

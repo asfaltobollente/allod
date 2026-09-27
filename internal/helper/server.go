@@ -789,7 +789,16 @@ func (s *Server) processRequest(req Request) Response {
 			}
 
 			systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
-			_ = exec.Command(systemctlBin, "restart", unit).Run()
+			_ = exec.Command(systemctlBin, "unmask", unit).Run()
+			_ = exec.Command(systemctlBin, "reset-failed", unit).Run()
+			outR, errR := exec.Command(systemctlBin, "restart", unit).CombinedOutput()
+			if errR != nil {
+				jOut, _ := exec.Command("journalctl", "-u", unit, "-n", "8", "--no-pager").CombinedOutput()
+				return Response{
+					Ok:    false,
+					Error: fmt.Sprintf("Errore restart %s: %v (%s)\n%s", unit, errR, strings.TrimSpace(string(outR)), strings.TrimSpace(string(jOut))),
+				}
+			}
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("systemctl restart %s", unit)}}
 
@@ -1549,11 +1558,19 @@ server:
 			status = "degraded"
 		}
 
+		var wsddError string
+		if !wsddActive && wsddInstalled {
+			if jOut, err := exec.Command("journalctl", "-u", "wsdd", "-n", "8", "--no-pager").CombinedOutput(); err == nil && len(jOut) > 0 {
+				wsddError = strings.TrimSpace(string(jOut))
+			}
+		}
+
 		payload, _ := json.Marshal(map[string]interface{}{
 			"avahi_installed":          avahiInstalled,
 			"avahi_active":             avahiActive,
 			"wsdd_installed":           wsddInstalled,
 			"wsdd_active":              wsddActive,
+			"wsdd_error":               wsddError,
 			"hosts_configured":         hostsConfigured,
 			"samba_service_configured": sambaServiceConfigured,
 			"mdns_name":                "allod.local",
@@ -1636,8 +1653,10 @@ server:
 				_ = os.WriteFile(avahiConfPath, []byte(patched), 0644)
 			}
 
-			// 6. Enable and restart services
+			// 6. Enable, unmask, reset-failed and restart services
 			systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
+			_ = exec.Command(systemctlBin, "unmask", "avahi-daemon", "wsdd").Run()
+			_ = exec.Command(systemctlBin, "reset-failed", "avahi-daemon", "wsdd").Run()
 			_ = exec.Command(systemctlBin, "enable", "--now", "avahi-daemon", "wsdd").Run()
 			_ = exec.Command(systemctlBin, "restart", "avahi-daemon", "wsdd").Run()
 
