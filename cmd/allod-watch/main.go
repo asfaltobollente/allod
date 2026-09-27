@@ -16,7 +16,9 @@ import (
 )
 
 var (
-	cfgPath string
+	cfgPath      string
+	overridePort int
+	overrideIP   string
 )
 
 func main() {
@@ -83,16 +85,33 @@ func main() {
 			if cfg.IsReceiverMode() {
 				fmt.Printf("✓ Modalità operativa: PUSH HTTP / Zero-Mesh (Dead Man's Snitch)\n")
 				port := cfg.Receiver.Port
-				if envPort := strings.TrimSpace(os.Getenv("PORT")); envPort != "" {
+				if overridePort > 0 {
+					port = overridePort
+					fmt.Printf("ℹ️  Override porta da flag CLI --port=%d\n", port)
+				} else if envPort := strings.TrimSpace(os.Getenv("PORT")); envPort != "" {
 					if p, err := strconv.Atoi(envPort); err == nil && p > 0 {
 						port = p
 						fmt.Printf("ℹ️  Rilevata porta dall'ambiente PORT=%d (compatibile Alwaysdata / PaaS)\n", port)
 					}
 				}
+
+				bindIP := overrideIP
+				if bindIP == "" {
+					bindIP = strings.TrimSpace(os.Getenv("IP"))
+				}
+
 				if port <= 0 {
 					port = 8443
 				}
-				_, err := watcher.StartReceiver(port, cfg.Receiver.SecretToken)
+
+				// If port is < 1024 (e.g. 443) and not root, and neither PORT nor IP env var is set:
+				// On local SSH test, fallback to 8443 to avoid permission denied
+				if port < 1024 && strings.TrimSpace(os.Getenv("PORT")) == "" && overridePort == 0 && bindIP == "" {
+					fmt.Printf("ℹ️  Porta %d riservata a root. In modalità senza root/PaaS uso porta fallback 8443 per test locale\n", port)
+					port = 8443
+				}
+
+				_, err := watcher.StartReceiverOn(bindIP, port, cfg.Receiver.SecretToken)
 				if err != nil {
 					log.Fatalf("Errore avvio ricevitore HTTP su porta %d: %v", port, err)
 				}
@@ -238,6 +257,9 @@ func main() {
 			fmt.Printf("allod-watch version %s\n", version.Get())
 		},
 	}
+
+	runCmd.Flags().IntVarP(&overridePort, "port", "p", 0, "Porta su cui ascoltare (override configurazione)")
+	runCmd.Flags().StringVar(&overrideIP, "ip", "", "Indirizzo IP su cui eseguire il bind (override configurazione)")
 
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(testTgCmd)
