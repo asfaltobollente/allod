@@ -188,6 +188,11 @@ func buildPushEndpoint(rawHost string, port int) string {
 		raw = strings.TrimPrefix(raw, "http://")
 	}
 
+	// Auto-correct common typo: *.alwaysdata.com -> *.alwaysdata.net (user sites are always on .net)
+	if strings.HasSuffix(strings.ToLower(raw), ".alwaysdata.com") {
+		raw = raw[:len(raw)-len(".alwaysdata.com")] + ".alwaysdata.net"
+	}
+
 	// Auto-upgrade to https if port is 443 or host contains alwaysdata.net and no explicit scheme was given
 	if !hasScheme {
 		if port == 443 || strings.Contains(strings.ToLower(raw), "alwaysdata.net") {

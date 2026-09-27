@@ -3832,6 +3832,11 @@ function onWatchVpsHostInput() {
       val = val.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
       hostInput.value = val;
     }
+    // Auto-fix common typo: .alwaysdata.com -> .alwaysdata.net
+    if (val.toLowerCase().endsWith('.alwaysdata.com')) {
+      val = val.replace(/\.alwaysdata\.com$/i, '.alwaysdata.net');
+      hostInput.value = val;
+    }
     // Auto-detect Alwaysdata domain
     if (val.toLowerCase().includes('alwaysdata.net')) {
       const match = val.match(/(?:ssh-)?([^.]+)\.alwaysdata\.net/i);
@@ -4005,6 +4010,11 @@ async function testWatchTelegram() {
 async function testWatchPush() {
   let host = (document.getElementById('watch-vps-host')?.value || '').trim();
   host = host.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (host.toLowerCase().endsWith('.alwaysdata.com')) {
+    host = host.replace(/\.alwaysdata\.com$/i, '.alwaysdata.net');
+    const hostInput = document.getElementById('watch-vps-host');
+    if (hostInput) hostInput.value = host;
+  }
   const port = parseInt(document.getElementById('watch-vps-port')?.value || '8443', 10);
   const token = (document.getElementById('watch-secret-token')?.value || '').trim();
   const feedback = document.getElementById('watch-push-feedback');
@@ -4075,6 +4085,11 @@ async function saveWatchConfig(showNotification = true) {
 
   let host = (document.getElementById('watch-vps-host')?.value || '').trim();
   host = host.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (host.toLowerCase().endsWith('.alwaysdata.com')) {
+    host = host.replace(/\.alwaysdata\.com$/i, '.alwaysdata.net');
+    const hostInput = document.getElementById('watch-vps-host');
+    if (hostInput) hostInput.value = host;
+  }
   const port = parseInt(document.getElementById('watch-vps-port')?.value || '8443', 10);
   const secretToken = (document.getElementById('watch-secret-token')?.value || '').trim();
   const pushInterval = parseInt(document.getElementById('watch-push-interval')?.value || '60', 10);
