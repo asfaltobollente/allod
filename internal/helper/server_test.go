@@ -567,6 +567,19 @@ func TestPatchSambaConfig(t *testing.T) {
 		t.Errorf("expected hide unreadable = yes to be added to user shares and shares")
 	}
 
+	// Verify [shares] is browseable = no (hidden from root network view)
+	if !strings.Contains(patched, "browseable = no") {
+		t.Errorf("expected browseable = no for [shares] in patched config")
+	}
+
+	// Verify [public] exists and is browseable = yes
+	if !strings.Contains(patched, "[public]") {
+		t.Errorf("expected [public] share in patched config")
+	}
+	if !strings.Contains(patched, "browseable = yes") {
+		t.Errorf("expected browseable = yes for [public] in patched config")
+	}
+
 	// Idempotency: patching already patched config shouldn't duplicate lines
 	patchedTwice := PatchSambaConfig(patched)
 	countGlobalEnum := strings.Count(patchedTwice, "access based share enum = yes")
@@ -658,6 +671,40 @@ func TestPatchAvahiDaemonConfig(t *testing.T) {
 	}
 	if strings.Count(patchedTwice, "host-name=allod") != 1 {
 		t.Errorf("expected exactly 1 host-name=allod, got %d", strings.Count(patchedTwice, "host-name=allod"))
+	}
+}
+
+func TestFindImmichPhotosSource(t *testing.T) {
+	tmpDir := t.TempDir()
+	basePhotos := filepath.Join(tmpDir, "photos", "upload")
+
+	// 1. Without any files, returns fallback
+	res := findImmichPhotosSource(basePhotos, "davide")
+	expectedFallback := filepath.Join(basePhotos, "library", "davide")
+	if res != expectedFallback {
+		t.Errorf("expected fallback %s, got %s", expectedFallback, res)
+	}
+
+	// 2. With UUID folder in upload/ containing photos
+	uuid := "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+	userUploadDir := filepath.Join(basePhotos, "upload", uuid)
+	_ = os.MkdirAll(userUploadDir, 0777)
+	_ = os.WriteFile(filepath.Join(userUploadDir, "photo1.jpg"), []byte("fake jpg"), 0644)
+
+	resWithUpload := findImmichPhotosSource(basePhotos, "davide")
+	if resWithUpload != userUploadDir {
+		t.Errorf("expected upload dir %s, got %s", userUploadDir, resWithUpload)
+	}
+
+	// 3. With Storage Template library/ containing photos, library is preferred over upload
+	userLibraryDir := filepath.Join(basePhotos, "library", uuid, "2026", "09")
+	_ = os.MkdirAll(userLibraryDir, 0777)
+	_ = os.WriteFile(filepath.Join(userLibraryDir, "photo2.jpg"), []byte("fake jpg 2"), 0644)
+
+	resWithLibrary := findImmichPhotosSource(basePhotos, "davide")
+	expectedLibRoot := filepath.Join(basePhotos, "library", uuid)
+	if resWithLibrary != expectedLibRoot {
+		t.Errorf("expected library dir %s, got %s", expectedLibRoot, resWithLibrary)
 	}
 }
 

@@ -530,20 +530,21 @@ func (s *Server) processRequest(req Request) Response {
 		if targetUser != "" && !validNameRegex.MatchString(targetUser) {
 			return Response{Ok: false, Error: "Invalid 'username' for bind_photos"}
 		}
-		basePhotos := "/mnt/allod-storage/photos/upload/library"
-		baseShares := "/mnt/allod-storage/shares"
+		storageRoot := getStorageBaseDir()
+		basePhotosRoot := filepath.Join(storageRoot, "photos", "upload")
+		baseShares := filepath.Join(storageRoot, "shares")
 
 		var targets [][2]string // [source, target]
 
 		if targetUser != "" && validNameRegex.MatchString(targetUser) {
-			targets = append(targets, [2]string{
-				filepath.Join(basePhotos, targetUser),
-				filepath.Join(baseShares, targetUser, "photos"),
-			})
+			userSrc := findImmichPhotosSource(basePhotosRoot, targetUser)
+			userTgt := filepath.Join(baseShares, targetUser, "photos")
+			targets = append(targets, [2]string{userSrc, userTgt})
 		} else {
 			// Shared / global photos library
+			globalSrc := findImmichPhotosSource(basePhotosRoot, "")
 			targets = append(targets, [2]string{
-				basePhotos,
+				globalSrc,
 				filepath.Join(baseShares, "photos"),
 			})
 			// Per-user photo shares for every registered user directory in shares
@@ -556,8 +557,9 @@ func (s *Server) processRequest(req Request) Response {
 					if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
 						continue
 					}
+					uSrc := findImmichPhotosSource(basePhotosRoot, uName)
 					targets = append(targets, [2]string{
-						filepath.Join(basePhotos, uName),
+						uSrc,
 						filepath.Join(baseShares, uName, "photos"),
 					})
 				}
@@ -578,8 +580,8 @@ func (s *Server) processRequest(req Request) Response {
 				tgt := pair[1]
 
 				if enabled {
-					_ = os.MkdirAll(src, 0770)
-					_ = os.MkdirAll(tgt, 0770)
+					_ = os.MkdirAll(src, 0775)
+					_ = os.MkdirAll(tgt, 0775)
 					if strings.Contains(mountsStr, tgt) {
 						_ = exec.Command("umount", tgt).Run()
 					}
@@ -587,13 +589,16 @@ func (s *Server) processRequest(req Request) Response {
 					if out, err := cmd.CombinedOutput(); err != nil {
 						return Response{Ok: false, Error: fmt.Sprintf("mount --bind %s to %s failed: %v (%s)", src, tgt, err, strings.TrimSpace(string(out)))}
 					}
-					_ = exec.Command("chmod", "-R", "0770", tgt).Run()
-					_ = exec.Command("chmod", "-R", "go-rwx", tgt).Run()
+					// Ensure files and directories are accessible to Samba user
+					_ = exec.Command("chmod", "-R", "a+rX", src).Run()
+					_ = exec.Command("chmod", "-R", "0775", tgt).Run()
+					updateFstabBindMount(src, tgt, true)
 				} else {
 					if strings.Contains(mountsStr, tgt) {
 						_ = exec.Command("umount", tgt).Run()
 					}
 					_ = exec.Command("chmod", "0770", tgt).Run()
+					updateFstabBindMount(src, tgt, false)
 				}
 			}
 		}
@@ -1936,14 +1941,66 @@ func PatchSambaConfig(content string) string {
 				if !hasHideUnreadable {
 					sLines = append(sLines, "   hide unreadable = yes")
 				}
-			} else if secLower == "shares" || secLower == "public" {
+			} else if secLower == "shares" {
 				if !hasHideUnreadable {
 					sLines = append(sLines, "   hide unreadable = yes")
+				}
+				// Hide root pool [shares] so it does not duplicate user shares in Windows Explorer
+				hasBrowseable := false
+				for i, sl := range sLines {
+					st := strings.TrimSpace(sl)
+					if strings.HasPrefix(st, "browseable") {
+						sLines[i] = "   browseable = no"
+						hasBrowseable = true
+					}
+				}
+				if !hasBrowseable {
+					sLines = append(sLines, "   browseable = no")
+				}
+			} else if secLower == "public" {
+				if !hasHideUnreadable {
+					sLines = append(sLines, "   hide unreadable = yes")
+				}
+				hasBrowseable := false
+				for i, sl := range sLines {
+					st := strings.TrimSpace(sl)
+					if strings.HasPrefix(st, "browseable") {
+						sLines[i] = "   browseable = yes"
+						hasBrowseable = true
+					}
+				}
+				if !hasBrowseable {
+					sLines = append(sLines, "   browseable = yes")
 				}
 			}
 		}
 
 		output = append(output, sLines...)
+	}
+
+	// Ensure [public] share is always present for family media & Jellyfin
+	hasPublic := false
+	for _, sec := range sectionOrder {
+		if strings.EqualFold(sec, "public") {
+			hasPublic = true
+			break
+		}
+	}
+	if !hasPublic {
+		output = append(output,
+			"",
+			"[public]",
+			"   comment = Cartella pubblica Allod (Jellyfin Media & Family)",
+			"   path = /mnt/allod-storage/shares/public",
+			"   browseable = yes",
+			"   read only = no",
+			"   guest ok = yes",
+			"   create mask = 0666",
+			"   directory mask = 0777",
+			"   force create mode = 0666",
+			"   force directory mode = 0777",
+			"   hide unreadable = yes",
+		)
 	}
 
 	return strings.Join(output, "\n")
@@ -1968,6 +2025,7 @@ func AutoHealSambaConfig() error {
 			_ = exec.Command(systemctlBin, "restart", "smbd", "nmbd").Run()
 		}
 	}
+	AutoBindPhotos()
 	return nil
 }
 
@@ -2258,5 +2316,229 @@ WantedBy=multi-user.target
 
 	return nil
 }
+
+func getStorageBaseDir() string {
+	if env := os.Getenv("ALLOD_STORAGE_DIR"); env != "" {
+		return filepath.Clean(env)
+	}
+	if fi, err := os.Stat("/mnt/allod-storage"); err == nil && fi.IsDir() {
+		return "/mnt/allod-storage"
+	}
+	if fi, err := os.Stat("/data"); err == nil && fi.IsDir() {
+		return "/data"
+	}
+	return "/mnt/allod-storage"
+}
+
+// findImmichPhotosSource searches for the actual photos directory of a user in Immich storage.
+func findImmichPhotosSource(basePhotosRoot, username string) string {
+	// 1. Try querying Immich Postgres database to get exact user UUID
+	userUUID := getImmichUserUUIDFromDB(username)
+	if userUUID != "" {
+		libPath := filepath.Join(basePhotosRoot, "library", userUUID)
+		if dirHasPhotosOrFiles(libPath) {
+			return libPath
+		}
+		uplPath := filepath.Join(basePhotosRoot, "upload", userUUID)
+		if dirHasPhotosOrFiles(uplPath) {
+			return uplPath
+		}
+		if fi, err := os.Stat(libPath); err == nil && fi.IsDir() {
+			return libPath
+		}
+		if fi, err := os.Stat(uplPath); err == nil && fi.IsDir() {
+			return uplPath
+		}
+	}
+
+	// 2. Scan filesystem for user UUID directories that contain files
+	var candidatesWithFiles []string
+	var candidatesAny []string
+
+	checkParent := func(sub string) {
+		p := filepath.Join(basePhotosRoot, sub)
+		entries, err := os.ReadDir(p)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			n := e.Name()
+			if n == "thumbs" || n == "profile" || n == "encoded-video" || n == "temp" {
+				continue
+			}
+			full := filepath.Join(p, n)
+			candidatesAny = append(candidatesAny, full)
+			if dirHasPhotosOrFiles(full) {
+				candidatesWithFiles = append(candidatesWithFiles, full)
+			}
+		}
+	}
+
+	checkParent("library")
+	checkParent("upload")
+
+	// If any candidate has actual files, prefer library over upload
+	if len(candidatesWithFiles) > 0 {
+		for _, c := range candidatesWithFiles {
+			if strings.Contains(c, "/library/") {
+				return c
+			}
+		}
+		return candidatesWithFiles[0]
+	}
+
+	// Check if directly in basePhotosRoot/library or upload
+	if dirHasPhotosOrFiles(filepath.Join(basePhotosRoot, "library")) {
+		return filepath.Join(basePhotosRoot, "library")
+	}
+	if dirHasPhotosOrFiles(filepath.Join(basePhotosRoot, "upload")) {
+		return filepath.Join(basePhotosRoot, "upload")
+	}
+
+	if len(candidatesAny) > 0 {
+		return candidatesAny[0]
+	}
+
+	// Fallback
+	if username != "" {
+		return filepath.Join(basePhotosRoot, "library", username)
+	}
+	return filepath.Join(basePhotosRoot, "library")
+}
+
+func getImmichUserUUIDFromDB(username string) string {
+	pgContainers := []string{"photos-postgres", "systemd-photos-postgres"}
+	for _, cName := range pgContainers {
+		cmd := exec.Command("podman", "exec", "-i", cName, "psql", "-U", "postgres", "-d", "immich", "-t", "-A", "-c", "SELECT id, email, name FROM users;")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(out), "\n")
+		for _, l := range lines {
+			parts := strings.Split(strings.TrimSpace(l), "|")
+			if len(parts) >= 1 && len(parts[0]) == 36 {
+				uuid := parts[0]
+				if username == "" {
+					return uuid
+				}
+				userLower := strings.ToLower(username)
+				if len(parts) >= 3 {
+					email := strings.ToLower(parts[1])
+					name := strings.ToLower(parts[2])
+					if strings.Contains(email, userLower) || strings.Contains(name, userLower) {
+						return uuid
+					}
+				}
+				// If only one user in DB
+				validUsers := 0
+				for _, row := range lines {
+					if len(strings.TrimSpace(row)) >= 36 {
+						validUsers++
+					}
+				}
+				if validUsers == 1 {
+					return uuid
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func dirHasPhotosOrFiles(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		return false
+	}
+	for _, e := range entries {
+		name := strings.ToLower(e.Name())
+		if name == "." || name == ".." || strings.HasPrefix(name, ".") {
+			continue
+		}
+		if e.IsDir() {
+			subEntries, _ := os.ReadDir(filepath.Join(dir, e.Name()))
+			if len(subEntries) > 0 {
+				return true
+			}
+		} else {
+			return true
+		}
+	}
+	return false
+}
+
+func updateFstabBindMount(src, tgt string, enabled bool) {
+	data, err := os.ReadFile("/etc/fstab")
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(data), "\n")
+	var newLines []string
+	bindEntry := fmt.Sprintf("%s %s none bind,nofail 0 0", src, tgt)
+	exists := false
+
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if strings.Contains(trimmed, tgt) && strings.Contains(trimmed, "bind") {
+			if enabled {
+				newLines = append(newLines, bindEntry)
+				exists = true
+			}
+			// if !enabled, omit
+		} else {
+			newLines = append(newLines, l)
+		}
+	}
+	if enabled && !exists {
+		newLines = append(newLines, bindEntry)
+	}
+	_ = os.WriteFile("/etc/fstab", []byte(strings.Join(newLines, "\n")), 0644)
+}
+
+// AutoBindPhotos scans user shares in /mnt/allod-storage/shares and ensures Immich photos are bind-mounted.
+func AutoBindPhotos() {
+	storageRoot := getStorageBaseDir()
+	baseShares := filepath.Join(storageRoot, "shares")
+	basePhotosRoot := filepath.Join(storageRoot, "photos", "upload")
+
+	entries, err := os.ReadDir(baseShares)
+	if err != nil {
+		return
+	}
+
+	mounts, _ := os.ReadFile("/proc/mounts")
+	mountsStr := string(mounts)
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		uName := e.Name()
+		if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
+			continue
+		}
+		tgt := filepath.Join(baseShares, uName, "photos")
+		if strings.Contains(mountsStr, tgt) {
+			continue
+		}
+		src := findImmichPhotosSource(basePhotosRoot, uName)
+		if src == "" || !dirHasPhotosOrFiles(src) {
+			continue
+		}
+		_ = os.MkdirAll(tgt, 0775)
+		if out, err := exec.Command("mount", "--bind", src, tgt).CombinedOutput(); err == nil {
+			_ = exec.Command("chmod", "-R", "a+rX", src).Run()
+			_ = exec.Command("chmod", "-R", "0775", tgt).Run()
+			updateFstabBindMount(src, tgt, true)
+		} else {
+			_ = out
+		}
+	}
+}
+
 
 
