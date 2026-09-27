@@ -29,6 +29,7 @@ export async function openNetworkConfigModal() {
   if (!modal) return;
 
   try {
+    loadZeroConfigStatus();
     const res = await fetch('/api/network/status');
     const json = await res.json();
     if (json.status === 'ok' && json.data) {
@@ -359,6 +360,84 @@ export async function restartNetworkModule() {
   }, 4000);
 }
 
+export async function loadZeroConfigStatus() {
+  try {
+    const res = await fetch('/api/zeroconfig/status');
+    const json = await res.json();
+    if (json.status === 'ok' && json.data) {
+      const d = json.data;
+      const mdnsBadge = document.getElementById('zeroconfig-mdns-badge');
+      const wsddBadge = document.getElementById('zeroconfig-wsdd-badge');
+      const lanText = document.getElementById('zeroconfig-lan-ip');
+
+      if (lanText && d.lan_ip) lanText.textContent = d.lan_ip;
+      if (mdnsBadge) {
+        if (d.avahi_active) {
+          mdnsBadge.textContent = '✓ Attivo (allod.local)';
+          mdnsBadge.style.background = '#10b981';
+          mdnsBadge.style.color = '#0f172a';
+        } else if (d.avahi_installed) {
+          mdnsBadge.textContent = '⏸️ Installato (Arrestato)';
+          mdnsBadge.style.background = '#f59e0b';
+          mdnsBadge.style.color = '#0f172a';
+        } else {
+          mdnsBadge.textContent = '❌ Non installato';
+          mdnsBadge.style.background = '#ef4444';
+          mdnsBadge.style.color = '#fff';
+        }
+      }
+
+      if (wsddBadge) {
+        if (d.wsdd_active) {
+          wsddBadge.textContent = '✓ Attivo (ALLOD)';
+          wsddBadge.style.background = '#10b981';
+          wsddBadge.style.color = '#0f172a';
+        } else if (d.wsdd_installed) {
+          wsddBadge.textContent = '⏸️ Installato (Arrestato)';
+          wsddBadge.style.background = '#f59e0b';
+          wsddBadge.style.color = '#0f172a';
+        } else {
+          wsddBadge.textContent = '❌ Non installato';
+          wsddBadge.style.background = '#ef4444';
+          wsddBadge.style.color = '#fff';
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Impossibile verificare stato Zero-Config:', err);
+  }
+}
+
+export async function setupZeroConfig() {
+  const btn = document.getElementById('zeroconfig-setup-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Configurazione Zero-Config in corso...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/zeroconfig/setup', { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      if (typeof showAlert === 'function') {
+        showAlert('Zero-Config configurato con successo! allod.local e WSDD (ALLOD) sono ora attivi.', 'success');
+      }
+      await loadZeroConfigStatus();
+    } else {
+      if (typeof showAlert === 'function') {
+        showAlert('Errore configurazione: ' + (data.message || 'Verifica connessione'), 'danger');
+      }
+    }
+  } catch (err) {
+    if (typeof showAlert === 'function') showAlert('Errore di connessione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🚀 Configura / Ripara Zero-Config';
+    }
+  }
+}
+
 // Bind to window object for inline HTML onclick handlers
 window.toggleNetworkModeUI = toggleNetworkModeUI;
 window.openNetworkConfigModal = openNetworkConfigModal;
@@ -370,3 +449,5 @@ window.installNativeNetBird = installNativeNetBird;
 window.startManagedServer = startManagedServer;
 window.stopManagedServer = stopManagedServer;
 window.restartNetworkModule = restartNetworkModule;
+window.loadZeroConfigStatus = loadZeroConfigStatus;
+window.setupZeroConfig = setupZeroConfig;

@@ -2849,12 +2849,11 @@ WantedBy=default.target
 			st.Close()
 		}
 
-		host := r.Host
-		if colon := strings.Index(host, ":"); colon != -1 {
-			host = host[:colon]
-		}
-		if host == "" {
-			host = "allod"
+		lanIP := panel.GetPrimaryLANIP()
+		mdnsHost := "allod.local"
+		if stT, errT := state.Open(dbPath); errT == nil {
+			mdnsHost = panel.GetZeroConfigHostname(stT) + ".local"
+			stT.Close()
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{
@@ -2862,7 +2861,10 @@ WantedBy=default.target
 			Message: fmt.Sprintf("Utente Triade '%s' creato e predisposto con successo!", req.Username),
 			Data: map[string]interface{}{
 				"username":             req.Username,
-				"smb_path":             fmt.Sprintf("\\\\%s\\%s", host, req.Username),
+				"smb_path":             fmt.Sprintf(`\\%s\%s`, mdnsHost, req.Username),
+				"smb_path_ip":          fmt.Sprintf(`\\%s\%s`, lanIP, req.Username),
+				"mdns_host":            mdnsHost,
+				"lan_ip":               lanIP,
 				"photos_linked":        linkPhotos,
 				"immich_storage_label": req.Username,
 				"jellyfin_user":        req.Username,
@@ -2879,6 +2881,9 @@ WantedBy=default.target
 		type TriadUserInfo struct {
 			Username     string `json:"username"`
 			SmbPath      string `json:"smb_path"`
+			SmbPathIP    string `json:"smb_path_ip"`
+			MdnsHost     string `json:"mdns_host"`
+			LanIP        string `json:"lan_ip"`
 			PhotosLinked bool   `json:"photos_linked"`
 			HasLibrary   bool   `json:"has_library"`
 		}
@@ -2887,12 +2892,11 @@ WantedBy=default.target
 		mounts, _ := os.ReadFile("/proc/mounts")
 		mountsStr := string(mounts)
 
-		host := r.Host
-		if colon := strings.Index(host, ":"); colon != -1 {
-			host = host[:colon]
-		}
-		if host == "" {
-			host = "allod"
+		lanIP := panel.GetPrimaryLANIP()
+		mdnsHost := "allod.local"
+		if stT, errT := state.Open(dbPath); errT == nil {
+			mdnsHost = panel.GetZeroConfigHostname(stT) + ".local"
+			stT.Close()
 		}
 
 		if entries, err := os.ReadDir(sharesDir); err == nil {
@@ -2913,7 +2917,10 @@ WantedBy=default.target
 
 				users = append(users, TriadUserInfo{
 					Username:     uName,
-					SmbPath:      fmt.Sprintf("\\\\%s\\%s", host, uName),
+					SmbPath:      fmt.Sprintf(`\\%s\%s`, mdnsHost, uName),
+					SmbPathIP:    fmt.Sprintf(`\\%s\%s`, lanIP, uName),
+					MdnsHost:     mdnsHost,
+					LanIP:        lanIP,
 					PhotosLinked: photosLinked,
 					HasLibrary:   errLib == nil,
 				})
@@ -3042,6 +3049,9 @@ WantedBy=default.target
 			return
 		}
 
+		lanIP := panel.GetPrimaryLANIP()
+		mdnsHost := panel.GetZeroConfigHostname(st) + ".local"
+
 		type FamilyMemberDTO struct {
 			ID           int64  `json:"id"`
 			Username     string `json:"username"`
@@ -3053,6 +3063,9 @@ WantedBy=default.target
 			AvatarColor  string `json:"avatar_color"`
 			Notes        string `json:"notes"`
 			SmbPath      string `json:"smb_path"`
+			SmbPathIP    string `json:"smb_path_ip"`
+			MdnsHost     string `json:"mdns_host"`
+			LanIP        string `json:"lan_ip"`
 			SmbActive    bool   `json:"smb_active"`
 			PhotosLinked bool   `json:"photos_linked"`
 			HasLibrary   bool   `json:"has_library"`
@@ -3091,7 +3104,10 @@ WantedBy=default.target
 				Role:         m.Role,
 				AvatarColor:  m.AvatarColor,
 				Notes:        m.Notes,
-				SmbPath:      fmt.Sprintf("\\\\%s\\%s", host, m.Username),
+				SmbPath:      fmt.Sprintf(`\\%s\%s`, mdnsHost, m.Username),
+				SmbPathIP:    fmt.Sprintf(`\\%s\%s`, lanIP, m.Username),
+				MdnsHost:     mdnsHost,
+				LanIP:        lanIP,
 				SmbActive:    m.SmbActive,
 				PhotosLinked: photosLinked,
 				HasLibrary:   errLib == nil,
@@ -3269,13 +3285,8 @@ WantedBy=default.target
 		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 			proto = "https"
 		}
-		host := r.Host
-		if colon := strings.Index(host, ":"); colon != -1 {
-			host = host[:colon]
-		}
-		if host == "" {
-			host = "allod"
-		}
+		lanIP := panel.GetPrimaryLANIP()
+		mdnsHost := panel.GetZeroConfigHostname(st) + ".local"
 
 		if req.GenerateInvite {
 			token, errTok := st.CreateResetToken(req.Username, 72*time.Hour)
@@ -3293,7 +3304,10 @@ WantedBy=default.target
 				"first_name":           req.FirstName,
 				"last_name":            req.LastName,
 				"role":                 req.Role,
-				"smb_path":             fmt.Sprintf("\\\\%s\\%s", host, req.Username),
+				"smb_path":             fmt.Sprintf(`\\%s\%s`, mdnsHost, req.Username),
+				"smb_path_ip":          fmt.Sprintf(`\\%s\%s`, lanIP, req.Username),
+				"mdns_host":            mdnsHost,
+				"lan_ip":               lanIP,
 				"photos_linked":        linkPhotos,
 				"has_invite":           req.GenerateInvite,
 				"invite_token":         inviteToken,
@@ -3629,6 +3643,91 @@ WantedBy=default.target
 			Message: fmt.Sprintf("Password personale per '%s' impostata con successo!", targetUser),
 			Data: map[string]interface{}{
 				"username": targetUser,
+			},
+		})
+	})
+
+	// 5a-22. API Zero-Config Status
+	mux.HandleFunc("/api/zeroconfig/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		res, err := client.Execute("network.zeroconfig_status", nil, false)
+		if err != nil {
+			client.SocketPath = "allod-helper.sock"
+			res, err = client.Execute("network.zeroconfig_status", nil, false)
+		}
+		if err == nil && res.Ok {
+			var stMap map[string]interface{}
+			if errU := json.Unmarshal([]byte(res.Output), &stMap); errU == nil {
+				json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: stMap})
+				return
+			}
+		}
+
+		// Fallback local detection
+		lanIP := panel.GetPrimaryLANIP()
+		netbirdIP := panel.GetNetBirdIP()
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data: map[string]interface{}{
+				"mdns_name":       "allod.local",
+				"netbios_name":    "ALLOD",
+				"lan_ip":          lanIP,
+				"netbird_ip":      netbirdIP,
+				"netbird_active":  netbirdIP != "",
+				"avahi_installed": false,
+				"avahi_active":    false,
+				"wsdd_installed":  false,
+				"wsdd_active":     false,
+				"status":          "inactive",
+			},
+		})
+	})
+
+	// 5a-23. API Zero-Config Setup / Configure
+	mux.HandleFunc("/api/zeroconfig/setup", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		st, _ := state.Open(dbPath)
+		hostname := "allod"
+		if st != nil {
+			hostname = panel.GetZeroConfigHostname(st)
+			st.Close()
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		res, err := client.Execute("network.zeroconfig_setup", map[string]interface{}{
+			"hostname": hostname,
+		}, false)
+		if err != nil {
+			client.SocketPath = "allod-helper.sock"
+			res, err = client.Execute("network.zeroconfig_setup", map[string]interface{}{
+				"hostname": hostname,
+			}, false)
+		}
+
+		if err != nil || !res.Ok {
+			errMsg := "Errore configurazione zero-config"
+			if err != nil {
+				errMsg = err.Error()
+			} else if res.Error != "" {
+				errMsg = res.Error
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errMsg})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: res.Output,
+			Data: map[string]interface{}{
+				"hostname": hostname + ".local",
+				"plan":     res.Plan,
 			},
 		})
 	})

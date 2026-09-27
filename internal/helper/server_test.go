@@ -591,3 +591,59 @@ func TestComputeNTLMHash(t *testing.T) {
 	}
 }
 
+func TestZeroConfigStatusPlan(t *testing.T) {
+	s := &Server{}
+	req := Request{
+		Action: "network.zeroconfig_status",
+		Plan:   true,
+		Args:   map[string]interface{}{},
+	}
+	res := s.processRequest(req)
+	if !res.Ok {
+		t.Fatalf("expected zeroconfig_status to succeed: %s", res.Error)
+	}
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Output), &data); err != nil {
+		t.Fatalf("failed to parse output json: %v", err)
+	}
+	if data["mdns_name"] != "allod.local" {
+		t.Errorf("expected mdns_name 'allod.local', got %v", data["mdns_name"])
+	}
+	if data["netbios_name"] != "ALLOD" {
+		t.Errorf("expected netbios_name 'ALLOD', got %v", data["netbios_name"])
+	}
+}
+
+func TestZeroConfigSetupPlan(t *testing.T) {
+	s := &Server{}
+	req := Request{
+		Action: "network.zeroconfig_setup",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"hostname": "allod",
+		},
+	}
+	res := s.processRequest(req)
+	if !res.Ok {
+		t.Fatalf("expected zeroconfig_setup plan to succeed: %s", res.Error)
+	}
+	if len(res.Plan) < 5 {
+		t.Errorf("expected at least 5 plan steps, got %d", len(res.Plan))
+	}
+}
+
+func TestPatchAvahiDaemonConfig(t *testing.T) {
+	conf := "[server]\nuse-ipv4=yes\n"
+	patched := PatchAvahiDaemonConfig(conf)
+	if !strings.Contains(patched, "enable-reflector=yes") {
+		t.Errorf("expected enable-reflector=yes to be added")
+	}
+
+	// Idempotency
+	patchedTwice := PatchAvahiDaemonConfig(patched)
+	if strings.Count(patchedTwice, "enable-reflector=yes") != 1 {
+		t.Errorf("expected exactly 1 enable-reflector=yes, got %d", strings.Count(patchedTwice, "enable-reflector=yes"))
+	}
+}
+
+

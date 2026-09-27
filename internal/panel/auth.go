@@ -652,25 +652,37 @@ func (h *AuthHandler) handlePortalMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hostName, _ := os.Hostname()
-	if hostName == "" {
-		hostName = "allod"
+	rawHost, _ := os.Hostname()
+	if rawHost == "" {
+		rawHost = "allod"
 	}
+
+	lanIP := GetPrimaryLANIP()
+	netbirdIP := GetNetBirdIP()
+	mdnsBase := GetZeroConfigHostname(st)
+	mdnsHost := mdnsBase + ".local"
+
+	modes := BuildZeroConfigModes(member.Username, lanIP, mdnsHost, netbirdIP)
 
 	json.NewEncoder(w).Encode(PanelResponse{
 		Status: "ok",
 		Data: map[string]interface{}{
-			"username":      member.Username,
-			"first_name":    member.FirstName,
-			"last_name":     member.LastName,
-			"role":          member.Role,
-			"email":         member.Email,
-			"avatar_color":  member.AvatarColor,
-			"smb_active":    member.SmbActive,
-			"photos_linked": member.PhotosLinked,
-			"hostname":      hostName,
-			"smb_path_win":  fmt.Sprintf(`\\%s\%s`, hostName, member.Username),
-			"smb_path_mac":  fmt.Sprintf("smb://%s/%s", hostName, member.Username),
+			"username":        member.Username,
+			"first_name":      member.FirstName,
+			"last_name":       member.LastName,
+			"role":            member.Role,
+			"email":           member.Email,
+			"avatar_color":    member.AvatarColor,
+			"smb_active":      member.SmbActive,
+			"photos_linked":   member.PhotosLinked,
+			"hostname":        mdnsHost,
+			"system_hostname": rawHost,
+			"mdns_host":       mdnsHost,
+			"lan_ip":          lanIP,
+			"netbird_ip":      netbirdIP,
+			"smb_path_win":    fmt.Sprintf(`\\%s\%s`, mdnsHost, member.Username),
+			"smb_path_mac":    fmt.Sprintf("smb://%s/%s", mdnsHost, member.Username),
+			"modes":           modes,
 		},
 	})
 }
