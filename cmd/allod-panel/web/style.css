@@ -80,7 +80,7 @@
   border-radius: 16px;
 }
 
-/* 3. Theme: CIA // Tactical (Tom Clancy: Jack Ryan, Splinter Cell, Ghost Recon) */
+/* 3. Theme: Tactical Ops // NVG (Tactical HUD, Night Vision) */
 [data-theme="cia"] {
   --bg-dark: #040806;
   --bg-sidebar: #020503;
@@ -181,7 +181,7 @@
   to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
-/* Horizontal Scanning Laser (Ghost Recon Cross-Com / Splinter Cell NVG) */
+/* Horizontal Scanning Laser (Tactical Cross-Com / NVG) */
 [data-theme="cia"] .tactical-scanline {
   position: absolute;
   left: 0;
@@ -237,7 +237,7 @@
   pointer-events: none;
 }
 
-/* Tactical HUD Cards with Ghost Recon / Splinter Cell L-Brackets */
+/* Tactical HUD Cards with Corner Telemetry L-Brackets */
 [data-theme="cia"] .card,
 [data-theme="cia"] .module-card,
 [data-theme="cia"] .launchpad-card {
@@ -780,7 +780,7 @@
   box-shadow: 0 3px 8px rgba(212, 175, 55, 0.25) !important;
 }
 
-/* 5. Theme: Modern Cloud Elegante (CasaOS / Linear / Apple Dark Glassmorphism) */
+/* 5. Theme: Modern Cloud Elegante (Modern Cloud / Dark Glassmorphism) */
 [data-theme="cloud"] {
   --bg-dark: #07090e;
   --bg-sidebar: rgba(10, 15, 26, 0.88);
@@ -2362,7 +2362,7 @@ body {
 .theme-preview-moderno .theme-preview-box { background: #202940; border-radius: 6px; }
 .theme-preview-moderno .theme-preview-box.active { background: linear-gradient(195deg, #ec407a, #d81b60); box-shadow: 0 2px 6px rgba(233,30,99,0.5); }
 
-/* Theme Preview: CIA (Tom Clancy) */
+/* Theme Preview: Tactical Ops (NVG) */
 .theme-preview-cia { background: #040806; border: 1px solid #1a3824; }
 .theme-preview-cia .theme-preview-sidebar { background: #020503; border-right: 1px solid #1a3824; }
 .theme-preview-cia .theme-preview-topbar { background: #08130d; border-bottom: 1px solid #1a3824; }
