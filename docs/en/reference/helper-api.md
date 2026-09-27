@@ -48,6 +48,7 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 | `shares.apply` | Configure Samba share and directory permissions | `name` (regex), `path` (allowed path), `enabled` (bool) | `mkdir -p`, `chmod`, modifies `/etc/samba/smb.conf`, restarts `smbd` |
 | `shares.bind_photos` | Bind-mount Immich photo library into Samba shares | `username` (optional regex), `enabled` (bool) | `mkdir -p`, `mount --bind`, `umount`, `chmod` |
 | `shares.set_password` | Configure Samba password and private share for user | `username` (regex), `password` (string) | `useradd` (if missing), `smbpasswd -a -s`, `chmod`, `chown`, `systemctl reload smbd` |
+| `shares.verify_password` | Verify if password matches user's Samba credentials | `username` (regex), `password` (string) | `pdbedit -u <user> -w`, validates NT-Hash in-memory |
 | `users.create` | Create unprivileged Linux user for share authentication | `username` (regex) | `useradd -M -s /usr/sbin/nologin <user>`, `mkdir -p`, `chmod 0770` |
 | `users.passwd` | Alias for `shares.set_password` | `username` (regex), `password` (string) | `useradd` (if missing), `smbpasswd -a -s`, `chmod`, `chown`, `systemctl reload smbd` |
 | `firewall.apply` | Reload host firewall configuration | *(none)* | `nftables reload /etc/allod/nftables.conf` |

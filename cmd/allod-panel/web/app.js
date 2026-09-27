@@ -3417,6 +3417,10 @@ async function loadFamilyMembers() {
 
           <!-- Actions -->
           <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+            <button type="button" class="btn btn-sm" onclick="openSetMemberPasswordModal('${escapeHtml(m.username)}', '${escapeHtml(m.display_name)}')" 
+                    style="font-size:11px; padding:4px 9px; border-radius:5px; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); color:var(--primary);" title="Imposta o reimposta direttamente la password di questo membro">
+              🔑 Password
+            </button>
             <button type="button" class="btn btn-sm btn-secondary" onclick="generateMemberResetLink('${escapeHtml(m.username)}')" 
                     style="font-size:11px; padding:4px 9px; border-radius:5px; background:rgba(255,255,255,0.05);" title="Mostra QR Code e Link di Invito/Onboarding">
               📲 Link / QR
@@ -3593,6 +3597,101 @@ function showFamilyQRModal(name, inviteUrl) {
 function closeFamilyQRModal() {
   const modal = document.getElementById('family-qr-modal');
   if (modal) modal.classList.add('hidden');
+}
+
+function openSetMemberPasswordModal(username, displayName) {
+  const modal = document.getElementById('set-member-password-modal');
+  const uInput = document.getElementById('set-pass-username');
+  const uCode = document.getElementById('set-pass-member-user');
+  const dName = document.getElementById('set-pass-member-display');
+  const pInput = document.getElementById('set-pass-input');
+  const alertEl = document.getElementById('set-pass-alert');
+  const submitBtn = document.getElementById('btn-save-member-pass');
+
+  if (uInput) uInput.value = username;
+  if (uCode) uCode.innerText = `@${username}`;
+  if (dName) dName.innerText = displayName || username;
+  if (pInput) {
+    pInput.value = '';
+    pInput.type = 'password';
+  }
+  if (alertEl) alertEl.classList.add('hidden');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '💾 Salva & Sincronizza';
+  }
+
+  if (modal) modal.classList.remove('hidden');
+  setTimeout(() => { if (pInput) pInput.focus(); }, 100);
+}
+
+function closeSetMemberPasswordModal() {
+  const modal = document.getElementById('set-member-password-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function submitSetMemberPassword() {
+  const username = document.getElementById('set-pass-username')?.value?.trim();
+  const password = document.getElementById('set-pass-input')?.value;
+  const alertEl = document.getElementById('set-pass-alert');
+  const submitBtn = document.getElementById('btn-save-member-pass');
+
+  if (!username) return;
+  if (!password || password.length < 4) {
+    if (alertEl) {
+      alertEl.className = 'alert alert-danger';
+      alertEl.innerText = 'La password deve contenere almeno 4 caratteri';
+      alertEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="loading-spinner"></span> <span>Sincronizzazione in corso...</span>';
+  }
+
+  try {
+    const res = await fetch('/api/family/set-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const json = await res.json();
+
+    if (res.ok && json.status === 'ok') {
+      if (alertEl) {
+        alertEl.className = 'alert alert-success';
+        alertEl.innerText = '✓ ' + (json.message || 'Password aggiornata con successo!');
+        alertEl.classList.remove('hidden');
+      }
+      showAlert(`Password per @${username} sincronizzata con successo!`, 'success');
+      setTimeout(() => {
+        closeSetMemberPasswordModal();
+        loadFamilyMembers();
+      }, 1000);
+    } else {
+      if (alertEl) {
+        alertEl.className = 'alert alert-danger';
+        alertEl.innerText = '⚠️ ' + (json.message || 'Errore salvataggio password');
+        alertEl.classList.remove('hidden');
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '💾 Salva & Sincronizza';
+      }
+    }
+  } catch (err) {
+    if (alertEl) {
+      alertEl.className = 'alert alert-danger';
+      alertEl.innerText = '⚠️ Errore di rete: ' + err.message;
+      alertEl.classList.remove('hidden');
+    }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '💾 Salva & Sincronizza';
+    }
+  }
 }
 
 function openQRLink() {

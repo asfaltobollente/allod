@@ -18,6 +18,7 @@
             "shares.apply",
             "shares.bind_photos",
             "shares.set_password",
+            "shares.verify_password",
             "users.create",
             "users.passwd",
             "firewall.apply",

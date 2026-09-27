@@ -578,7 +578,7 @@
     }
 
     async function initPortal() {
-      const token = getParam('token');
+      const token = getParam('token') || getParam('invite');
       if (token) {
         activeToken = token;
         await verifyToken(token);

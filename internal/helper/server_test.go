@@ -573,3 +573,21 @@ func TestPatchSambaConfig(t *testing.T) {
 	}
 }
 
+func TestComputeNTLMHash(t *testing.T) {
+	tests := []struct {
+		password string
+		expected string
+	}{
+		{"", "31D6CFE0D16AE931B73C59D7E0C089C0"},
+		{"password", "8846F7EAEE8FB117AD06BDD830B7586C"},
+		{"admin", "209C6174DA490CAEB422F3FA5A7AE634"},
+	}
+
+	for _, tc := range tests {
+		hash := ComputeNTLMHash(tc.password)
+		if hash != tc.expected {
+			t.Errorf("ComputeNTLMHash(%q) = %s; want %s", tc.password, hash, tc.expected)
+		}
+	}
+}
+

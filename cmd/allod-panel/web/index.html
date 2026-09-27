@@ -1256,6 +1256,48 @@ sudo systemctl enable --now allod-helperd</pre>
     </div>
   </div>
 
+  <!-- SET FAMILY MEMBER PASSWORD MODAL -->
+  <div id="set-member-password-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:440px;">
+      <div class="modal-header">
+        <h3 style="margin:0; font-size:15px; font-weight:700;">🔑 Imposta Password Membro</h3>
+        <button class="modal-close-btn" onclick="closeSetMemberPasswordModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px;">
+        <div style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:10px 12px; margin-bottom:14px; display:flex; align-items:center; gap:10px;">
+          <div style="font-size:24px;">👤</div>
+          <div>
+            <div id="set-pass-member-display" style="font-weight:700; color:var(--text-main); font-size:13.5px;">--</div>
+            <div style="font-size:11.5px; color:var(--text-muted);">Account: <code id="set-pass-member-user" style="color:#38bdf8;">--</code></div>
+          </div>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px; line-height:1.4;">
+          Imposta la password direttamente da qui. Verrà sincronizzata istantaneamente per l'accesso alle <b>cartelle SMB personali</b> e per il <b>Portale Personale Allod (/portal)</b>.
+        </p>
+
+        <form id="form-set-member-pass" onsubmit="event.preventDefault(); submitSetMemberPassword();">
+          <input type="hidden" id="set-pass-username" value="">
+          <div class="form-group mb-3">
+            <label for="set-pass-input" style="font-size:12px; font-weight:600;">Nuova Password (min. 4 caratteri):</label>
+            <div style="display:flex; gap:6px;">
+              <input type="password" id="set-pass-input" class="form-control" placeholder="••••••••" required minlength="4">
+              <button type="button" class="btn btn-sm btn-secondary" onclick="togglePasswordVisibility('set-pass-input')" style="padding:0 10px;" title="Mostra/Nascondi Password">👁️</button>
+            </div>
+          </div>
+
+          <div id="set-pass-alert" class="alert hidden" style="margin-bottom:12px; font-size:11.5px; padding:8px 12px;"></div>
+
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <button type="button" class="btn btn-secondary" onclick="closeSetMemberPasswordModal()">Annulla</button>
+            <button type="submit" id="btn-save-member-pass" class="btn btn-primary" style="padding:7px 16px;">
+              💾 Salva & Sincronizza
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- DIAGNOSTICS MODAL -->
   <div id="diagnostics-modal" class="modal-overlay hidden">
     <div class="modal-card">
