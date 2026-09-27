@@ -789,6 +789,9 @@ func (s *Server) processRequest(req Request) Response {
 			}
 
 			systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
+			if unit == "wsdd" || unit == "wsdd.service" {
+				_ = ensureWsddInstalledAndUnit()
+			}
 			_ = exec.Command(systemctlBin, "unmask", unit).Run()
 			_ = exec.Command(systemctlBin, "reset-failed", unit).Run()
 			outR, errR := exec.Command(systemctlBin, "restart", unit).CombinedOutput()
@@ -1530,6 +1533,8 @@ server:
 			wsddInstalled = true
 		} else if _, err := os.Stat("/usr/sbin/wsdd"); err == nil {
 			wsddInstalled = true
+		} else if _, err := os.Stat("/usr/local/bin/wsdd"); err == nil {
+			wsddInstalled = true
 		}
 
 		wsddActive := false
@@ -1654,6 +1659,7 @@ server:
 			}
 
 			// 6. Enable, unmask, reset-failed and restart services
+			_ = ensureWsddInstalledAndUnit()
 			systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
 			_ = exec.Command(systemctlBin, "unmask", "avahi-daemon", "wsdd").Run()
 			_ = exec.Command(systemctlBin, "reset-failed", "avahi-daemon", "wsdd").Run()
@@ -2048,4 +2054,72 @@ func PatchAvahiDaemonConfig(content string) string {
 	}
 	return content + "\n[reflector]\nenable-reflector=yes\n"
 }
+
+// ensureWsddInstalledAndUnit ensures wsdd executable exists, writes /etc/systemd/system/wsdd.service if missing, and reloads systemd.
+func ensureWsddInstalledAndUnit() error {
+	wsddBin := resolveExecutable("wsdd", "/usr/bin/wsdd", "/usr/sbin/wsdd", "/usr/local/bin/wsdd")
+	if wsddBin == "" {
+		// 1. Try apt-get install wsdd python3
+		aptBin := resolveExecutable("apt-get", "/usr/bin/apt-get", "/bin/apt-get")
+		if aptBin != "" {
+			cmdApt := exec.Command(aptBin, "install", "-y", "-q", "wsdd", "python3")
+			cmdApt.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+			_ = cmdApt.Run()
+		}
+		wsddBin = resolveExecutable("wsdd", "/usr/bin/wsdd", "/usr/sbin/wsdd", "/usr/local/bin/wsdd")
+	}
+
+	// 2. Fallback: if apt package was not found, download official standalone wsdd.py
+	if wsddBin == "" {
+		curlBin := resolveExecutable("curl", "/usr/bin/curl", "/bin/curl")
+		if curlBin != "" {
+			_ = exec.Command(curlBin, "-sSL", "https://raw.githubusercontent.com/christgau/wsdd/master/src/wsdd.py", "-o", "/usr/local/bin/wsdd").Run()
+			_ = os.Chmod("/usr/local/bin/wsdd", 0755)
+			wsddBin = resolveExecutable("wsdd", "/usr/local/bin/wsdd")
+		}
+	}
+
+	if wsddBin == "" {
+		wsddBin = "/usr/bin/wsdd"
+	}
+
+	// 3. Ensure /etc/default/wsdd exists with Allod NetBIOS configuration
+	_ = os.MkdirAll("/etc/default", 0755)
+	_ = os.WriteFile("/etc/default/wsdd", []byte("WSDD_PARAMS=\"-n ALLOD -w WORKGROUP\"\n"), 0644)
+
+	// 4. Ensure /etc/systemd/system/wsdd.service exists
+	serviceFile := "/etc/systemd/system/wsdd.service"
+	libService := "/lib/systemd/system/wsdd.service"
+	_, errEtc := os.Stat(serviceFile)
+	_, errLib := os.Stat(libService)
+
+	if errEtc != nil && errLib != nil {
+		unitContent := fmt.Sprintf(`[Unit]
+Description=Allod Web Services Dynamic Discovery (WSDD) for Windows
+Documentation=man:wsdd(8)
+After=network.target network-online.target smbd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/wsdd
+ExecStart=%s -n ALLOD -w WORKGROUP
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+`, wsddBin)
+		_ = os.WriteFile(serviceFile, []byte(unitContent), 0644)
+	}
+
+	systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
+	if systemctlBin != "" {
+		_ = exec.Command(systemctlBin, "daemon-reload").Run()
+		_ = exec.Command(systemctlBin, "enable", "wsdd").Run()
+	}
+
+	return nil
+}
+
 
