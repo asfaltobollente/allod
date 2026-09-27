@@ -228,6 +228,56 @@
     .btn-copy:hover {
       background: rgba(255, 255, 255, 0.2);
     }
+    .mode-pill-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 10px 0;
+    }
+    .mode-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 6px 12px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .mode-pill:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .mode-pill.active {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: var(--primary);
+      color: #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    }
+    .mode-pill .pill-tag {
+      font-size: 9.5px;
+      text-transform: uppercase;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+    }
+    .seamless-box {
+      background: rgba(56, 189, 248, 0.06);
+      border: 1px dashed rgba(56, 189, 248, 0.25);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-top: 12px;
+      font-size: 11.5px;
+      color: #bae6fd;
+      line-height: 1.45;
+    }
     .user-profile-header {
       display: flex;
       align-items: center;
@@ -429,15 +479,24 @@
             <span class="badge badge-success">Attiva</span>
           </div>
           <p style="font-size:12px; color:var(--text-muted); line-height:1.45;">
-            Spazio privato esclusivo protetto da credenziali. Inserisci questo percorso su Windows o Mac:
+            Spazio privato esclusivo protetto da password personale. Scegli la modalità di connessione:
           </p>
+          <div id="smb-mode-pills" class="mode-pill-container">
+            <!-- Modalità popolate dinamicamente da JS: allod.local, IP LAN, NetBird Mesh -->
+          </div>
+          <div id="mode-desc-text" style="font-size:11.5px; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
+            Risoluzione automatica mDNS: zero configurazioni sul router.
+          </div>
           <div class="code-box">
-            <span id="dash-smb-win">\\allod\mario</span>
+            <span id="dash-smb-win">\\allod.local\mario</span>
             <button type="button" class="btn-copy" onclick="copyText('dash-smb-win', this)">Copia Windows</button>
           </div>
           <div class="code-box" style="margin-top:6px;">
-            <span id="dash-smb-mac">smb://allod/mario</span>
+            <span id="dash-smb-mac">smb://allod.local/mario</span>
             <button type="button" class="btn-copy" onclick="copyText('dash-smb-mac', this)">Copia Mac</button>
+          </div>
+          <div class="seamless-box">
+            <span>✨ <strong>Accesso Seamless Casa & Fuori Casa</strong>: impostando l'indirizzo suggerito, le app (Immich, Jellyfin) o le cartelle di rete funzioneranno sia sotto il WiFi di casa sia all'esterno tramite NetBird senza cambiare configurazione!</span>
           </div>
         </div>
 
@@ -724,7 +783,37 @@
       }
     }
 
+    let currentPortalUser = null;
+    let currentActiveMode = 'mdns';
+
+    function selectConnectionMode(modeKey) {
+      if (!currentPortalUser || !currentPortalUser.modes || !currentPortalUser.modes[modeKey]) return;
+      currentActiveMode = modeKey;
+      const mode = currentPortalUser.modes[modeKey];
+
+      document.querySelectorAll('.mode-pill').forEach(pill => {
+        if (pill.dataset.mode === modeKey) {
+          pill.classList.add('active');
+        } else {
+          pill.classList.remove('active');
+        }
+      });
+
+      const winEl = document.getElementById('dash-smb-win');
+      const macEl = document.getElementById('dash-smb-mac');
+      const descEl = document.getElementById('mode-desc-text');
+      if (winEl) winEl.innerText = mode.win_path;
+      if (macEl) macEl.innerText = mode.mac_path;
+      if (descEl) descEl.innerText = mode.description || '';
+
+      const immichBtn = document.getElementById('link-immich');
+      const jellyfinBtn = document.getElementById('link-jellyfin');
+      if (immichBtn && mode.immich_url) immichBtn.href = mode.immich_url;
+      if (jellyfinBtn && mode.jellyfin_url) jellyfinBtn.href = mode.jellyfin_url;
+    }
+
     function showDashboard(user) {
+      currentPortalUser = user;
       document.getElementById('view-loading').classList.add('hidden');
       document.getElementById('view-login').classList.add('hidden');
       document.getElementById('view-token').classList.add('hidden');
@@ -741,17 +830,38 @@
         avatar.style.background = user.avatar_color;
       }
 
-      // Samba paths
-      const hostname = user.hostname || window.location.hostname || 'allod';
-      const smbWin = `\\\\${hostname}\\${user.username}`;
-      const smbMac = `smb://${hostname}/${user.username}`;
-      document.getElementById('dash-smb-win').innerText = smbWin;
-      document.getElementById('dash-smb-mac').innerText = smbMac;
+      // Populate Connection Mode Pills
+      const pillsContainer = document.getElementById('smb-mode-pills');
+      if (pillsContainer && user.modes) {
+        pillsContainer.innerHTML = '';
+        const order = ['mdns', 'lan_ip', 'mesh'];
+        order.forEach(k => {
+          const m = user.modes[k];
+          if (!m) return;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `mode-pill ${k === currentActiveMode ? 'active' : ''}`;
+          btn.dataset.mode = k;
+          btn.onclick = () => selectConnectionMode(k);
 
-      // Service links
-      const hostIp = window.location.hostname || 'allod';
-      document.getElementById('link-immich').href = `http://${hostIp}:2283`;
-      document.getElementById('link-jellyfin').href = `http://${hostIp}:8096`;
+          let icon = '🏠';
+          if (k === 'lan_ip') icon = '🔢';
+          if (k === 'mesh') icon = '🌐';
+
+          btn.innerHTML = `<span>${icon}</span> <span>${m.label}</span> ${m.badge ? `<span class="pill-tag">${m.badge}</span>` : ''}`;
+          pillsContainer.appendChild(btn);
+        });
+      }
+
+      if (user.modes && user.modes.mdns) {
+        selectConnectionMode('mdns');
+      } else if (user.modes && user.modes.lan_ip) {
+        selectConnectionMode('lan_ip');
+      } else {
+        const hostname = user.hostname || window.location.hostname || 'allod';
+        document.getElementById('dash-smb-win').innerText = `\\\\${hostname}\\${user.username}`;
+        document.getElementById('dash-smb-mac').innerText = `smb://${hostname}/${user.username}`;
+      }
     }
 
     async function submitChangePassword() {

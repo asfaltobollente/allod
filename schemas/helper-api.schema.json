@@ -36,6 +36,8 @@
             "network.server_up",
             "network.server_down",
             "network.server_status",
+            "network.zeroconfig_status",
+            "network.zeroconfig_setup",
             "containers.prune"
           ]
         },
