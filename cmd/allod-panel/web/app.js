@@ -3860,7 +3860,7 @@ function updateThemeBadge(themeName) {
       default: (typeof t === 'function' ? t('theme_default', 'Default Slate') : 'Default Slate'),
       cloud: (typeof t === 'function' ? t('theme_cloud', 'Modern Cloud Elegante') : 'Modern Cloud Elegante'),
       moderno: (typeof t === 'function' ? t('theme_moderno', 'Moderno') : 'Moderno'),
-      cia: (typeof t === 'function' ? t('theme_cia', 'CIA // Tactical (Tom Clancy)') : 'CIA // Tactical (Tom Clancy)'),
+      cia: (typeof t === 'function' ? t('theme_cia', 'Tactical Ops // NVG') : 'Tactical Ops // NVG'),
       allod: (typeof t === 'function' ? t('theme_allod', 'Allod') : 'Allod')
     };
     badge.textContent = names[themeName] || themeName;
