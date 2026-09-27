@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asfaltobollente/allod/internal/helper"
 	"github.com/asfaltobollente/allod/internal/state"
 )
 
@@ -310,3 +311,83 @@ func TestFamilyPortalAuthFlow(t *testing.T) {
 		t.Errorf("expected 200 with new password, got %d", rec.Code)
 	}
 }
+
+func TestPortalLoginAutoSyncWithSamba(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "state.db")
+
+	store, err := state.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open store: %v", err)
+	}
+
+	// Create user 'davide' without password (as imported from Samba share)
+	err = store.CreateFamilyMember(&state.FamilyMember{
+		Username:     "davide",
+		FirstName:    "Davide",
+		LastName:     "Arrus",
+		Role:         "member",
+		SmbActive:    true,
+		PasswordHash: "",
+		PasswordSalt: "",
+	})
+	if err != nil {
+		t.Fatalf("failed to create member: %v", err)
+	}
+	store.Close()
+
+	// Mock helper that verifies Samba credentials
+	mockHelper := &mockHelperClient{
+		executeFn: func(action string, args map[string]interface{}, plan bool) (helper.Response, error) {
+			if action == "shares.verify_password" {
+				user, _ := args["username"].(string)
+				pass, _ := args["password"].(string)
+				if user == "davide" && pass == "DavideSambaPass2026!" {
+					return helper.Response{Ok: true, Applied: true, Output: "valid"}, nil
+				}
+				return helper.Response{Ok: true, Applied: true, Output: "invalid"}, nil
+			}
+			return helper.Response{Ok: true}, nil
+		},
+	}
+
+	authHandler := NewAuthHandler(dbPath, mockHelper)
+	mux := http.NewServeMux()
+	authHandler.RegisterAuthRoutes(mux)
+
+	// 1. Try login with wrong password -> 400 with "Nessuna password ancora impostata"
+	badLogin := bytes.NewBufferString(`{"username":"davide","password":"WrongPassword"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/portal/login", badLogin)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for unverified password, got %d", rec.Code)
+	}
+
+	// 2. Try login with valid Samba password -> 200 OK & auto-activates!
+	goodLogin := bytes.NewBufferString(`{"username":"davide","password":"DavideSambaPass2026!"}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/portal/login", goodLogin)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for auto-sync login, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 3. Verify in state.db that password_hash is now populated
+	stCheck, _ := state.Open(dbPath)
+	mem, _ := stCheck.GetFamilyMember("davide")
+	stCheck.Close()
+	if mem.PasswordHash == "" || mem.PasswordSalt == "" {
+		t.Errorf("expected password hash and salt to be populated in state.db after auto-sync")
+	}
+
+	// 4. Subsequent login works directly via PBKDF2
+	rec2 := httptest.NewRecorder()
+	goodLogin2 := bytes.NewBufferString(`{"username":"davide","password":"DavideSambaPass2026!"}`)
+	req2 := httptest.NewRequest(http.MethodPost, "/api/portal/login", goodLogin2)
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected 200 on second login, got %d", rec2.Code)
+	}
+}
+

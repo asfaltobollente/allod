@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,13 +20,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
-// AllowedActions is the single source of truth for the 16 actions supported by the root helper.
+// AllowedActions is the single source of truth for the actions supported by the root helper.
 var AllowedActions = []string{
 	"shares.apply",
 	"shares.bind_photos",
 	"shares.set_password",
+	"shares.verify_password",
 	"users.create",
 	"users.passwd",
 	"firewall.apply",
@@ -677,6 +680,38 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
+
+	case "shares.verify_password":
+		username, ok := req.Args["username"].(string)
+		if !ok || !validNameRegex.MatchString(username) {
+			return Response{Ok: false, Error: "Invalid or missing 'username'"}
+		}
+		password, _ := req.Args["password"].(string)
+		if password == "" {
+			return Response{Ok: false, Error: "Password cannot be empty"}
+		}
+
+		plan := []string{fmt.Sprintf("pdbedit -u %s -w", username)}
+		if !req.Plan {
+			pdbeditBin := resolveExecutable("pdbedit", "/usr/bin/pdbedit", "/bin/pdbedit")
+			cmd := exec.Command(pdbeditBin, "-u", username, "-w")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("pdbedit error: %v (%s)", err, strings.TrimSpace(string(out)))}
+			}
+
+			// Format: username:uid:LM_hash:NT_hash:[flags]:LCT-...
+			parts := strings.Split(strings.TrimSpace(string(out)), ":")
+			if len(parts) >= 4 {
+				ntHashStored := strings.ToUpper(strings.TrimSpace(parts[3]))
+				calcHash := ComputeNTLMHash(password)
+				if ntHashStored != "" && ntHashStored == calcHash {
+					return Response{Ok: true, Applied: true, Plan: plan, Output: "valid"}
+				}
+			}
+			return Response{Ok: true, Applied: true, Plan: plan, Output: "invalid"}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
 
 	case "firewall.apply":
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{"nftables reload /etc/allod/nftables.conf"}}
@@ -1683,3 +1718,87 @@ func generateRandomKeyString(numBytes int) string {
 	_, _ = rand.Read(b)
 	return base64.StdEncoding.EncodeToString(b)
 }
+
+// md4Hash computes the MD4 message digest according to RFC 1320.
+func md4Hash(data []byte) [16]byte {
+	var a, b, c, d uint32 = 0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476
+
+	origLen := uint64(len(data))
+	padLen := (56 - int((origLen+1)%64)) % 64
+	if padLen < 0 {
+		padLen += 64
+	}
+	padded := make([]byte, origLen+1+uint64(padLen)+8)
+	copy(padded, data)
+	padded[origLen] = 0x80
+	binary.LittleEndian.PutUint64(padded[len(padded)-8:], origLen*8)
+
+	for i := 0; i < len(padded); i += 64 {
+		chunk := padded[i : i+64]
+		var x [16]uint32
+		for j := 0; j < 16; j++ {
+			x[j] = binary.LittleEndian.Uint32(chunk[j*4 : (j+1)*4])
+		}
+
+		aa, bb, cc, dd := a, b, c, d
+
+		// Round 1
+		ff := func(a, b, c, d, k uint32, s uint) uint32 {
+			t := a + ((b & c) | (^b & d)) + x[k]
+			return (t << s) | (t >> (32 - s))
+		}
+		a = ff(a, b, c, d, 0, 3); d = ff(d, a, b, c, 1, 7); c = ff(c, d, a, b, 2, 11); b = ff(b, c, d, a, 3, 19)
+		a = ff(a, b, c, d, 4, 3); d = ff(d, a, b, c, 5, 7); c = ff(c, d, a, b, 6, 11); b = ff(b, c, d, a, 7, 19)
+		a = ff(a, b, c, d, 8, 3); d = ff(d, a, b, c, 9, 7); c = ff(c, d, a, b, 10, 11); b = ff(b, c, d, a, 11, 19)
+		a = ff(a, b, c, d, 12, 3); d = ff(d, a, b, c, 13, 7); c = ff(c, d, a, b, 14, 11); b = ff(b, c, d, a, 15, 19)
+
+		// Round 2
+		gg := func(a, b, c, d, k uint32, s uint) uint32 {
+			t := a + ((b & c) | (b & d) | (c & d)) + x[k] + 0x5a827999
+			return (t << s) | (t >> (32 - s))
+		}
+		a = gg(a, b, c, d, 0, 3); d = gg(d, a, b, c, 4, 5); c = gg(c, d, a, b, 8, 9); b = gg(b, c, d, a, 12, 13)
+		a = gg(a, b, c, d, 1, 3); d = gg(d, a, b, c, 5, 5); c = gg(c, d, a, b, 9, 9); b = gg(b, c, d, a, 13, 13)
+		a = gg(a, b, c, d, 2, 3); d = gg(d, a, b, c, 6, 5); c = gg(c, d, a, b, 10, 9); b = gg(b, c, d, a, 14, 13)
+		a = gg(a, b, c, d, 3, 3); d = gg(d, a, b, c, 7, 5); c = gg(c, d, a, b, 11, 9); b = gg(b, c, d, a, 15, 13)
+
+		// Round 3
+		hh := func(a, b, c, d, k uint32, s uint) uint32 {
+			t := a + (b ^ c ^ d) + x[k] + 0x6ed9eba1
+			return (t << s) | (t >> (32 - s))
+		}
+		a = hh(a, b, c, d, 0, 3); d = hh(d, a, b, c, 8, 9); c = hh(c, d, a, b, 4, 11); b = hh(b, c, d, a, 12, 15)
+		a = hh(a, b, c, d, 2, 3); d = hh(d, a, b, c, 10, 9); c = hh(c, d, a, b, 6, 11); b = hh(b, c, d, a, 14, 15)
+		a = hh(a, b, c, d, 1, 3); d = hh(d, a, b, c, 9, 9); c = hh(c, d, a, b, 5, 11); b = hh(b, c, d, a, 13, 15)
+		a = hh(a, b, c, d, 3, 3); d = hh(d, a, b, c, 11, 9); c = hh(c, d, a, b, 7, 11); b = hh(b, c, d, a, 15, 15)
+
+		a += aa
+		b += bb
+		c += cc
+		d += dd
+	}
+
+	var res [16]byte
+	binary.LittleEndian.PutUint32(res[0:4], a)
+	binary.LittleEndian.PutUint32(res[4:8], b)
+	binary.LittleEndian.PutUint32(res[8:12], c)
+	binary.LittleEndian.PutUint32(res[12:16], d)
+	return res
+}
+
+// toUTF16LE converts a string to little-endian UTF-16 bytes (standard Windows/NTLM format).
+func toUTF16LE(s string) []byte {
+	runes := utf16.Encode([]rune(s))
+	b := make([]byte, len(runes)*2)
+	for i, r := range runes {
+		binary.LittleEndian.PutUint16(b[i*2:(i+1)*2], r)
+	}
+	return b
+}
+
+// ComputeNTLMHash computes the standard uppercase hexadecimal NTLM hash of a password string.
+func ComputeNTLMHash(password string) string {
+	h := md4Hash(toUTF16LE(password))
+	return strings.ToUpper(hex.EncodeToString(h[:]))
+}
+

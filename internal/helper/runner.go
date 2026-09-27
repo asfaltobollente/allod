@@ -10,6 +10,7 @@ type CommandRunner interface {
 	CreateUser(username string) error
 	DeleteUser(username string) error
 	SetSambaPassword(username, password string) error
+	VerifySambaPassword(username, password string) (bool, error)
 	AddSambaUser(username string) error
 	DeleteSambaUser(username string) error
 	ApplyShare(name, path string) error
@@ -59,6 +60,21 @@ func (c *Client) SetSambaPassword(username, password string) error {
 		return fmt.Errorf("helper error setting samba password for %s: %s", username, res.Error)
 	}
 	return nil
+}
+
+// VerifySambaPassword verifies if a given password matches the user's password in Samba.
+func (c *Client) VerifySambaPassword(username, password string) (bool, error) {
+	res, err := c.Execute("shares.verify_password", map[string]interface{}{
+		"username": username,
+		"password": password,
+	}, false)
+	if err != nil {
+		return false, fmt.Errorf("helper connection error: %w", err)
+	}
+	if !res.Ok {
+		return false, fmt.Errorf("helper error verifying samba password for %s: %s", username, res.Error)
+	}
+	return res.Output == "valid", nil
 }
 
 // AddSambaUser registers a user with the Samba password database.

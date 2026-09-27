@@ -2686,13 +2686,30 @@ WantedBy=default.target
 			return
 		}
 
-		// If photos-shares integration is active, bind this user's photo folder automatically
-		if st, err := state.Open("state.db"); err == nil {
+		// Sincronizzazione con il database di stato Allod (Family Portal & state.db)
+		if st, err := state.Open(dbPath); err == nil {
 			if val, _ := st.GetMeta("photos_shares_integration"); val == "true" {
 				_, _ = client.Execute("shares.bind_photos", map[string]interface{}{
 					"enabled":  true,
 					"username": req.Username,
 				}, false)
+			}
+
+			// Sincronizza anche la password del portale personale se l'utente esiste (o crealo se manca)
+			m, _ := st.GetFamilyMember(req.Username)
+			if m == nil {
+				_ = st.CreateFamilyMember(&state.FamilyMember{
+					Username:    req.Username,
+					FirstName:   strings.Title(req.Username),
+					Role:        "member",
+					AvatarColor: "#38bdf8",
+					SmbActive:   true,
+				})
+			}
+			if salt, errSalt := panel.GenerateSalt(); errSalt == nil {
+				hash := panel.HashPassword(req.Password, salt)
+				saltHex := hex.EncodeToString(salt)
+				_ = st.SetFamilyMemberPassword(req.Username, hash, saltHex)
 			}
 			st.Close()
 		}
@@ -2808,6 +2825,28 @@ WantedBy=default.target
 		// 5. Execute bind mount for user photos if requested
 		if linkPhotos {
 			_ = client.BindPhotos(req.Username, true)
+		}
+
+		// 6. Sincronizzazione con il database di stato Allod (Family Portal)
+		if st, err := state.Open(dbPath); err == nil {
+			m, _ := st.GetFamilyMember(req.Username)
+			if m == nil {
+				_ = st.CreateFamilyMember(&state.FamilyMember{
+					Username:     req.Username,
+					FirstName:    strings.Title(req.Username),
+					Role:         "member",
+					AvatarColor:  "#38bdf8",
+					SmbActive:    true,
+					PhotosLinked: linkPhotos,
+				})
+			}
+			if req.Password != "" {
+				if salt, errSalt := panel.GenerateSalt(); errSalt == nil {
+					hash := panel.HashPassword(req.Password, salt)
+					_ = st.SetFamilyMemberPassword(req.Username, hash, hex.EncodeToString(salt))
+				}
+			}
+			st.Close()
 		}
 
 		host := r.Host
@@ -3211,6 +3250,13 @@ WantedBy=default.target
 			PhotosLinked: linkPhotos,
 		}
 
+		if req.Password != "" {
+			if salt, errSalt := panel.GenerateSalt(); errSalt == nil {
+				member.PasswordSalt = hex.EncodeToString(salt)
+				member.PasswordHash = panel.HashPassword(req.Password, salt)
+			}
+		}
+
 		if err := st.CreateFamilyMember(member); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore salvataggio membro: " + err.Error()})
@@ -3304,6 +3350,100 @@ WantedBy=default.target
 				"token":      token,
 				"invite_url": inviteURL,
 				"expires_in": "48 ore",
+			},
+		})
+	})
+
+	// 5a-18b. API Family Set Member Password (Admin Direct Password Setup)
+	mux.HandleFunc("/api/family/set-password", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
+			return
+		}
+
+		req.Username = strings.ToLower(strings.TrimSpace(req.Username))
+		if req.Username == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome utente richiesto"})
+			return
+		}
+
+		if len(req.Password) < 4 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
+			return
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore database: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		member, errM := st.GetFamilyMember(req.Username)
+		if errM != nil || member == nil {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Membro '%s' non trovato", req.Username)})
+			return
+		}
+
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		// Ensure system user exists in Linux
+		_ = ensureSystemUser(&client, req.Username)
+
+		// Set Samba password via root helper
+		errSmb := client.SetSambaPassword(req.Username, req.Password)
+		if errSmb != nil {
+			// Retry once
+			_ = ensureSystemUser(&client, req.Username)
+			errSmb = client.SetSambaPassword(req.Username, req.Password)
+		}
+		if errSmb != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: fmt.Sprintf("Errore aggiornamento password Samba: %v", errSmb),
+			})
+			return
+		}
+
+		// Update PBKDF2 hash in state.db
+		salt, errSalt := panel.GenerateSalt()
+		if errSalt != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore generazione salt crittografico"})
+			return
+		}
+		hash := panel.HashPassword(req.Password, salt)
+		if errP := st.SetFamilyMemberPassword(req.Username, hash, hex.EncodeToString(salt)); errP != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore salvataggio password nel database: " + errP.Error()})
+			return
+		}
+
+		// Consume/invalidate any pending onboarding token for this user
+		if member.OnboardingToken != "" {
+			_ = st.ConsumeResetToken(member.OnboardingToken)
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Password per l'utente '%s' impostata e sincronizzata con successo sia per Samba sia per il Portale Personale!", req.Username),
+			Data: map[string]interface{}{
+				"username": req.Username,
 			},
 		})
 	})

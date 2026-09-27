@@ -555,12 +555,31 @@ func (h *AuthHandler) handlePortalLogin(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if member.PasswordHash == "" || member.PasswordSalt == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(PanelResponse{
-			Status:  "error",
-			Message: "Nessuna password ancora impostata per questo account. Chiedi all'amministratore un link o QR di benvenuto per attivarla.",
-		})
-		return
+		// Auto-sync: If password was provided and helper client is available, check if password matches Samba
+		if req.Password != "" && h.Helper != nil {
+			resp, errH := h.Helper.Execute("shares.verify_password", map[string]interface{}{
+				"username": username,
+				"password": req.Password,
+			}, false)
+			if errH == nil && resp.Ok && resp.Output == "valid" {
+				if salt, errSalt := GenerateSalt(); errSalt == nil {
+					hash := HashPassword(req.Password, salt)
+					saltHex := hex.EncodeToString(salt)
+					_ = st.SetFamilyMemberPassword(username, hash, saltHex)
+					member.PasswordHash = hash
+					member.PasswordSalt = saltHex
+				}
+			}
+		}
+
+		if member.PasswordHash == "" || member.PasswordSalt == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: "Nessuna password ancora impostata per questo account. Chiedi all'amministratore un link o QR di benvenuto per attivarla.",
+			})
+			return
+		}
 	}
 
 	if !VerifyPassword(req.Password, member.PasswordSalt, member.PasswordHash) {
