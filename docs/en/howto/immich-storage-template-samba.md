@@ -27,6 +27,10 @@ making photos directly browsable over local network file shares (`\\allod\shares
 Navigate to your Allod server in any browser:
 👉 **`http://<SERVER-IP>:2283`**
 
+> [!TIP]
+> **Unified Smartphone Syncing (Wi-Fi + 4G)**: By configuring NetBird's **Network Route** feature (see the *Sovereign Remote Access via NetBird Mesh* guide), you can configure your Immich mobile app with the single local IP address (e.g. `http://192.168.1.50:2283`): automatic camera backup works seamlessly both on home Wi-Fi and mobile 4G without ever changing settings.
+
+
 ### 2. Navigate to Administration Settings
 1. Click the gear icon **Administration** (top right or navigation drawer).
 2. Select **Settings** ➔ **Storage Template** in the left menu.

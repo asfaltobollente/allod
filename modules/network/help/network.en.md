@@ -28,3 +28,16 @@ The `network` module manages secure remote access to Immich, Jellyfin, Nextcloud
    * Setup keys and management URLs are saved exclusively to `network/secrets/netbird.env` with restricted `0600` permissions and never inlined in container definition files.
 3. **P2P WireGuard Encryption**:
    * All application traffic between devices is end-to-end encrypted with state-of-the-art Noise protocol cryptography.
+
+---
+
+## 🌟 Recommended Setup: One IP Address Inside & Outside Home (Network Route)
+
+To avoid changing server URLs in mobile apps (such as Immich and Jellyfin) when moving between home Wi-Fi and mobile 4G/5G:
+* **Why not use `.local` over 4G**: Android and iOS strictly filter out mDNS `*.local` queries over mobile VPN connections according to RFC 6762.
+* **The Seamless Solution (NetBird Network Route)**:
+  1. In your NetBird dashboard, navigate to **Network Routes** ➔ **Add Route**.
+  2. Set the *Network Range* to your Allod server's local LAN IP with `/32` (e.g. `192.168.1.50/32` or your full subnet `192.168.1.0/24`).
+  3. Select your Allod node as the *Routing Peer* and *Distribution Groups*: `All`.
+  4. In your mobile apps, configure the local IP directly (e.g. `http://192.168.1.50:2283` for Immich): it will connect seamlessly both at home on Wi-Fi and globally over 4G!
+

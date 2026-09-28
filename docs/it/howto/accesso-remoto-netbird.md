@@ -59,6 +59,40 @@ Tramite l'IP NetBird del server (es. `100.100.64.229`), puoi raggiungere tutti i
 
 ---
 
+### 5. 🌟 Opzione Consigliata: Lo Stesso Indirizzo IP Sia Dentro Che Fuori Casa (Network Route)
+
+Quando utilizzi app per smartphone come **Immich** (sincronizzazione automatica foto in background) o **Jellyfin** (streaming video), dover cambiare indirizzo tra quando sei a casa in Wi-Fi e quando sei fuori in 4G è scomodo.
+
+Inoltre, i sistemi operativi mobili (Android e iOS) **bloccano per standard (RFC 6762) la risoluzione di `allod.local` su connessioni VPN/4G**, rendendo `allod.local` utilizzabile solo sotto il Wi-Fi domestico.
+
+#### La Soluzione Perfetta: NetBird Network Route
+Abilitando la funzione **Network Route** di NetBird, puoi inserire nelle app e nei preferiti **il solo indirizzo IP locale del tuo server** (es. `192.168.1.50`):
+* **A casa in Wi-Fi**: Il telefono comunica con `192.168.1.50` direttamente alla massima velocità Gigabit/Wi-Fi locale senza passare da Internet.
+* **Fuori in 4G/5G con NetBird attivo**: NetBird riconosce l'indirizzo `192.168.1.50` e lo instrada automaticamente dentro il tunnel cifrato WireGuard verso il tuo server Allod!
+* **Zero configurazioni DNS**: Nessun resolver da configurare, zero problemi con i browser mobili, e le app come Immich non interrompono mai il backup.
+
+#### Procedura di Attivazione (in 1 minuto):
+1. Accedi alla dashboard di NetBird ([app.netbird.io](https://app.netbird.io) o la tua istanza self-hosted).
+2. Nel menu a sinistra clicca su **Network Routes** e poi sul pulsante **Add Route**.
+3. Compila i campi:
+   * **Network Name**: `Allod-LAN` (o a scelta).
+   * **Network Range**: l'IP LAN del tuo server Allod con `/32` (es. `192.168.1.50/32`), oppure l'intera subnet domestica (es. `192.168.1.0/24`) se desideri raggiungere da 4G anche altri dispositivi di casa (es. router, telecamere).
+   * **Routing Peer**: seleziona il tuo server Allod (es. `ferrettiubuntuserver`).
+   * **Distribution Groups**: seleziona `All` (per distribuire la rotta a tutti i tuoi dispositivi mobili).
+   * **Masquerade**: Lascia la spunta attiva (**Enabled**).
+4. Clicca su **Save**.
+
+Da questo momento, puoi configurare l'app Immich su `http://192.168.1.50:2283` e il pannello su `http://192.168.1.50:8080`: funzioneranno perfettamente sia sul divano che a chilometri di distanza!
+
+---
+
+#### Alternativa: Nome Host Breve tramite NetBird MagicDNS (`http://allod:8080`)
+Se per il browser preferisci digitare una parola invece dei numeri:
+1. Nella dashboard NetBird, vai su **Peers**, clicca sul tuo server e rinominalo da `ferrettiubuntuserver` a **`allod`**.
+2. Da smartphone in 4G con NetBird attivo, puoi aprire `http://allod:8080` (MagicDNS risolverà il nome automaticamente).
+
+---
+
 ## 🔍 Risoluzione Problemi e Prestazioni di Rete (CGNAT, ISP Senza IP Pubblico & UPnP)
 
 ### Perché lo Speedtest da Remoto è Basso (~9-10 Mbps) e il Ping è Alto (~90 ms)?

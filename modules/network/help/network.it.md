@@ -28,3 +28,16 @@ Il modulo `network` gestisce la connettività sicura da remoto per accedere a Im
    * Le credenziali di pairing NetBird sono salvate esclusivamente in `network/secrets/netbird.env` con permessi restrittivi `0600`.
 3. **Crittografia P2P WireGuard**:
    * Tutto il traffico applicativo tra i dispositivi è cifrato end-to-end tramite crittografia moderna basata su WireGuard e protocollo Noise.
+
+---
+
+## 🌟 Opzione Consigliata: Stesso Indirizzo IP Dentro e Fuori Casa (Network Route)
+
+Per evitare di dover cambiare indirizzo nelle app mobili (come Immich e Jellyfin) quando si passa dal Wi-Fi di casa al 4G esterno:
+* **Perché non usare `.local` in 4G**: Android e iOS bloccano la risoluzione mDNS `*.local` sulle connessioni VPN mobili per standard RFC 6762.
+* **La Soluzione (NetBird Network Route)**:
+  1. Nella dashboard di NetBird vai su **Network Routes** ➔ **Add Route**.
+  2. Inserisci come *Network Range* l'IP LAN del server con `/32` (es. `192.168.1.50/32` o l'intera subnet `192.168.1.0/24`).
+  3. Seleziona il server Allod come *Routing Peer* e *Distribution Groups*: `All`.
+  4. Nelle app mobili configura direttamente l'IP locale (es. `http://192.168.1.50:2283` per Immich): funzionerà sia sul divano in Wi-Fi che ovunque nel mondo via 4G!
+

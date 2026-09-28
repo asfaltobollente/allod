@@ -86,7 +86,41 @@ Once connected via the NetBird app, you can access all Allod services using the 
 
 ---
 
-### Step 5: Verify Connected Peers in Allod Panel
+### Step 5: 🌟 Recommended Setup: One Unified IP Address Inside and Outside Home (Network Route)
+
+When using mobile apps like **Immich** (background camera photo syncing) or **Jellyfin** (media streaming), switching between different URLs or IP addresses when at home versus on mobile data is cumbersome.
+
+Furthermore, mobile operating systems (Android and iOS) **strictly drop unicast `.local` DNS queries across VPN connections** in compliance with RFC 6762, restricting `allod.local` to physical local Wi-Fi.
+
+#### The Seamless Solution: NetBird Network Route
+By configuring a **Network Route** in NetBird, you can enter **the single local LAN IP of your Allod server** (e.g., `192.168.1.50`) into all your mobile apps and browser bookmarks:
+* **At home on Wi-Fi**: Your phone communicates directly with `192.168.1.50` at full local Gigabit/Wi-Fi speed without touching the Internet.
+* **Outside on 4G/5G with NetBird active**: NetBird captures traffic to `192.168.1.50` and transparently routes it through the encrypted WireGuard tunnel to your Allod server.
+* **Zero DNS headaches**: No custom DNS resolvers, no mobile browser search-bar confusion, and background app syncing (like Immich) never breaks.
+
+#### How to Enable (in 60 seconds):
+1. Open your NetBird management dashboard ([app.netbird.io](https://app.netbird.io) or self-hosted).
+2. In the left navigation, click **Network Routes** and then **Add Route**.
+3. Fill in the fields:
+   * **Network Name**: `Allod-LAN`
+   * **Network Range**: Your server's local LAN IP with `/32` (e.g. `192.168.1.50/32`), or your entire home subnet (e.g. `192.168.1.0/24`) if you also want access to other home hardware (e.g. routers, cameras).
+   * **Routing Peer**: Select your Allod node (e.g. `ferrettiubuntuserver`).
+   * **Distribution Groups**: Select `All` (or your mobile device group).
+   * **Masquerade**: Keep checked (**Enabled**).
+4. Click **Save**.
+
+Now set Immich to `http://192.168.1.50:2283` and Allod Panel to `http://192.168.1.50:8080`: they will work seamlessly from your couch or from anywhere in the world!
+
+---
+
+#### Alternative: Short Hostname via NetBird MagicDNS (`http://allod:8080`)
+If you prefer typing words rather than numbers in your browser:
+1. In the NetBird dashboard under **Peers**, rename your Allod node from `ferrettiubuntuserver` to **`allod`**.
+2. When connected via NetBird on 4G, you can open `http://allod:8080` directly.
+
+---
+
+### Step 6: Verify Connected Peers in Allod Panel
 
 Refresh the Allod Web Panel. In the **Network** module card and **Launchpad**:
 * The node displays **Connected (WireGuard P2P)** or **Connected (Relayed)**.

@@ -27,6 +27,10 @@ rendendole direttamente navigabili e sfogliabili tramite la condivisione di rete
 Apri il browser sul tuo server locale:
 👉 **`http://<SERVER-IP>:2283`**
 
+> [!TIP]
+> **Sincronizzazione Unificata Smartphone (Wi-Fi + 4G)**: Configurando la **Network Route** di NetBird sulla LAN (vedi guida *Accesso Remoto con NetBird Mesh*), puoi impostare nell'app Immich per smartphone il solo indirizzo locale (es. `http://192.168.1.50:2283`): il backup funzionerà sempre, sia a casa in Wi-Fi che fuori in 4G, senza dover mai cambiare URL.
+
+
 ### 2. Vai nelle Impostazioni Amministrazione
 1. Clicca sull'icona ingranaggio **Administration** (in alto a destra o barra laterale).
 2. Nel menu a sinistra seleziona: **Settings** ➔ **Storage Template**.
