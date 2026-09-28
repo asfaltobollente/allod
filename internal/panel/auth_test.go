@@ -391,3 +391,22 @@ func TestPortalLoginAutoSyncWithSamba(t *testing.T) {
 	}
 }
 
+func TestGetClientIPRemoteAddrVersusForwarded(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "192.168.1.100:54321"
+	req.Header.Set("X-Forwarded-For", "10.0.0.1, 10.0.0.2")
+	req.Header.Set("X-Real-IP", "10.0.0.99")
+
+	// Default: untrusted proxy, must ignore headers and use RemoteAddr
+	ip := getClientIP(req)
+	if ip != "192.168.1.100" {
+		t.Errorf("expected getClientIP to return %q without trusted proxy, got %q", "192.168.1.100", ip)
+	}
+
+	// With ALLOD_TRUSTED_PROXY=true, honors X-Forwarded-For
+	t.Setenv("ALLOD_TRUSTED_PROXY", "true")
+	trustedIP := getClientIP(req)
+	if trustedIP != "10.0.0.1" {
+		t.Errorf("expected getClientIP to return %q with trusted proxy, got %q", "10.0.0.1", trustedIP)
+	}
+}
