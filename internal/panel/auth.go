@@ -173,12 +173,14 @@ func GetSessionToken(r *http.Request, cookieName string) string {
 }
 
 func getClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
+	if strings.EqualFold(os.Getenv("ALLOD_TRUSTED_PROXY"), "true") || os.Getenv("ALLOD_TRUSTED_PROXY") == "1" {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			return strings.TrimSpace(parts[0])
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return strings.TrimSpace(xri)
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil {
@@ -194,11 +196,11 @@ func acceptsHTML(r *http.Request) bool {
 
 // AuthHandler handles both admin dashboard authentication and family member portal operations.
 type AuthHandler struct {
-	DBPath            string
-	Helper            HelperClient
-	RateLimiter       *RateLimiter
-	EnsureSystemUser  func(client HelperClient, username string) error
-	SetSambaPassword  func(client HelperClient, username, password string) error
+	DBPath           string
+	Helper           HelperClient
+	RateLimiter      *RateLimiter
+	EnsureSystemUser func(client HelperClient, username string) error
+	SetSambaPassword func(client HelperClient, username, password string) error
 }
 
 // NewAuthHandler creates an AuthHandler with defaults.
