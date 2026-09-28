@@ -3889,12 +3889,26 @@ function openThemeSelector() {
 let currentWatchConfig = null;
 let currentWatchMeshIP = '--';
 let currentWatchMode = 'receiver';
+let currentWatchInstallToken = '';
+
+async function refreshWatchInstallToken() {
+  try {
+    const res = await fetch('/api/watch/install-token', { method: 'POST' });
+    const json = await res.json();
+    if (json.status === 'ok' && json.token) {
+      currentWatchInstallToken = json.token;
+    }
+  } catch (e) {
+    console.error('Error fetching watch install token:', e);
+  }
+}
 
 async function openWatchSentinelModal() {
   const modal = document.getElementById('watch-sentinel-modal');
   if (!modal) return;
 
   switchWatchTab('telegram');
+  await refreshWatchInstallToken();
 
   try {
     const res = await fetch('/api/watch/config');
@@ -4616,12 +4630,13 @@ echo "✅ Allod Watch Sentinel è ora in ascolto sulla porta ${port}!"
     const setupKey = setupKeyInput ? setupKeyInput.value.trim() : '';
     const alreadyMesh = alreadyMeshCheck ? alreadyMeshCheck.checked : false;
 
+    const tokenQuery = currentWatchInstallToken ? `&t=${encodeURIComponent(currentWatchInstallToken)}` : '';
     let cmd = '';
     if (alreadyMesh) {
-      cmd = `curl -fsSL "http://${meshIP}:8080/api/watch/install.sh?mode=mesh" | sudo bash`;
+      cmd = `curl -fsSL "http://${meshIP}:8080/api/watch/install.sh?mode=mesh${tokenQuery}" | sudo bash`;
     } else {
       const keyPlaceholder = setupKey || '<NETBIRD_SETUP_KEY>';
-      cmd = `curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key ${keyPlaceholder} && curl -fsSL "http://${meshIP}:8080/api/watch/install.sh?mode=mesh" | sudo bash`;
+      cmd = `curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key ${keyPlaceholder} && curl -fsSL "http://${meshIP}:8080/api/watch/install.sh?mode=mesh${tokenQuery}" | sudo bash`;
     }
     codeEl.textContent = cmd;
   }

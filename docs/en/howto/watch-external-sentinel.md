@@ -60,7 +60,7 @@ If you prefer connecting the VPS directly to your private WireGuard mesh network
 2. Paste a **Setup Key** generated in your NetBird dashboard (`https://app.netbird.io/setup-keys`).
 3. Click **`📋 Copy Command for VPS`**. The command will execute:
    ```bash
-   curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key <KEY> && curl -fsSL "http://<ALLOD-MESH-IP>:8080/api/watch/install.sh?mode=mesh" | sudo bash
+   curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key <KEY> && curl -fsSL "http://<ALLOD-MESH-IP>:8080/api/watch/install.sh?mode=mesh&t=<TOKEN>" | sudo bash
    ```
 4. The VPS connects to your private mesh and polls Allod's `/api/health` endpoint periodically.
 

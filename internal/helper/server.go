@@ -98,18 +98,47 @@ func isAllowedPath(p string) bool {
 	if p == "" {
 		return true
 	}
-	if strings.Contains(p, "..") {
+	clean := filepath.Clean(p)
+	if strings.Contains(clean, "..") {
 		return false
 	}
-	clean := filepath.ToSlash(filepath.Clean(p))
-	if strings.HasPrefix(clean, "/mnt/allod-storage") ||
-		strings.HasPrefix(clean, "/mnt") ||
-		strings.HasPrefix(clean, "/data") ||
-		clean == "/usr/local/bin" {
-		return true
+
+	slashClean := filepath.ToSlash(clean)
+	// Explicitly reject system directories
+	if slashClean == "/usr/local/bin" || slashClean == "/bin" || slashClean == "/usr/bin" ||
+		slashClean == "/sbin" || slashClean == "/usr/sbin" || slashClean == "/etc" ||
+		slashClean == "/root" || slashClean == "/var" || slashClean == "/tmp" {
+		return false
 	}
-	if envStorage := os.Getenv("ALLOD_STORAGE_DIR"); envStorage != "" && strings.HasPrefix(clean, filepath.ToSlash(filepath.Clean(envStorage))) {
-		return true
+
+	// Resolve symlinks if path exists, or evaluate parent if path does not exist yet
+	evalPath := clean
+	if realPath, err := filepath.EvalSymlinks(clean); err == nil {
+		evalPath = realPath
+	} else {
+		parent := filepath.Dir(clean)
+		if realParent, err := filepath.EvalSymlinks(parent); err == nil {
+			evalPath = filepath.Join(realParent, filepath.Base(clean))
+		}
+	}
+
+	normClean := filepath.ToSlash(evalPath)
+
+	allowedRoots := []string{
+		"/mnt/allod-storage",
+		"/data",
+	}
+	if envStorage := os.Getenv("ALLOD_STORAGE_DIR"); envStorage != "" {
+		allowedRoots = append(allowedRoots, filepath.ToSlash(filepath.Clean(envStorage)))
+	}
+
+	for _, root := range allowedRoots {
+		if root == "" {
+			continue
+		}
+		if normClean == root || strings.HasPrefix(normClean, root+"/") {
+			return true
+		}
 	}
 	return false
 }
@@ -470,13 +499,6 @@ func (s *Server) processRequest(req Request) Response {
 			_ = os.MkdirAll(path, 0777)
 			_ = exec.Command("chmod", "-R", "0777", path).Run()
 
-			// If path is a system binary directory, do not configure it as a Samba share
-			cleanPath := filepath.Clean(path)
-			if cleanPath == "/usr/local/bin" || cleanPath == "/bin" || cleanPath == "/usr/bin" || cleanPath == "/sbin" || cleanPath == "/usr/sbin" {
-				_ = os.RemoveAll(filepath.Join(cleanPath, "public"))
-				return Response{Ok: true, Applied: true, Plan: []string{fmt.Sprintf("chmod -R 0777 %s", cleanPath)}}
-			}
-
 			// Ensure public folder and media subfolders
 			pubPath := filepath.Join(path, "public")
 			if strings.HasSuffix(path, "/public") {
@@ -734,58 +756,12 @@ func (s *Server) processRequest(req Request) Response {
 		}
 		if !req.Plan {
 			if unit == "allod-helperd" {
-				// 1. Copy newly built binary to /usr/local/bin/allod-helperd if available
-				cwd, _ := os.Getwd()
-				candidates := []string{
-					filepath.Join(cwd, "allod-helperd"),
-					"allod-helperd",
-				}
-				if entries, err := filepath.Glob("/home/*/allod/allod-helperd"); err == nil {
-					candidates = append(candidates, entries...)
-				}
-				if entries, err := filepath.Glob("/home/*/*/allod-helperd"); err == nil {
-					candidates = append(candidates, entries...)
-				}
-				if entries, err := filepath.Glob("/home/*/*/*/allod-helperd"); err == nil {
-					candidates = append(candidates, entries...)
-				}
-				candidates = append(candidates, "/tmp/allod-helperd-update", "/tmp/allod-helperd")
-				for _, cand := range candidates {
-					if info, err := os.Stat(cand); err == nil && !info.IsDir() {
-						if data, err := os.ReadFile(cand); err == nil && len(data) > 0 {
-							tmpDst := "/usr/local/bin/allod-helperd.tmp"
-							_ = os.Remove(tmpDst)
-							if errW := os.WriteFile(tmpDst, data, 0755); errW == nil {
-								_ = os.Rename(tmpDst, "/usr/local/bin/allod-helperd")
-							} else {
-								_ = os.Remove("/usr/local/bin/allod-helperd")
-								_ = os.WriteFile("/usr/local/bin/allod-helperd", data, 0755)
-							}
-							_ = os.Chmod("/usr/local/bin/allod-helperd", 0755)
-						}
-						break
-					}
-				}
-
-				// 2. Restart systemd service asynchronously so we can return the response first
 				systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
 				go func() {
 					time.Sleep(200 * time.Millisecond)
 					_ = exec.Command(systemctlBin, "--no-block", "restart", "allod-helperd").Run()
 				}()
 				return Response{Ok: true, Applied: true, Plan: []string{"systemctl restart --no-block allod-helperd (queued)"}}
-
-				// 3. Fallback for manual run: spawn self in background and exit
-				binaryPath, errExe := os.Executable()
-				if errExe == nil {
-					go func() {
-						time.Sleep(500 * time.Millisecond)
-						cmd := exec.Command(binaryPath)
-						_ = cmd.Start()
-						os.Exit(0)
-					}()
-					return Response{Ok: true, Applied: true, Plan: []string{"re-spawn allod-helperd binary"}}
-				}
 			}
 
 			systemctlBin := resolveExecutable("systemctl", "/bin/systemctl", "/usr/bin/systemctl")
@@ -2058,30 +2034,66 @@ func md4Hash(data []byte) [16]byte {
 			t := a + ((b & c) | (^b & d)) + x[k]
 			return (t << s) | (t >> (32 - s))
 		}
-		a = ff(a, b, c, d, 0, 3); d = ff(d, a, b, c, 1, 7); c = ff(c, d, a, b, 2, 11); b = ff(b, c, d, a, 3, 19)
-		a = ff(a, b, c, d, 4, 3); d = ff(d, a, b, c, 5, 7); c = ff(c, d, a, b, 6, 11); b = ff(b, c, d, a, 7, 19)
-		a = ff(a, b, c, d, 8, 3); d = ff(d, a, b, c, 9, 7); c = ff(c, d, a, b, 10, 11); b = ff(b, c, d, a, 11, 19)
-		a = ff(a, b, c, d, 12, 3); d = ff(d, a, b, c, 13, 7); c = ff(c, d, a, b, 14, 11); b = ff(b, c, d, a, 15, 19)
+		a = ff(a, b, c, d, 0, 3)
+		d = ff(d, a, b, c, 1, 7)
+		c = ff(c, d, a, b, 2, 11)
+		b = ff(b, c, d, a, 3, 19)
+		a = ff(a, b, c, d, 4, 3)
+		d = ff(d, a, b, c, 5, 7)
+		c = ff(c, d, a, b, 6, 11)
+		b = ff(b, c, d, a, 7, 19)
+		a = ff(a, b, c, d, 8, 3)
+		d = ff(d, a, b, c, 9, 7)
+		c = ff(c, d, a, b, 10, 11)
+		b = ff(b, c, d, a, 11, 19)
+		a = ff(a, b, c, d, 12, 3)
+		d = ff(d, a, b, c, 13, 7)
+		c = ff(c, d, a, b, 14, 11)
+		b = ff(b, c, d, a, 15, 19)
 
 		// Round 2
 		gg := func(a, b, c, d, k uint32, s uint) uint32 {
 			t := a + ((b & c) | (b & d) | (c & d)) + x[k] + 0x5a827999
 			return (t << s) | (t >> (32 - s))
 		}
-		a = gg(a, b, c, d, 0, 3); d = gg(d, a, b, c, 4, 5); c = gg(c, d, a, b, 8, 9); b = gg(b, c, d, a, 12, 13)
-		a = gg(a, b, c, d, 1, 3); d = gg(d, a, b, c, 5, 5); c = gg(c, d, a, b, 9, 9); b = gg(b, c, d, a, 13, 13)
-		a = gg(a, b, c, d, 2, 3); d = gg(d, a, b, c, 6, 5); c = gg(c, d, a, b, 10, 9); b = gg(b, c, d, a, 14, 13)
-		a = gg(a, b, c, d, 3, 3); d = gg(d, a, b, c, 7, 5); c = gg(c, d, a, b, 11, 9); b = gg(b, c, d, a, 15, 13)
+		a = gg(a, b, c, d, 0, 3)
+		d = gg(d, a, b, c, 4, 5)
+		c = gg(c, d, a, b, 8, 9)
+		b = gg(b, c, d, a, 12, 13)
+		a = gg(a, b, c, d, 1, 3)
+		d = gg(d, a, b, c, 5, 5)
+		c = gg(c, d, a, b, 9, 9)
+		b = gg(b, c, d, a, 13, 13)
+		a = gg(a, b, c, d, 2, 3)
+		d = gg(d, a, b, c, 6, 5)
+		c = gg(c, d, a, b, 10, 9)
+		b = gg(b, c, d, a, 14, 13)
+		a = gg(a, b, c, d, 3, 3)
+		d = gg(d, a, b, c, 7, 5)
+		c = gg(c, d, a, b, 11, 9)
+		b = gg(b, c, d, a, 15, 13)
 
 		// Round 3
 		hh := func(a, b, c, d, k uint32, s uint) uint32 {
 			t := a + (b ^ c ^ d) + x[k] + 0x6ed9eba1
 			return (t << s) | (t >> (32 - s))
 		}
-		a = hh(a, b, c, d, 0, 3); d = hh(d, a, b, c, 8, 9); c = hh(c, d, a, b, 4, 11); b = hh(b, c, d, a, 12, 15)
-		a = hh(a, b, c, d, 2, 3); d = hh(d, a, b, c, 10, 9); c = hh(c, d, a, b, 6, 11); b = hh(b, c, d, a, 14, 15)
-		a = hh(a, b, c, d, 1, 3); d = hh(d, a, b, c, 9, 9); c = hh(c, d, a, b, 5, 11); b = hh(b, c, d, a, 13, 15)
-		a = hh(a, b, c, d, 3, 3); d = hh(d, a, b, c, 11, 9); c = hh(c, d, a, b, 7, 11); b = hh(b, c, d, a, 15, 15)
+		a = hh(a, b, c, d, 0, 3)
+		d = hh(d, a, b, c, 8, 9)
+		c = hh(c, d, a, b, 4, 11)
+		b = hh(b, c, d, a, 12, 15)
+		a = hh(a, b, c, d, 2, 3)
+		d = hh(d, a, b, c, 10, 9)
+		c = hh(c, d, a, b, 6, 11)
+		b = hh(b, c, d, a, 14, 15)
+		a = hh(a, b, c, d, 1, 3)
+		d = hh(d, a, b, c, 9, 9)
+		c = hh(c, d, a, b, 5, 11)
+		b = hh(b, c, d, a, 13, 15)
+		a = hh(a, b, c, d, 3, 3)
+		d = hh(d, a, b, c, 11, 9)
+		c = hh(c, d, a, b, 7, 11)
+		b = hh(b, c, d, a, 15, 15)
 
 		a += aa
 		b += bb
@@ -2657,6 +2669,3 @@ func AutoBindPhotos() {
 		}
 	}
 }
-
-
-

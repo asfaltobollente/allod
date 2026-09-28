@@ -74,7 +74,7 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 ### 1. `shares.apply`
 * **Input & Validation**: `name` must match `^[a-zA-Z0-9_-]{1,64}$` (defaults to `"shares"`). `path` must be within `/mnt/allod-storage`, `/data`, or the configured `ALLOD_STORAGE_DIR`, strictly disallowing directory traversal (`..`).
 * **Compromised Panel Impact**: An attacker controlling `allod-panel` could alter Samba share definitions or permissions within `/mnt/allod-storage`. They cannot access arbitrary system paths (`/etc`, `/root`, `/bin`).
-* **Mitigations**: Strict path allowlist validation; system binary paths like `/usr/local/bin` are protected and prevented from being exposed as Samba shares.
+* **Mitigations**: Strict path allowlist validation (`/mnt/allod-storage`, `/data`, `ALLOD_STORAGE_DIR`); system binary paths like `/usr/local/bin` and system directories are strictly rejected.
 * **Idempotency**: Yes, reapplying identical share settings leaves configuration and filesystem in a consistent state.
 * **Support for `plan: true`**: Yes, outputs planned commands without filesystem or Samba mutations.
 
@@ -130,7 +130,7 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 ### 10. `service.restart`
 * **Input & Validation**: `unit` must match `^[a-zA-Z0-9_.-]{1,64}$` AND exist in `AllowedServiceUnits` (`allod-helperd`, `allod-panel`, `smbd`, `smb`, `network`, `network-netbird`, `netbird`, `cloud`, `cloud-postgres`, `photos`, `photos-postgres`, `photos-valkey`, `media`, `backup`, `storage`, `nftables`).
 * **Compromised Panel Impact**: Could restart whitelisted Allod services, causing temporary service interruption.
-* **Mitigations**: Closed allowlist of units; an attacker cannot restart arbitrary host services (e.g., `ssh`, `systemd-journald`, `login`).
+* **Mitigations**: Closed allowlist of units; an attacker cannot restart arbitrary host services (e.g., `ssh`, `systemd-journald`, `login`). `service.restart allod-helperd` solely issues an asynchronous restart and does not copy, overwrite, or replace binaries.
 * **Idempotency**: Yes.
 * **Support for `plan: true`**: Yes.
 

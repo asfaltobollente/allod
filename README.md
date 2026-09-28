@@ -404,7 +404,7 @@ nohup ./allod-panel > panel.log 2>&1 &
 **Production Launch (systemd Services):**
 ```bash
 # 1. Install & start root helper system daemon
-sudo install -m 0755 allod-helperd /usr/local/bin/allod-helperd
+sudo install -o root -g root -m 0755 allod-helperd /usr/local/bin/allod-helperd
 sudo groupadd -f allod && sudo usermod -aG allod $USER
 sudo cp configs/allod-helperd.service /etc/systemd/system/
 sudo systemctl daemon-reload

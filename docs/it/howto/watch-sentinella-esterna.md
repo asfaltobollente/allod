@@ -60,7 +60,7 @@ Se preferisci collegare la VPS direttamente alla tua rete privata WireGuard:
 2. Incolla una **Setup Key** generata dalla dashboard di NetBird (`https://app.netbird.io/setup-keys`).
 3. Clicca **`📋 Copia Comando per VPS`**. Il comando eseguirà:
    ```bash
-   curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key <KEY> && curl -fsSL "http://<IP-MESH-ALLOD>:8080/api/watch/install.sh?mode=mesh" | sudo bash
+   curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key <KEY> && curl -fsSL "http://<IP-MESH-ALLOD>:8080/api/watch/install.sh?mode=mesh&t=<TOKEN>" | sudo bash
    ```
 4. La VPS entrerà nella rete privata ed effettuerà il polling periodico dell'endpoint `/api/health`.
 

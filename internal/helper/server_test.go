@@ -155,8 +155,40 @@ func TestHelperSharesApplySystemBinProtection(t *testing.T) {
 		},
 	}
 	res := s.processRequest(req)
-	if !res.Ok {
-		t.Fatalf("expected shares.apply to succeed, got error: %s", res.Error)
+	if res.Ok {
+		t.Fatalf("expected shares.apply for system binary directory /usr/local/bin to be rejected, but it succeeded")
+	}
+}
+
+func TestIsAllowedPathSecurity(t *testing.T) {
+	allowed := []string{
+		"/mnt/allod-storage",
+		"/mnt/allod-storage/shares",
+		"/mnt/allod-storage/photos/upload",
+		"/data",
+		"/data/shares",
+	}
+	for _, p := range allowed {
+		if !isAllowedPath(p) {
+			t.Errorf("expected isAllowedPath(%q) to be true, got false", p)
+		}
+	}
+
+	disallowed := []string{
+		"/usr/local/bin",
+		"/bin",
+		"/usr/bin",
+		"/etc",
+		"/tmp",
+		"/mnt",
+		"/mnt/other",
+		"/mnt/allod-storage-fake",
+		"/mnt/allod-storage/../etc",
+	}
+	for _, p := range disallowed {
+		if isAllowedPath(p) {
+			t.Errorf("expected isAllowedPath(%q) to be false, got true", p)
+		}
 	}
 }
 
@@ -752,5 +784,3 @@ func TestCountMediaFiles(t *testing.T) {
 		t.Errorf("expected 4 media files, got %d", cnt)
 	}
 }
-
-
