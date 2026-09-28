@@ -4272,6 +4272,58 @@ async function testWatchTelegram() {
   }
 }
 
+async function testWatchDigest() {
+  const city = (document.getElementById('watch-weather-city')?.value || '').trim() || 'Atri';
+  const token = (document.getElementById('watch-telegram-token')?.value || '').trim();
+  let chatId = (document.getElementById('watch-telegram-chat-id')?.value || '').trim();
+  if (chatId === 'undefined') chatId = '';
+  const feedback = document.getElementById('watch-weather-feedback');
+  const btn = document.getElementById('btn-test-watch-digest');
+
+  if (btn) btn.disabled = true;
+  if (feedback) {
+    feedback.style.display = 'block';
+    feedback.style.background = 'rgba(56,189,248,0.15)';
+    feedback.style.color = '#38bdf8';
+    feedback.style.border = '1px solid rgba(56,189,248,0.3)';
+    feedback.textContent = `⏳ Recupero previsioni meteo per "${city}" e invio resoconto su Telegram...`;
+  }
+
+  try {
+    const res = await fetch('/api/watch/test-digest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city: city, bot_token: token, chat_id: chatId })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      if (feedback) {
+        feedback.style.background = 'rgba(16,185,129,0.15)';
+        feedback.style.color = '#34d399';
+        feedback.style.border = '1px solid rgba(16,185,129,0.3)';
+        feedback.innerHTML = `✅ <strong>${json.message}</strong><br><small style="color:var(--text-main); font-family:sans-serif; margin-top:5px; display:inline-block;">${json.data?.weather || ''}</small>`;
+      }
+      await saveWatchConfig(false);
+    } else {
+      if (feedback) {
+        feedback.style.background = 'rgba(239,68,68,0.15)';
+        feedback.style.color = '#f87171';
+        feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+        feedback.innerHTML = `❌ <strong>${json.message}</strong>`;
+      }
+    }
+  } catch (err) {
+    if (feedback) {
+      feedback.style.background = 'rgba(239,68,68,0.15)';
+      feedback.style.color = '#f87171';
+      feedback.style.border = '1px solid rgba(239,68,68,0.3)';
+      feedback.textContent = '❌ Errore invio: ' + err.message;
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function testWatchPush() {
   let host = (document.getElementById('watch-vps-host')?.value || '').trim();
   host = host.replace(/^https?:\/\//i, '').replace(/\/+$/, '');

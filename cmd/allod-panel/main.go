@@ -870,6 +870,83 @@ func main() {
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Message: "Messaggio di prova inviato con successo! Controlla la chat Telegram."})
 	})
 
+	// 2g-2. API Watch Test Digest (POST /api/watch/test-digest)
+	mux.HandleFunc("/api/watch/test-digest", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var req struct {
+			City   string `json:"city"`
+			Token  string `json:"bot_token"`
+			ChatID string `json:"chat_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		city := strings.TrimSpace(req.City)
+		token := strings.TrimSpace(req.Token)
+		chatID := strings.TrimSpace(req.ChatID)
+
+		st, err := state.Open(dbPath)
+		if err == nil {
+			cfg, _ := st.GetSentinelConfig()
+			st.Close()
+			if cfg != nil {
+				if city == "" {
+					city = strings.TrimSpace(cfg.WeatherCity)
+				}
+				if token == "" {
+					token = strings.TrimSpace(cfg.TelegramBotToken)
+				}
+				if chatID == "" {
+					chatID = strings.TrimSpace(cfg.TelegramChatID)
+				}
+			}
+		}
+		if city == "" {
+			city = "Atri"
+		}
+		if token == "" || chatID == "" {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Token del bot e Chat ID sono entrambi necessari per inviare il resoconto di test."})
+			return
+		}
+
+		weatherClient := watch.NewWeatherClient()
+		wForecast, wErr := weatherClient.GetDailyForecast(city)
+		var weatherStr string
+		if wErr == nil {
+			weatherStr = wForecast
+		} else {
+			weatherStr = fmt.Sprintf("🌤️ %s (Meteo temporaneamente non disponibile: %v)", city, wErr)
+		}
+
+		client := watch.NewTelegramNotifier(token, chatID, 0)
+		report := watch.DigestReport{
+			NodeName:      "allod-ferretti",
+			Uptime:        24 * time.Hour,
+			StorageStatus: "Integro e Sano (Btrfs RAID 1)",
+			StorageUsed:   "N/D",
+			StorageFree:   "N/D",
+			RAMUsedMB:     1680,
+			RAMTotalMB:    7746,
+			ActiveModules: []string{"shares", "storage", "watch", "media", "network", "photos"},
+			WeatherInfo:   weatherStr,
+		}
+		if err := client.SendDailyDigest(report); err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Invio fallito: " + err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Resoconto con meteo per '%s' inviato con successo su Telegram!", city),
+			Data: map[string]interface{}{
+				"weather": weatherStr,
+			},
+		})
+	})
+
 	// 2h. API Watch Installer Script (GET /api/watch/install.sh)
 	mux.HandleFunc("/api/watch/install.sh", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
