@@ -371,6 +371,16 @@ export async function loadZeroConfigStatus() {
       const lanText = document.getElementById('zeroconfig-lan-ip');
 
       if (lanText && d.lan_ip) lanText.textContent = d.lan_ip;
+      const nbBox = document.getElementById('zeroconfig-netbird-info');
+      const nbText = document.getElementById('zeroconfig-netbird-ip');
+      if (nbBox && nbText) {
+        if (d.netbird_active && d.netbird_ip) {
+          nbText.textContent = d.netbird_ip;
+          nbBox.style.display = 'block';
+        } else {
+          nbBox.style.display = 'none';
+        }
+      }
       if (mdnsBadge) {
         if (d.avahi_active) {
           mdnsBadge.textContent = '✓ Attivo (allod.local)';
