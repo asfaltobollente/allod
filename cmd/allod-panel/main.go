@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -951,12 +950,31 @@ func main() {
 	mux.HandleFunc("/api/watch/install.sh", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
+		authorized := false
 		st, err := state.Open(dbPath)
 		var cfg *state.SentinelConfigRecord
 		if err == nil {
+			if admToken := panel.GetSessionToken(r, panel.AdminCookieName); admToken != "" {
+				if sess, errGet := st.GetSession(admToken); errGet == nil && sess != nil && sess.UserType == "admin" {
+					authorized = true
+				}
+			}
 			cfg, _ = st.GetSentinelConfig()
 			st.Close()
 		}
+
+		if !authorized {
+			tokenParam := strings.TrimSpace(r.URL.Query().Get("t"))
+			if tokenParam != "" && globalWatchInstallTokens.ValidateAndConsume(tokenParam) {
+				authorized = true
+			}
+		}
+
+		if !authorized {
+			http.Error(w, "Accesso negato: richiesta autenticazione admin o token monouso valido (&t=...)", http.StatusForbidden)
+			return
+		}
+
 		if cfg == nil {
 			cfg = &state.SentinelConfigRecord{
 				Mode:                 "receiver",
@@ -1293,21 +1311,6 @@ fi
 			}
 		}
 
-		// If not found on disk, attempt on-demand cross-compilation if go toolchain is present
-		if targetPath == "" {
-			if _, err := exec.LookPath("go"); err == nil {
-				_ = os.MkdirAll("bin", 0755)
-				outPath := filepath.Join("bin", fmt.Sprintf("allod-watch-linux-%s", arch))
-				cmd := exec.Command("go", "build", "-ldflags", "-s -w", "-o", outPath, "./cmd/allod-watch")
-				cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+arch, "CGO_ENABLED=0")
-				if out, err := cmd.CombinedOutput(); err == nil {
-					targetPath = outPath
-				} else {
-					log.Printf("[WATCH] Compilazione on-demand fallita: %v, out: %s", err, string(out))
-				}
-			}
-		}
-
 		if targetPath == "" {
 			http.Error(w, fmt.Sprintf("Binario allod-watch per architettura %s non disponibile", arch), http.StatusNotFound)
 			return
@@ -1317,6 +1320,9 @@ fi
 		w.Header().Set("Content-Disposition", "attachment; filename=allod-watch")
 		http.ServeFile(w, r, targetPath)
 	})
+
+	// 2i-2. API Watch Generate Install Token (POST /api/watch/install-token)
+	mux.HandleFunc("/api/watch/install-token", HandleWatchInstallToken)
 
 	// 2j. API Watch Generate Secret Token (POST /api/watch/generate-token)
 	mux.HandleFunc("/api/watch/generate-token", func(w http.ResponseWriter, r *http.Request) {
@@ -2067,111 +2073,6 @@ fi
 		})
 	})
 
-
-	upgradeAndRestartHelper := func(client *helper.Client, logReport *strings.Builder) error {
-		cwd, _ := os.Getwd()
-
-		// 1. Where could the new helper binary be?
-		tmpHelper := filepath.Join(os.TempDir(), "allod-helperd-update")
-		candidates := []string{
-			tmpHelper,
-			filepath.Join(cwd, "allod-helperd"),
-			"allod-helperd",
-			filepath.Join(cwd, "allod-helperd.new"),
-		}
-		var helperBytes []byte
-		var foundPath string
-		for _, p := range candidates {
-			if data, err := os.ReadFile(p); err == nil && len(data) > 0 {
-				helperBytes = data
-				foundPath = p
-				if logReport != nil {
-					logReport.WriteString(fmt.Sprintf("✓ Trovato binario helper: %s (%d byte)\n", p, len(data)))
-				}
-				break
-			}
-		}
-
-		if len(helperBytes) == 0 {
-			// Compile now if not found
-			cmdBuild := exec.Command("go", "build", "-o", tmpHelper, "./cmd/allod-helperd")
-			if out, errB := cmdBuild.CombinedOutput(); errB == nil {
-				if data, errR := os.ReadFile(tmpHelper); errR == nil && len(data) > 0 {
-					helperBytes = data
-					foundPath = tmpHelper
-					if logReport != nil {
-						logReport.WriteString(fmt.Sprintf("✓ Compilato helper in %s (%d byte)\n", tmpHelper, len(data)))
-					}
-				}
-			} else if logReport != nil {
-				logReport.WriteString(fmt.Sprintf("⚠️ Errore compilazione helper: %v (%s)\n", errB, strings.TrimSpace(string(out))))
-			}
-		}
-
-		if len(helperBytes) > 0 {
-			// Step 1: Ensure /usr/local/bin is writable via helper shares.apply
-			// Pass BOTH 'name' and 'path' to work with older and newer helper daemons!
-			if client != nil {
-				_, _ = client.Execute("shares.apply", map[string]interface{}{
-					"name": "shares",
-					"path": "/usr/local/bin",
-				}, false)
-			}
-
-			// Step 2: Write to /usr/local/bin/allod-helperd.tmp and atomic rename to bypass ETXTBSY
-			tmpDst := "/usr/local/bin/allod-helperd.tmp"
-			_ = os.Remove(tmpDst)
-			copied := false
-			if errW := os.WriteFile(tmpDst, helperBytes, 0755); errW == nil {
-				_ = os.Rename(tmpDst, "/usr/local/bin/allod-helperd")
-				copied = true
-			} else {
-				// Direct unlink and copy
-				_ = os.Remove("/usr/local/bin/allod-helperd")
-				_ = exec.Command("sudo", "-n", "rm", "-f", "/usr/local/bin/allod-helperd").Run()
-				if errDirect := os.WriteFile("/usr/local/bin/allod-helperd", helperBytes, 0755); errDirect == nil {
-					copied = true
-				} else if errCp := exec.Command("cp", "-f", foundPath, "/usr/local/bin/allod-helperd").Run(); errCp == nil {
-					copied = true
-				} else if errSudo := exec.Command("sudo", "-n", "cp", "-f", foundPath, "/usr/local/bin/allod-helperd").Run(); errSudo == nil {
-					copied = true
-				}
-			}
-
-			// Ensure permissions
-			_ = os.Chmod("/usr/local/bin/allod-helperd", 0755)
-			_ = exec.Command("chmod", "0755", "/usr/local/bin/allod-helperd").Run()
-			_ = exec.Command("sudo", "-n", "chmod", "0755", "/usr/local/bin/allod-helperd").Run()
-
-			// Also copy allod cli if available
-			_ = os.Remove("/usr/local/bin/allod")
-			_ = exec.Command("cp", "-f", "allod", "/usr/local/bin/allod").Run()
-			_ = exec.Command("sudo", "-n", "cp", "-f", "allod", "/usr/local/bin/allod").Run()
-
-			// Restore /usr/local/bin permissions
-			_ = exec.Command("chmod", "0755", "/usr/local/bin").Run()
-			_ = exec.Command("sudo", "-n", "chmod", "0755", "/usr/local/bin").Run()
-
-			if copied {
-				if logReport != nil {
-					logReport.WriteString("✓ allod-helperd aggiornato con successo in /usr/local/bin/allod-helperd\n")
-				}
-			} else if logReport != nil {
-				logReport.WriteString("ℹ️ Impossibile scrivere in /usr/local/bin/allod-helperd\n")
-			}
-		}
-
-		// Step 3: Restart allod-helperd
-		if client != nil {
-			res, err := client.Execute("service.restart", map[string]interface{}{"unit": "allod-helperd"}, false)
-			if err != nil || !res.Ok {
-				_ = exec.Command("sudo", "-n", "systemctl", "restart", "allod-helperd").Run()
-				_ = exec.Command("sudo", "-n", "chmod", "0666", "/run/allod/helper.sock").Run()
-			}
-		}
-		return nil
-	}
-
 	// 5a-5. API System Self-Update & Restart
 	mux.HandleFunc("/api/system/self-update", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2224,22 +2125,12 @@ fi
 		_ = os.Rename("allod.new", "allod")
 		_ = os.Chmod("allod", 0755)
 
-		// Build allod-helperd to /tmp/allod-helperd-update (guaranteed write access)
-		tmpHelper := filepath.Join(os.TempDir(), "allod-helperd-update")
-		_ = os.Remove(tmpHelper)
-		buildHelperOut, errH := buildGoBinary(tmpHelper, "./cmd/allod-helperd")
-		logReport.WriteString(fmt.Sprintf("[go build -o %s ./cmd/allod-helperd]\n%s\n", tmpHelper, string(buildHelperOut)))
-		if errH == nil {
-			_ = os.Remove("allod-helperd")
-			_ = exec.Command("cp", "-f", tmpHelper, "allod-helperd").Run()
-		}
-
-		// Upgrade and restart allod-helperd
+		// Upgrade and restart allod-helperd securely
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-		if err := upgradeAndRestartHelper(&client, &logReport); err == nil {
+		if resHelper, errH := UpgradeAndRestartHelper(&client, &logReport); errH == nil && resHelper.RestartQueued {
 			logReport.WriteString("✓ Demone Root Helper (allod-helperd) aggiornato e riavviato!\n")
-		} else {
-			logReport.WriteString(fmt.Sprintf("ℹ️ Riavvio allod-helperd: %v\n", err))
+		} else if errH != nil {
+			logReport.WriteString(fmt.Sprintf("ℹ️ allod-helperd: %v\n", errH))
 		}
 
 		// Sync existing family members into Linux OS so accounts like 'mario' exist in /etc/passwd
@@ -2285,22 +2176,13 @@ fi
 		}
 
 		var logReport strings.Builder
-		// Compile allod-helperd to temp path first
-		tmpHelper := filepath.Join(os.TempDir(), "allod-helperd-update")
-		_ = os.Remove(tmpHelper)
-		buildHelperOut, errH := exec.Command("go", "build", "-o", tmpHelper, "./cmd/allod-helperd").CombinedOutput()
-		logReport.WriteString(fmt.Sprintf("[go build -o %s ./cmd/allod-helperd]\n%s\n", tmpHelper, string(buildHelperOut)))
-		if errH == nil {
-			_ = os.Remove("allod-helperd")
-			_ = exec.Command("cp", "-f", tmpHelper, "allod-helperd").Run()
-		}
-
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-		if err := upgradeAndRestartHelper(&client, &logReport); err != nil {
+		resHelper, errH := UpgradeAndRestartHelper(&client, &logReport)
+		if errH != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{
 				Status:  "error",
-				Message: "Errore riavvio helper: " + err.Error(),
+				Message: "Errore compilazione helper: " + errH.Error(),
 				Data:    map[string]interface{}{"log": logReport.String(), "output": logReport.String()},
 			})
 			return
@@ -2320,10 +2202,15 @@ fi
 			st.Close()
 		}
 
+		msg := "✓ Demone Root Helper (allod-helperd) aggiornato e riavviato!"
+		if !resHelper.RestartQueued && resHelper.ManualCommand != "" {
+			msg = "Compilazione helper completata. Per applicare l'aggiornamento, esegui il comando sudo install sul server."
+		}
+
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
-			Message: "✓ Demone Root Helper (allod-helperd) aggiornato, riavviato e utenti sincronizzati!",
-			Data:    map[string]interface{}{"log": logReport.String(), "output": logReport.String()},
+			Message: msg,
+			Data:    map[string]interface{}{"manual_command": resHelper.ManualCommand, "log": logReport.String(), "output": logReport.String()},
 		})
 	})
 
@@ -3620,109 +3507,7 @@ WantedBy=default.target
 	})
 
 	// 5a-21. API Portal Set Password
-	mux.HandleFunc("/api/portal/set-password", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var req struct {
-			Token       string `json:"token"`
-			Username    string `json:"username"`
-			NewPassword string `json:"new_password"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
-			return
-		}
-
-		if len(req.NewPassword) < 4 {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La nuova password deve contenere almeno 4 caratteri"})
-			return
-		}
-
-		st, err := state.Open(dbPath)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore database: " + err.Error()})
-			return
-		}
-		defer st.Close()
-
-		targetUser := ""
-		if req.Token != "" {
-			member, errVal := st.ValidateResetToken(req.Token)
-			if errVal != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: errVal.Error()})
-				return
-			}
-			targetUser = member.Username
-		} else if req.Username != "" {
-			targetUser = strings.ToLower(strings.TrimSpace(req.Username))
-			m, errMem := st.GetFamilyMember(targetUser)
-			if errMem != nil || m == nil {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Utente non trovato"})
-				return
-			}
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Token o nome utente richiesto"})
-			return
-		}
-
-		// Set Samba password via root helper
-		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-		// Ensure system user exists in Linux (/etc/passwd) first
-		if errEnsure := ensureSystemUser(&client, targetUser); errEnsure != nil {
-			log.Printf("[portal] Avviso ensureSystemUser: %v", errEnsure)
-		}
-
-		errSmb := client.SetSambaPassword(targetUser, req.NewPassword)
-		if errSmb != nil {
-			// Retry once after ensuring user
-			_ = ensureSystemUser(&client, targetUser)
-			errSmb = client.SetSambaPassword(targetUser, req.NewPassword)
-		}
-
-		if errSmb != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(PanelResponse{
-				Status:  "error",
-				Message: fmt.Sprintf("Errore aggiornamento password Samba: %v", errSmb),
-			})
-			return
-		}
-
-		// Save password hash into family member record in state.db
-		if salt, errSalt := panel.GenerateSalt(); errSalt == nil {
-			hash := panel.HashPassword(req.NewPassword, salt)
-			_ = st.SetFamilyMemberPassword(targetUser, hash, hex.EncodeToString(salt))
-		}
-
-		// Create session cookie so the user is immediately authenticated in the portal
-		token, errSess := st.CreateSession("family", targetUser, panel.SessionDuration)
-		if errSess == nil {
-			panel.SetSessionCookie(w, panel.FamilyCookieName, token, int(panel.SessionDuration.Seconds()))
-		}
-
-		// Consume token if one was used
-		if req.Token != "" {
-			_ = st.ConsumeResetToken(req.Token)
-		}
-
-		json.NewEncoder(w).Encode(PanelResponse{
-			Status:  "ok",
-			Message: fmt.Sprintf("Password personale per '%s' impostata con successo!", targetUser),
-			Data: map[string]interface{}{
-				"username": targetUser,
-			},
-		})
-	})
+	mux.HandleFunc("/api/portal/set-password", HandlePortalSetPassword(dbPath, ensureSystemUser))
 
 	// 5a-22. API Zero-Config Status
 	mux.HandleFunc("/api/zeroconfig/status", func(w http.ResponseWriter, r *http.Request) {
