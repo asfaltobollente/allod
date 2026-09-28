@@ -141,7 +141,7 @@ func ensureModuleSecret(module, key, legacyValue string) error {
 	return os.WriteFile(secFile, []byte(envContent), 0600)
 }
 
-// EnsureStorageDirectories creates all host volume mount paths with permissive access.
+// EnsureStorageDirectories creates all host volume mount paths with secure group-accessible permissions.
 func EnsureStorageDirectories(modID string) {
 	baseDir := ResolvedStorageBaseDir()
 	var dirs []string
@@ -153,8 +153,8 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "cloud", "postgres"),
 		}
 		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0777)
-			_ = os.Chmod(d, 0777)
+			_ = os.MkdirAll(d, 0770)
+			_ = os.Chmod(d, 0770)
 		}
 		_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "secrets"), 0700)
 		_ = ensureModuleSecret("cloud", "postgres", legacyCloudPostgresPassword)
@@ -166,8 +166,8 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "photos", "valkey"),
 		}
 		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0777)
-			_ = os.Chmod(d, 0777)
+			_ = os.MkdirAll(d, 0770)
+			_ = os.Chmod(d, 0770)
 		}
 		_ = os.MkdirAll(filepath.Join(baseDir, "photos", "secrets"), 0700)
 		_ = ensureModuleSecret("photos", "postgres", legacyPhotosPostgresPassword)
@@ -188,8 +188,8 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "shares", "public", "music"),
 		}
 		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0777)
-			_ = os.Chmod(d, 0777)
+			_ = os.MkdirAll(d, 0770)
+			_ = os.Chmod(d, 0770)
 		}
 	case "media":
 		dirs = []string{
@@ -214,8 +214,8 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "media", "config"),
 		}
 		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0777)
-			_ = os.Chmod(d, 0777)
+			_ = os.MkdirAll(d, 0770)
+			_ = os.Chmod(d, 0770)
 		}
 	case "network":
 		nbCfgDir := filepath.Join(baseDir, "network", "netbird")
@@ -224,7 +224,7 @@ func EnsureStorageDirectories(modID string) {
 			nbCfgDir,
 		}
 		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0777)
+			_ = os.MkdirAll(d, 0750)
 		}
 		_ = os.MkdirAll(netSecretsDir, 0700)
 		netbirdEnv := filepath.Join(netSecretsDir, "netbird.env")
@@ -239,7 +239,7 @@ func EnsureStorageDirectories(modID string) {
 	}
 
 	for _, d := range dirs {
-		_ = os.MkdirAll(d, 0777)
+		_ = os.MkdirAll(d, 0770)
 	}
 }
 
@@ -338,41 +338,41 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 	case "cloud":
 		_ = ensureModuleSecret("cloud", "postgres", legacyCloudPostgresPassword)
 		if isPrimary {
-			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/html:/var/www/html:Z\n", baseDir))
-			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/data:/var/www/html/data:Z\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/html:/var/www/html:Z,U\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/data:/var/www/html/data:Z,U\n", baseDir))
 			if strings.Contains(img.Ref, "nextcloud") {
 				sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/cloud/secrets/postgres.env\n", baseDir))
 			}
 		} else if strings.Contains(img.Ref, "postgres") {
-			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/postgres:/var/lib/postgresql/data:Z\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/cloud/postgres:/var/lib/postgresql/data:Z,U\n", baseDir))
 			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/cloud/secrets/postgres.env\n", baseDir))
 		}
 	case "photos":
 		_ = ensureModuleSecret("photos", "postgres", legacyPhotosPostgresPassword)
 		if isPrimary {
-			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/usr/src/app/upload:Z\n", baseDir))
-			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/data:Z\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/usr/src/app/upload:Z,U\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/photos/upload:/data:Z,U\n", baseDir))
 			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/photos/secrets/postgres.env\n", baseDir))
 		} else if strings.Contains(img.Ref, "postgres") {
-			sb.WriteString(fmt.Sprintf("Volume=%s/photos/postgres:/var/lib/postgresql/data:Z\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/photos/postgres:/var/lib/postgresql/data:Z,U\n", baseDir))
 			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/photos/secrets/postgres.env\n", baseDir))
 			sb.WriteString("ShmSize=128m\n")
 		} else if strings.Contains(img.Ref, "valkey") {
-			sb.WriteString(fmt.Sprintf("Volume=%s/photos/valkey:/data:Z\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/photos/valkey:/data:Z,U\n", baseDir))
 		}
 	case "backup":
-		sb.WriteString(fmt.Sprintf("Volume=%s/backup/vault:/data:Z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/backup/vault:/data:Z,U\n", baseDir))
 	case "media":
-		sb.WriteString(fmt.Sprintf("Volume=%s/media/config:/config:Z\n", baseDir))
-		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/media:z\n", baseDir))
-		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/shares/public:z\n", baseDir))
-		sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/media/config:/config:Z,U\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/media:z,U\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/shares/public:z,U\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z,ro\n", baseDir))
 	case "network":
 		sb.WriteString(fmt.Sprintf("Volume=%s/network/netbird:/var/lib/netbird:Z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("Volume=%s/network/netbird:/etc/netbird:Z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/secrets/netbird.env\n", baseDir))
 	default:
-		sb.WriteString(fmt.Sprintf("Volume=%s/%s:/data:Z\n", baseDir, m.ID))
+		sb.WriteString(fmt.Sprintf("Volume=%s/%s:/data:Z,U\n", baseDir, m.ID))
 	}
 
 	if m.Privileges.Userns == "host" {

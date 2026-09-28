@@ -1747,13 +1747,13 @@ fi
 
 		baseDir := quadlet.ResolvedStorageBaseDir()
 		if req.Module == "photos" {
-			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "upload"), 0777)
-			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "postgres"), 0777)
-			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "valkey"), 0777)
+			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "upload"), 0770)
+			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "postgres"), 0770)
+			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "valkey"), 0770)
 		} else if req.Module == "cloud" {
-			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "html"), 0777)
-			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "data"), 0777)
-			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "postgres"), 0777)
+			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "html"), 0770)
+			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "data"), 0770)
+			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "postgres"), 0770)
 		} else if req.Module == "media" {
 			mediaDirs := []string{
 				filepath.Join(baseDir, "media", "config"),
@@ -1767,12 +1767,11 @@ fi
 				filepath.Join(baseDir, "shares", "musica"),
 			}
 			for _, md := range mediaDirs {
-				_ = os.MkdirAll(md, 0777)
-				_ = os.Chmod(md, 0777)
+				_ = os.MkdirAll(md, 0770)
+				_ = os.Chmod(md, 0770)
 			}
-			_ = exec.Command("chmod", "-R", "0777", filepath.Join(baseDir, "shares")).Run()
 		} else {
-			_ = os.MkdirAll(filepath.Join(baseDir, req.Module), 0777)
+			_ = os.MkdirAll(filepath.Join(baseDir, req.Module), 0770)
 		}
 
 		reloadOut, _ := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput()
