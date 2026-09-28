@@ -42,9 +42,9 @@ func HandlePortalSetPassword(dbPath string, ensureSysUser func(client *helper.Cl
 			return
 		}
 
-		if len(req.NewPassword) < 4 {
+		if len(req.NewPassword) < 8 {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La nuova password deve contenere almeno 4 caratteri"})
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La nuova password deve contenere almeno 8 caratteri"})
 			return
 		}
 

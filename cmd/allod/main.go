@@ -1147,8 +1147,8 @@ var adminPasswordResetCmd = &cobra.Command{
 			newPass = strings.TrimSpace(line)
 		}
 
-		if len(newPass) < 6 {
-			fmt.Println("Errore: la password deve contenere almeno 6 caratteri.")
+		if len(newPass) < 12 {
+			fmt.Println("Errore: la password deve contenere almeno 12 caratteri.")
 			os.Exit(1)
 		}
 

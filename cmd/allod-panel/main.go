@@ -2618,9 +2618,9 @@ WantedBy=default.target
 			}
 		}
 
-		if len(req.Password) < 4 {
+		if len(req.Password) < 8 {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 8 caratteri"})
 			return
 		}
 
@@ -2740,9 +2740,9 @@ WantedBy=default.target
 			return
 		}
 
-		if len(req.Password) < 4 {
+		if len(req.Password) < 8 {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 8 caratteri"})
 			return
 		}
 
@@ -3140,9 +3140,9 @@ WantedBy=default.target
 			return
 		}
 
-		if req.Password != "" && len(req.Password) < 4 {
+		if req.Password != "" && len(req.Password) < 8 {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 8 caratteri"})
 			return
 		}
 
@@ -3357,9 +3357,9 @@ WantedBy=default.target
 			return
 		}
 
-		if len(req.Password) < 4 {
+		if len(req.Password) < 8 {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 4 caratteri"})
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 8 caratteri"})
 			return
 		}
 

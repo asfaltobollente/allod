@@ -1278,9 +1278,9 @@ sudo systemctl enable --now allod-helperd</pre>
         <form id="form-set-member-pass" onsubmit="event.preventDefault(); submitSetMemberPassword();">
           <input type="hidden" id="set-pass-username" value="">
           <div class="form-group mb-3">
-            <label for="set-pass-input" style="font-size:12px; font-weight:600;">Nuova Password (min. 4 caratteri):</label>
+            <label for="set-pass-input" style="font-size:12px; font-weight:600;">Nuova Password (min. 8 caratteri):</label>
             <div style="display:flex; gap:6px;">
-              <input type="password" id="set-pass-input" class="form-control" placeholder="••••••••" required minlength="4">
+              <input type="password" id="set-pass-input" class="form-control" placeholder="••••••••" required minlength="8">
               <button type="button" class="btn btn-sm btn-secondary" onclick="togglePasswordVisibility('set-pass-input')" style="padding:0 10px;" title="Mostra/Nascondi Password">👁️</button>
             </div>
           </div>
