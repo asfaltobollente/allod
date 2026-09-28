@@ -490,26 +490,31 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		plan := []string{
-			fmt.Sprintf("mkdir -p %s && chmod -R 0777 %s", path, path),
+			fmt.Sprintf("mkdir -p %s && chmod 2770 %s", path, path),
 			fmt.Sprintf("configure share [%s] at %s in /etc/samba/smb.conf", name, path),
 			"systemctl restart smbd",
 		}
 
 		if !req.Plan {
-			_ = os.MkdirAll(path, 0777)
-			_ = exec.Command("chmod", "-R", "0777", path).Run()
+			_ = exec.Command("groupadd", "-f", "allod-data").Run()
 
-			// Ensure public folder and media subfolders
+			_ = os.MkdirAll(path, 0770)
+			_ = exec.Command("chmod", "2770", path).Run()
+			_ = exec.Command("chown", "root:allod-data", path).Run()
+
+			// Ensure public folder and media subfolders with 2770
 			pubPath := filepath.Join(path, "public")
 			if strings.HasSuffix(path, "/public") {
 				pubPath = path
 			}
-			_ = os.MkdirAll(pubPath, 0777)
-			_ = exec.Command("chmod", "-R", "0777", pubPath).Run()
+			_ = os.MkdirAll(pubPath, 0770)
+			_ = exec.Command("chmod", "2770", pubPath).Run()
+			_ = exec.Command("chown", "root:allod-data", pubPath).Run()
 			for _, sub := range []string{"film", "musica", "serie", "movies", "tv", "music"} {
 				subDir := filepath.Join(pubPath, sub)
-				_ = os.MkdirAll(subDir, 0777)
-				_ = exec.Command("chmod", "0777", subDir).Run()
+				_ = os.MkdirAll(subDir, 0770)
+				_ = exec.Command("chmod", "2770", subDir).Run()
+				_ = exec.Command("chown", "root:allod-data", subDir).Run()
 			}
 
 			smbConf := "/etc/samba/smb.conf"
@@ -680,11 +685,11 @@ func (s *Server) processRequest(req Request) Response {
 			}
 			_ = exec.Command(smbpasswdBin, "-e", username).Run()
 
-			// Ensure user directory /mnt/allod-storage/shares/<username> exists
+			// Ensure user directory /mnt/allod-storage/shares/<username> exists with 2700
 			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
-			_ = os.MkdirAll(userSharePath, 0770)
+			_ = os.MkdirAll(userSharePath, 0700)
 			chmodBin := resolveExecutable("chmod", "/bin/chmod", "/usr/bin/chmod")
-			_ = exec.Command(chmodBin, "0770", userSharePath).Run()
+			_ = exec.Command(chmodBin, "2700", userSharePath).Run()
 			chownBin := resolveExecutable("chown", "/bin/chown", "/usr/bin/chown")
 			_ = exec.Command(chownBin, "-R", fmt.Sprintf("%s:%s", username, username), userSharePath).Run()
 
@@ -854,8 +859,8 @@ func (s *Server) processRequest(req Request) Response {
 			fmt.Sprintf("mkdir -p %s", mountPoint),
 			fmt.Sprintf("mount %s %s", disks[0], mountPoint),
 			fmt.Sprintf("mkdir -p %s/{cloud,photos,shares,backup,media}", mountPoint),
-			fmt.Sprintf("chmod -R 0777 %s", mountPoint),
-			fmt.Sprintf("chown -R %s:%s %s", username, username, mountPoint),
+			fmt.Sprintf("chmod 2770 %s", mountPoint),
+			fmt.Sprintf("chown root:allod-data %s", mountPoint),
 		}
 
 		if !req.Plan {
@@ -877,12 +882,15 @@ func (s *Server) processRequest(req Request) Response {
 			if err := exec.Command("mkfs.btrfs", args...).Run(); err != nil {
 				return Response{Ok: false, Error: fmt.Sprintf("Errore mkfs.btrfs: %v", err)}
 			}
-			_ = os.MkdirAll(mountPoint, 0777)
+			_ = os.MkdirAll(mountPoint, 0770)
 			firstDisk := disks[0]
 			if !strings.HasPrefix(firstDisk, "/dev/") {
 				firstDisk = "/dev/" + firstDisk
 			}
 			_ = exec.Command("mount", firstDisk, mountPoint).Run()
+
+			// Ensure service group allod-data exists
+			_ = exec.Command("groupadd", "-f", "allod-data").Run()
 
 			subdirs := []string{
 				"cloud", "cloud/html", "cloud/data", "cloud/postgres",
@@ -892,12 +900,13 @@ func (s *Server) processRequest(req Request) Response {
 				"media", "media/data", "media/config",
 			}
 			for _, sub := range subdirs {
-				_ = os.MkdirAll(filepath.Join(mountPoint, sub), 0777)
+				p := filepath.Join(mountPoint, sub)
+				_ = os.MkdirAll(p, 0770)
+				_ = exec.Command("chmod", "2770", p).Run()
+				_ = exec.Command("chown", "root:allod-data", p).Run()
 			}
-			_ = exec.Command("chmod", "-R", "0777", mountPoint).Run()
-			if username != "root" {
-				_ = exec.Command("chown", "-R", fmt.Sprintf("%s:%s", username, username), mountPoint).Run()
-			}
+			_ = exec.Command("chmod", "2770", mountPoint).Run()
+			_ = exec.Command("chown", "root:allod-data", mountPoint).Run()
 		}
 
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
