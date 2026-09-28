@@ -435,12 +435,12 @@
       <form id="form-token" onsubmit="event.preventDefault(); submitTokenSetup();">
         <div class="form-group">
           <label for="token-pass">Nuova Password Personale:</label>
-          <input type="password" id="token-pass" class="form-control" placeholder="Minimo 4 caratteri" minlength="4" required>
+          <input type="password" id="token-pass" class="form-control" placeholder="Minimo 8 caratteri" minlength="8" required>
         </div>
 
         <div class="form-group">
           <label for="token-confirm">Conferma Nuova Password:</label>
-          <input type="password" id="token-confirm" class="form-control" placeholder="Ripeti la password" minlength="4" required>
+          <input type="password" id="token-confirm" class="form-control" placeholder="Ripeti la password" minlength="8" required>
         </div>
 
         <button type="submit" id="btn-token-submit" class="btn">
@@ -550,12 +550,12 @@
 
           <div class="form-group">
             <label for="change-new-pass">Nuova Password:</label>
-            <input type="password" id="change-new-pass" class="form-control" placeholder="Minimo 4 caratteri" minlength="4" required>
+            <input type="password" id="change-new-pass" class="form-control" placeholder="Minimo 8 caratteri" minlength="8" required>
           </div>
 
           <div class="form-group">
             <label for="change-confirm-pass">Conferma Nuova Password:</label>
-            <input type="password" id="change-confirm-pass" class="form-control" placeholder="Ripeti la nuova password" minlength="4" required>
+            <input type="password" id="change-confirm-pass" class="form-control" placeholder="Ripeti la nuova password" minlength="8" required>
           </div>
 
           <button type="submit" id="btn-change-submit" class="btn">
@@ -695,8 +695,8 @@
       const p1 = document.getElementById('token-pass').value;
       const p2 = document.getElementById('token-confirm').value;
 
-      if (p1.length < 4) {
-        showAlert('La password deve contenere almeno 4 caratteri');
+      if (p1.length < 8) {
+        showAlert('La password deve contenere almeno 8 caratteri');
         return;
       }
       if (p1 !== p2) {
@@ -870,8 +870,8 @@
       const newPass = document.getElementById('change-new-pass').value;
       const confPass = document.getElementById('change-confirm-pass').value;
 
-      if (newPass.length < 4) {
-        showAlert('La nuova password deve contenere almeno 4 caratteri');
+      if (newPass.length < 8) {
+        showAlert('La nuova password deve contenere almeno 8 caratteri');
         return;
       }
       if (newPass !== confPass) {

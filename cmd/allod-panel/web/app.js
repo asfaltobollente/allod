@@ -3181,8 +3181,8 @@ async function saveSmbPassword() {
   const username = (userInput && userInput.value.trim()) || ((currentStatus && currentStatus.user) ? currentStatus.user : 'user');
   const password = passInput ? passInput.value : '';
 
-  if (!password || password.length < 4) {
-    showAlert('La password deve contenere almeno 4 caratteri', 'warning');
+  if (!password || password.length < 8) {
+    showAlert('La password deve contenere almeno 8 caratteri', 'warning');
     if (passInput) passInput.focus();
     return;
   }
@@ -3481,8 +3481,8 @@ async function submitCreateFamilyMember() {
     if (uInput) uInput.focus();
     return;
   }
-  if (isManual && (!password || password.length < 4)) {
-    showAlert('La password manuale deve contenere almeno 4 caratteri', 'warning');
+  if (isManual && (!password || password.length < 8)) {
+    showAlert('La password manuale deve contenere almeno 8 caratteri', 'warning');
     if (manualPassInput) manualPassInput.focus();
     return;
   }
@@ -3637,10 +3637,10 @@ async function submitSetMemberPassword() {
   const submitBtn = document.getElementById('btn-save-member-pass');
 
   if (!username) return;
-  if (!password || password.length < 4) {
+  if (!password || password.length < 8) {
     if (alertEl) {
       alertEl.className = 'alert alert-danger';
-      alertEl.innerText = 'La password deve contenere almeno 4 caratteri';
+      alertEl.innerText = 'La password deve contenere almeno 8 caratteri';
       alertEl.classList.remove('hidden');
     }
     return;

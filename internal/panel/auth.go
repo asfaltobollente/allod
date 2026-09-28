@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,13 +17,21 @@ import (
 	"time"
 
 	"github.com/asfaltobollente/allod/internal/state"
+	"golang.org/x/crypto/argon2"
 )
 
 const (
 	AdminCookieName  = "allod_admin_session"
 	FamilyCookieName = "allod_family_session"
-	HashIterations   = 10000
+	HashIterations   = 10000 // Legacy HMAC-SHA256 iteration count
 	SessionDuration  = 30 * 24 * time.Hour
+
+	// Argon2id parameters (recommended for Pi 5 / mini-PC / embedded targets)
+	ArgonTime    = 3
+	ArgonMemory  = 64 * 1024 // 64 MiB
+	ArgonThreads = 2
+	ArgonKeyLen  = 32
+	ArgonSaltLen = 16
 )
 
 // GenerateSalt creates a 32-byte cryptographically secure random salt.
@@ -34,8 +43,74 @@ func GenerateSalt() ([]byte, error) {
 	return salt, nil
 }
 
-// HashPassword computes a multi-round salted HMAC-SHA256 hash.
+// parseArgon2idHash extracts parameters, salt, and hash from a PHC-formatted argon2id string.
+// Format: argon2id$v=19$m=65536,t=3,p=2$<saltB64>$<hashB64>
+func parseArgon2idHash(encoded string) (version int, memory, time uint32, threads uint8, salt, hash []byte, err error) {
+	parts := strings.Split(encoded, "$")
+	if len(parts) != 5 {
+		return 0, 0, 0, 0, nil, nil, fmt.Errorf("invalid argon2id format: expected 5 parts, got %d", len(parts))
+	}
+	if parts[0] != "argon2id" {
+		return 0, 0, 0, 0, nil, nil, fmt.Errorf("incompatible algorithm: %s", parts[0])
+	}
+	if _, err := fmt.Sscanf(parts[1], "v=%d", &version); err != nil {
+		return 0, 0, 0, 0, nil, nil, fmt.Errorf("invalid version format: %w", err)
+	}
+	if version != argon2.Version {
+		return 0, 0, 0, 0, nil, nil, fmt.Errorf("incompatible argon2 version: %d", version)
+	}
+	var m uint32
+	var t uint32
+	var p uint8
+	if _, err := fmt.Sscanf(parts[2], "m=%d,t=%d,p=%d", &m, &t, &p); err != nil {
+		return 0, 0, 0, 0, nil, nil, fmt.Errorf("invalid params format: %w", err)
+	}
+	salt, err = base64.RawStdEncoding.DecodeString(parts[3])
+	if err != nil {
+		return 0, 0, 0, 0, nil, nil, fmt.Errorf("invalid salt encoding: %w", err)
+	}
+	hash, err = base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return 0, 0, 0, 0, nil, nil, fmt.Errorf("invalid hash encoding: %w", err)
+	}
+	return version, m, t, p, salt, hash, nil
+}
+
+// HashPassword computes an argon2id hash formatted as a self-describing string:
+// argon2id$v=19$m=65536,t=3,p=2$<saltB64>$<hashB64>
+// If the provided salt has fewer than ArgonSaltLen bytes, a secure random salt is generated.
+// Note: With argon2id the salt is contained inside the hash string itself. Callers saving to
+// state.db may leave password_salt empty or store hex(salt) for compatibility; VerifyPassword
+// extracts the salt directly from the hash string.
 func HashPassword(password string, salt []byte) string {
+	if len(salt) < ArgonSaltLen {
+		newSalt := make([]byte, ArgonSaltLen)
+		if _, err := rand.Read(newSalt); err == nil {
+			salt = newSalt
+		}
+	}
+	hash := argon2.IDKey([]byte(password), salt, ArgonTime, ArgonMemory, ArgonThreads, ArgonKeyLen)
+	return fmt.Sprintf("argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+		argon2.Version,
+		ArgonMemory,
+		ArgonTime,
+		ArgonThreads,
+		base64.RawStdEncoding.EncodeToString(salt),
+		base64.RawStdEncoding.EncodeToString(hash),
+	)
+}
+
+// HashPasswordArgon2 generates a secure random salt and computes the argon2id hash.
+func HashPasswordArgon2(password string) (string, error) {
+	salt := make([]byte, ArgonSaltLen)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("failed to generate random salt: %w", err)
+	}
+	return HashPassword(password, salt), nil
+}
+
+// legacyHashPassword computes the legacy multi-round salted HMAC-SHA256 hash.
+func legacyHashPassword(password string, salt []byte) string {
 	key := []byte(password)
 	h := hmac.New(sha256.New, key)
 	h.Write(salt)
@@ -48,14 +123,33 @@ func HashPassword(password string, salt []byte) string {
 	return hex.EncodeToString(res)
 }
 
-// VerifyPassword verifies a password against a hex-encoded salt and hash in constant time.
-func VerifyPassword(password, saltHex, hashHex string) bool {
+// VerifyPassword verifies a password against a stored hash and optional salt.
+// If storedHash starts with "argon2id$", it validates with argon2id. If saltHex is non-empty,
+// it validates that saltHex matches the salt encoded within the hash string.
+// If storedHash is in legacy format, it falls back to legacyHashPassword with saltHex.
+func VerifyPassword(password, saltHex, storedHash string) bool {
+	if strings.HasPrefix(storedHash, "argon2id$") {
+		_, memory, time, threads, salt, expectedHash, err := parseArgon2idHash(storedHash)
+		if err != nil {
+			return false
+		}
+		if saltHex != "" {
+			decodedSalt, errHex := hex.DecodeString(saltHex)
+			if errHex != nil || subtle.ConstantTimeCompare(decodedSalt, salt) != 1 {
+				return false
+			}
+		}
+		computedHash := argon2.IDKey([]byte(password), salt, time, memory, threads, uint32(len(expectedHash)))
+		return subtle.ConstantTimeCompare(computedHash, expectedHash) == 1
+	}
+
+	// Legacy HMAC-SHA256
 	salt, err := hex.DecodeString(saltHex)
 	if err != nil || len(salt) == 0 {
 		return false
 	}
-	computed := HashPassword(password, salt)
-	return subtle.ConstantTimeCompare([]byte(computed), []byte(hashHex)) == 1
+	computed := legacyHashPassword(password, salt)
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(storedHash)) == 1
 }
 
 type loginAttempt struct {
@@ -348,9 +442,9 @@ func (h *AuthHandler) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	trimmedPass := strings.TrimSpace(req.Password)
-	if len(trimmedPass) < 6 {
+	if len(trimmedPass) < 12 {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 6 caratteri"})
+		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La password deve contenere almeno 12 caratteri"})
 		return
 	}
 
@@ -455,6 +549,13 @@ func (h *AuthHandler) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 	if h.RateLimiter != nil {
 		h.RateLimiter.RecordSuccess(ip)
+	}
+
+	// Transparent rehash: if stored hash is legacy format, rehash to argon2id
+	if !strings.HasPrefix(storedHash, "argon2id$") {
+		if newHash, errHash := HashPasswordArgon2(req.Password); errHash == nil {
+			_ = st.SetAdminAuth(newHash, "")
+		}
 	}
 
 	token, err := st.CreateSession("admin", "admin", SessionDuration)
@@ -600,6 +701,13 @@ func (h *AuthHandler) handlePortalLogin(w http.ResponseWriter, r *http.Request) 
 		h.RateLimiter.RecordSuccess(ip)
 	}
 
+	// Transparent rehash: if stored hash is legacy format, rehash to argon2id
+	if !strings.HasPrefix(member.PasswordHash, "argon2id$") {
+		if newHash, errHash := HashPasswordArgon2(req.Password); errHash == nil {
+			_ = st.SetFamilyMemberPassword(username, newHash, "")
+		}
+	}
+
 	token, err := st.CreateSession("family", member.Username, SessionDuration)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -707,9 +815,9 @@ func (h *AuthHandler) handlePortalChangePassword(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if len(req.NewPassword) < 4 {
+	if len(req.NewPassword) < 8 {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La nuova password deve contenere almeno 4 caratteri"})
+		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "La nuova password deve contenere almeno 8 caratteri"})
 		return
 	}
 

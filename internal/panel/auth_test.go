@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -408,5 +410,169 @@ func TestGetClientIPRemoteAddrVersusForwarded(t *testing.T) {
 	trustedIP := getClientIP(req)
 	if trustedIP != "10.0.0.1" {
 		t.Errorf("expected getClientIP to return %q with trusted proxy, got %q", "10.0.0.1", trustedIP)
+	}
+}
+
+func TestArgon2idFormatAndVerification(t *testing.T) {
+	password := "CorrectHorseBatteryStaple123!"
+
+	hash, err := HashPasswordArgon2(password)
+	if err != nil {
+		t.Fatalf("HashPasswordArgon2 failed: %v", err)
+	}
+
+	if !strings.HasPrefix(hash, "argon2id$v=19$m=65536,t=3,p=2$") {
+		t.Fatalf("unexpected hash format: %s", hash)
+	}
+
+	// Verify correct password with empty saltHex (salt extracted from hash)
+	if !VerifyPassword(password, "", hash) {
+		t.Errorf("expected verification with embedded salt to succeed")
+	}
+
+	// Verify wrong password fails
+	if VerifyPassword("WrongPassword123!", "", hash) {
+		t.Errorf("expected wrong password verification to fail")
+	}
+
+	// Verify corrupted hash fails
+	if VerifyPassword(password, "", "argon2id$invalid$format") {
+		t.Errorf("expected malformed hash to fail")
+	}
+}
+
+func TestLegacyPasswordFallbackAndTransparentRehash(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test-rehash.db")
+
+	st, err := state.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open state db: %v", err)
+	}
+
+	// 1. Seed admin with legacy HMAC-SHA256 hash
+	adminPass := "LegacyAdminPass123"
+	saltBytes := []byte("1234567890123456")
+	legacyHash := legacyHashPassword(adminPass, saltBytes)
+	saltHex := hex.EncodeToString(saltBytes)
+
+	if err := st.SetAdminAuth(legacyHash, saltHex); err != nil {
+		t.Fatalf("failed to set admin auth: %v", err)
+	}
+
+	// 2. Seed family member with legacy hash
+	familyPass := "LegacyFamilyPass123"
+	famSaltBytes := []byte("abcdefabcdefabcd")
+	famLegacyHash := legacyHashPassword(familyPass, famSaltBytes)
+	famSaltHex := hex.EncodeToString(famSaltBytes)
+
+	if err := st.CreateFamilyMember(&state.FamilyMember{
+		Username:     "giulia",
+		FirstName:    "Giulia",
+		LastName:     "Verdi",
+		Role:         "member",
+		SmbActive:    true,
+		PasswordHash: famLegacyHash,
+		PasswordSalt: famSaltHex,
+	}); err != nil {
+		t.Fatalf("failed to create family member: %v", err)
+	}
+	st.Close()
+
+	handler := NewAuthHandler(dbPath, nil)
+	mux := http.NewServeMux()
+	handler.RegisterAuthRoutes(mux)
+
+	// 3. Admin login with legacy hash should succeed
+	adminLoginBody := bytes.NewBufferString(fmt.Sprintf(`{"username":"admin","password":%q}`, adminPass))
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", adminLoginBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on admin login with legacy hash, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 4. Verify admin hash in state.db has been transparently rehashed to argon2id
+	stCheck, err := state.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to reopen db: %v", err)
+	}
+	newAdminHash, _, err := stCheck.GetAdminAuth()
+	stCheck.Close()
+	if err != nil || !strings.HasPrefix(newAdminHash, "argon2id$") {
+		t.Errorf("expected admin hash to be rehashed to argon2id, got: %s", newAdminHash)
+	}
+
+	// 5. Subsequent admin login works with rehashed password
+	adminLoginBody2 := bytes.NewBufferString(fmt.Sprintf(`{"username":"admin","password":%q}`, adminPass))
+	req2 := httptest.NewRequest(http.MethodPost, "/api/auth/login", adminLoginBody2)
+	rec2 := httptest.NewRecorder()
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on second admin login with rehashed argon2id, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	// 6. Family login with legacy hash should succeed
+	famLoginBody := bytes.NewBufferString(fmt.Sprintf(`{"username":"giulia","password":%q}`, familyPass))
+	reqFam := httptest.NewRequest(http.MethodPost, "/api/portal/login", famLoginBody)
+	recFam := httptest.NewRecorder()
+	mux.ServeHTTP(recFam, reqFam)
+	if recFam.Code != http.StatusOK {
+		t.Fatalf("expected 200 on family login with legacy hash, got %d: %s", recFam.Code, recFam.Body.String())
+	}
+
+	// 7. Verify family member hash has been transparently rehashed to argon2id
+	stCheckFam, _ := state.Open(dbPath)
+	memGiulia, _ := stCheckFam.GetFamilyMember("giulia")
+	stCheckFam.Close()
+	if memGiulia == nil || !strings.HasPrefix(memGiulia.PasswordHash, "argon2id$") {
+		t.Errorf("expected giulia's hash to be rehashed to argon2id, got: %v", memGiulia)
+	}
+}
+
+func TestPasswordMinimumLengths(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test-minpass.db")
+
+	handler := NewAuthHandler(dbPath, nil)
+	mux := http.NewServeMux()
+	handler.RegisterAuthRoutes(mux)
+
+	// Admin setup requires >= 12 chars: test with 11 chars -> 400
+	shortAdmin := bytes.NewBufferString(`{"password":"shortAdmin1"}`) // 11 chars
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/setup", shortAdmin)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for admin password < 12 chars, got %d", rec.Code)
+	}
+
+	// Admin setup with 13 chars -> 200
+	validAdmin := bytes.NewBufferString(`{"password":"validAdmin123"}`) // 13 chars
+	reqValid := httptest.NewRequest(http.MethodPost, "/api/auth/setup", validAdmin)
+	recValid := httptest.NewRecorder()
+	mux.ServeHTTP(recValid, reqValid)
+	if recValid.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid admin password, got %d", recValid.Code)
+	}
+
+	// Family change password requires >= 8 chars: test with 7 chars -> 400
+	st, _ := state.Open(dbPath)
+	_ = st.CreateFamilyMember(&state.FamilyMember{
+		Username:     "testuser",
+		FirstName:    "Test",
+		Role:         "member",
+		PasswordHash: HashPassword("InitialSecretPass1", nil),
+	})
+	token, _ := st.CreateSession("family", "testuser", SessionDuration)
+	st.Close()
+
+	shortFam := bytes.NewBufferString(`{"current_password":"InitialSecretPass1","new_password":"short12"}`) // 7 chars
+	reqFam := httptest.NewRequest(http.MethodPost, "/api/portal/change-password", shortFam)
+	reqFam.AddCookie(&http.Cookie{Name: FamilyCookieName, Value: token})
+	recFam := httptest.NewRecorder()
+	mux.ServeHTTP(recFam, reqFam)
+	if recFam.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for family password < 8 chars, got %d", recFam.Code)
 	}
 }

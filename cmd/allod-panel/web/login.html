@@ -303,7 +303,7 @@
         <div class="form-group">
           <label class="form-label" for="setup-password">Nuova Password Amministratore:</label>
           <div class="input-wrapper">
-            <input type="password" id="setup-password" class="form-input" placeholder="Minimo 6 caratteri" minlength="6" required>
+            <input type="password" id="setup-password" class="form-input" placeholder="Minimo 12 caratteri" minlength="12" required>
             <button type="button" class="btn-toggle-eye" onclick="togglePassVisibility('setup-password', this)">👁️</button>
           </div>
         </div>
@@ -311,7 +311,7 @@
         <div class="form-group">
           <label class="form-label" for="setup-confirm">Conferma Password:</label>
           <div class="input-wrapper">
-            <input type="password" id="setup-confirm" class="form-input" placeholder="Ripeti la password" minlength="6" required>
+            <input type="password" id="setup-confirm" class="form-input" placeholder="Ripeti la password" minlength="12" required>
             <button type="button" class="btn-toggle-eye" onclick="togglePassVisibility('setup-confirm', this)">👁️</button>
           </div>
         </div>
@@ -429,8 +429,8 @@
       const p1 = document.getElementById('setup-password').value;
       const p2 = document.getElementById('setup-confirm').value;
 
-      if (p1.length < 6) {
-        showAlert('La password deve contenere almeno 6 caratteri');
+      if (p1.length < 12) {
+        showAlert('La password deve contenere almeno 12 caratteri');
         return;
       }
       if (p1 !== p2) {
