@@ -645,3 +645,68 @@ func TestAuthResponsesDoNotExposeTokenInJSON(t *testing.T) {
 		t.Errorf("expected Set-Cookie with %s", FamilyCookieName)
 	}
 }
+
+func TestSetupRestrictedToLocalhostOrToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+	h := NewAuthHandler(dbPath, nil)
+	h.SetupToken = "secure-one-time-setup-token-42"
+	mux := http.NewServeMux()
+	h.RegisterAuthRoutes(mux)
+
+	// 1. Remote request without setup token -> 403 Forbidden
+	bodyNoToken := bytes.NewBufferString(`{"password":"validAdmin123456"}`)
+	reqRemote := httptest.NewRequest(http.MethodPost, "/api/auth/setup", bodyNoToken)
+	reqRemote.RemoteAddr = "192.168.1.100:54321"
+	recRemote := httptest.NewRecorder()
+	mux.ServeHTTP(recRemote, reqRemote)
+
+	if recRemote.Code != http.StatusForbidden {
+		t.Errorf("SECURITY: expected 403 Forbidden for remote setup without token, got %d", recRemote.Code)
+	}
+
+	// 2. Remote request with WRONG setup token -> 403 Forbidden
+	bodyWrongToken := bytes.NewBufferString(`{"password":"validAdmin123456","setup_token":"wrong-token"}`)
+	reqWrong := httptest.NewRequest(http.MethodPost, "/api/auth/setup", bodyWrongToken)
+	reqWrong.RemoteAddr = "192.168.1.100:54321"
+	recWrong := httptest.NewRecorder()
+	mux.ServeHTTP(recWrong, reqWrong)
+
+	if recWrong.Code != http.StatusForbidden {
+		t.Errorf("SECURITY: expected 403 Forbidden for remote setup with wrong token, got %d", recWrong.Code)
+	}
+
+	// 3. Localhost request without token -> allowed (200 OK)
+	bodyLocal := bytes.NewBufferString(`{"password":"validAdmin123456"}`)
+	reqLocal := httptest.NewRequest(http.MethodPost, "/api/auth/setup", bodyLocal)
+	reqLocal.RemoteAddr = "127.0.0.1:54321"
+	recLocal := httptest.NewRecorder()
+	mux.ServeHTTP(recLocal, reqLocal)
+
+	if recLocal.Code != http.StatusOK {
+		t.Errorf("expected localhost setup to succeed without token, got %d", recLocal.Code)
+	}
+
+	// 4. Token should be invalidated after setup
+	if h.SetupToken != "" {
+		t.Errorf("expected SetupToken to be invalidated (empty) after successful setup, got %q", h.SetupToken)
+	}
+
+	// 5. Test remote with VALID token on fresh handler
+	tmpDir2 := t.TempDir()
+	dbPath2 := filepath.Join(tmpDir2, "state.db")
+	h2 := NewAuthHandler(dbPath2, nil)
+	h2.SetupToken = "my-valid-setup-token-99"
+	mux2 := http.NewServeMux()
+	h2.RegisterAuthRoutes(mux2)
+
+	bodyValidToken := bytes.NewBufferString(`{"password":"validAdmin123456","setup_token":"my-valid-setup-token-99"}`)
+	reqValidRemote := httptest.NewRequest(http.MethodPost, "/api/auth/setup", bodyValidToken)
+	reqValidRemote.RemoteAddr = "192.168.1.100:54321"
+	recValidRemote := httptest.NewRecorder()
+	mux2.ServeHTTP(recValidRemote, reqValidRemote)
+
+	if recValidRemote.Code != http.StatusOK {
+		t.Errorf("expected remote setup with valid token to succeed, got %d", recValidRemote.Code)
+	}
+}

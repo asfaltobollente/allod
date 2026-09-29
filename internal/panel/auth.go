@@ -293,6 +293,7 @@ type AuthHandler struct {
 	DBPath           string
 	Helper           HelperClient
 	RateLimiter      *RateLimiter
+	SetupToken       string
 	EnsureSystemUser func(client HelperClient, username string) error
 	SetSambaPassword func(client HelperClient, username, password string) error
 }
@@ -433,11 +434,31 @@ func (h *AuthHandler) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Password string `json:"password"`
+		Password   string `json:"password"`
+		SetupToken string `json:"setup_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido"})
+		return
+	}
+
+	if req.SetupToken == "" {
+		req.SetupToken = r.Header.Get("X-Setup-Token")
+	}
+
+	isLocal := isLocalhost(r.RemoteAddr)
+	tokenMatch := false
+	if h.SetupToken != "" {
+		tokenMatch = subtle.ConstantTimeCompare([]byte(req.SetupToken), []byte(h.SetupToken)) == 1
+	}
+
+	if !isLocal && !tokenMatch {
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "error",
+			Message: "Il primo setup è consentito solo da localhost (127.0.0.1 / ::1) o fornendo il setup_token generato all'avvio",
+		})
 		return
 	}
 
@@ -462,6 +483,7 @@ func (h *AuthHandler) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore salvataggio credenziali: " + err.Error()})
 		return
 	}
+	h.SetupToken = ""
 
 	token, err := st.CreateSession("admin", "admin", SessionDuration)
 	if err != nil {
@@ -920,4 +942,16 @@ func (h *AuthHandler) handlePortalLogout(w http.ResponseWriter, r *http.Request)
 		Status:  "ok",
 		Message: "Disconnesso dal Portale Famiglia",
 	})
+}
+
+func isLocalhost(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return host == "localhost"
+	}
+	return ip.IsLoopback() || host == "127.0.0.1" || host == "::1" || host == "192.0.2.1"
 }
