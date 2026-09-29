@@ -576,3 +576,72 @@ func TestPasswordMinimumLengths(t *testing.T) {
 		t.Errorf("expected 400 for family password < 8 chars, got %d", recFam.Code)
 	}
 }
+
+func TestAuthResponsesDoNotExposeTokenInJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "state.db")
+	h := NewAuthHandler(dbPath, nil)
+	mux := http.NewServeMux()
+	h.RegisterAuthRoutes(mux)
+
+	// 1. Setup admin
+	bodySetup := bytes.NewBufferString(`{"password":"validAdmin123456"}`)
+	reqSetup := httptest.NewRequest(http.MethodPost, "/api/auth/setup", bodySetup)
+	recSetup := httptest.NewRecorder()
+	mux.ServeHTTP(recSetup, reqSetup)
+
+	if recSetup.Code != http.StatusOK {
+		t.Fatalf("expected 200 from setup, got %d", recSetup.Code)
+	}
+	if strings.Contains(recSetup.Body.String(), `"token"`) {
+		t.Errorf("SECURITY: /api/auth/setup leaked token in JSON: %s", recSetup.Body.String())
+	}
+	if !strings.Contains(recSetup.Header().Get("Set-Cookie"), AdminCookieName) {
+		t.Errorf("expected Set-Cookie with %s", AdminCookieName)
+	}
+
+	// 2. Login admin
+	bodyLogin := bytes.NewBufferString(`{"password":"validAdmin123456"}`)
+	reqLogin := httptest.NewRequest(http.MethodPost, "/api/auth/login", bodyLogin)
+	recLogin := httptest.NewRecorder()
+	mux.ServeHTTP(recLogin, reqLogin)
+
+	if recLogin.Code != http.StatusOK {
+		t.Fatalf("expected 200 from login, got %d", recLogin.Code)
+	}
+	if strings.Contains(recLogin.Body.String(), `"token"`) {
+		t.Errorf("SECURITY: /api/auth/login leaked token in JSON: %s", recLogin.Body.String())
+	}
+	if !strings.Contains(recLogin.Header().Get("Set-Cookie"), AdminCookieName) {
+		t.Errorf("expected Set-Cookie with %s", AdminCookieName)
+	}
+
+	// 3. Portal login for family member
+	salt, _ := GenerateSalt()
+	saltHex := hex.EncodeToString(salt)
+	st, _ := state.Open(dbPath)
+	_ = st.CreateFamilyMember(&state.FamilyMember{
+		Username:     "familymember",
+		FirstName:    "Family",
+		LastName:     "Member",
+		Role:         "member",
+		PasswordHash: HashPassword("SuperFamilySecretPass123", salt),
+		PasswordSalt: saltHex,
+	})
+	st.Close()
+
+	bodyPortal := bytes.NewBufferString(`{"username":"familymember","password":"SuperFamilySecretPass123"}`)
+	reqPortal := httptest.NewRequest(http.MethodPost, "/api/portal/login", bodyPortal)
+	recPortal := httptest.NewRecorder()
+	mux.ServeHTTP(recPortal, reqPortal)
+
+	if recPortal.Code != http.StatusOK {
+		t.Fatalf("expected 200 from portal login, got %d", recPortal.Code)
+	}
+	if strings.Contains(recPortal.Body.String(), `"token"`) {
+		t.Errorf("SECURITY: /api/portal/login leaked token in JSON: %s", recPortal.Body.String())
+	}
+	if !strings.Contains(recPortal.Header().Get("Set-Cookie"), FamilyCookieName) {
+		t.Errorf("expected Set-Cookie with %s", FamilyCookieName)
+	}
+}
