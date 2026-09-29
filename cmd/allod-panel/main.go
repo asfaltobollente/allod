@@ -4162,6 +4162,21 @@ WantedBy=default.target
 	adminProtectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
+		// CSRF defense: enforce Origin/Referer check on mutating API requests
+		if strings.HasPrefix(path, "/api/") && path != "/api/speedtest/upload" {
+			if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete || r.Method == http.MethodPatch {
+				if !panel.CheckSameOrigin(r) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(PanelResponse{
+						Status:  "error",
+						Message: "CSRF check failed: invalid or missing Origin/Referer header",
+					})
+					return
+				}
+			}
+		}
+
 		// Whitelist public static, health prober and auth/portal routes
 		if path == "/login" || path == "/setup" || path == "/portal" || path == "/welcome" ||
 			path == "/api/health" ||
