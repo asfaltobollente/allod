@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -46,18 +47,18 @@ type PeerStatus struct {
 
 // Watcher manages background polling of one or more Allod nodes.
 type Watcher struct {
-	mu                  sync.Mutex
-	peers               map[string]*PeerStatus
-	alertThreshold      time.Duration
-	checkInterval       time.Duration
-	failureCountLimit   int
-	stopChan            chan struct{}
-	client              *http.Client
-	secretToken         string
-	receiverSrv         *http.Server
-	OnAlert             func(nodeID, reason string, downtime time.Duration)
-	OnRecover           func(nodeID string, totalDowntime time.Duration)
-	OnWarning           func(nodeID, title, details string)
+	mu                sync.Mutex
+	peers             map[string]*PeerStatus
+	alertThreshold    time.Duration
+	checkInterval     time.Duration
+	failureCountLimit int
+	stopChan          chan struct{}
+	client            *http.Client
+	secretToken       string
+	receiverSrv       *http.Server
+	OnAlert           func(nodeID, reason string, downtime time.Duration)
+	OnRecover         func(nodeID string, totalDowntime time.Duration)
+	OnWarning         func(nodeID, title, details string)
 }
 
 // NewWatcher creates an enhanced watcher.
@@ -311,15 +312,17 @@ func (w *Watcher) HandleHeartbeat(payload *NodeHealthPayload, token string) erro
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// Authenticate if a secret token is configured
-	if w.secretToken != "" {
-		cleanedToken := strings.TrimSpace(token)
-		if strings.HasPrefix(strings.ToLower(cleanedToken), "bearer ") {
-			cleanedToken = strings.TrimSpace(cleanedToken[7:])
-		}
-		if cleanedToken != w.secretToken {
-			return fmt.Errorf("autenticazione fallita: token non valido")
-		}
+	// Reject unauthenticated push heartbeats when secret_token is not configured
+	if w.secretToken == "" {
+		return fmt.Errorf("autenticazione fallita: secret_token non configurato sul ricevitore")
+	}
+
+	cleanedToken := strings.TrimSpace(token)
+	if strings.HasPrefix(strings.ToLower(cleanedToken), "bearer ") {
+		cleanedToken = strings.TrimSpace(cleanedToken[7:])
+	}
+	if subtle.ConstantTimeCompare([]byte(cleanedToken), []byte(w.secretToken)) != 1 {
+		return fmt.Errorf("autenticazione fallita: token non valido")
 	}
 
 	if payload == nil {
@@ -525,4 +528,3 @@ func (w *Watcher) StopReceiver(ctx context.Context) error {
 	}
 	return nil
 }
-
