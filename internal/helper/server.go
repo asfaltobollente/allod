@@ -1680,7 +1680,7 @@ server:
 			"--env", "AUTH_SUPPORTED_SCOPES=openid profile email groups",
 			"--env", "AUTH_REDIRECT_URI=/nb-auth",
 			"--env", "AUTH_SILENT_REDIRECT_URI=/nb-silent-auth",
-			"docker.io/netbirdio/dashboard:latest",
+			"docker.io/netbirdio/dashboard:v2.94.0",
 		}
 
 		plan := []string{
