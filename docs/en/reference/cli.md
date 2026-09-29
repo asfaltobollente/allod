@@ -66,7 +66,7 @@ Displays the real-time operational status (running, stopped, failed, unmanaged) 
 ### `allod admin-password reset [password]`
 Emergency CLI recovery tool to reset or initialize the Web Panel administrator password in `state.db`.
 * If `[password]` is omitted, the command interactively prompts for a password via stdin (minimum 6 characters).
-* Computes a fresh cryptographic salt, hashes the password using PBKDF2 with SHA-256 (600,000 iterations), stores the record securely in SQLite `state.db`, and invalidates existing admin session tokens.
+* Computes a fresh cryptographic salt, hashes the password using argon2id, stores the record securely in SQLite `state.db`, and invalidates existing admin session tokens.
 
 ### `allod version`
 Prints the current dynamic version of the Allod binary (resolved from build-time ldflags or VCS revision).

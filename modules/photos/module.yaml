@@ -14,13 +14,13 @@ levels:
       modules: [storage]
       cpu_flags: [sse4_2]
     grants: [backup automatico da telefono, timeline, album condivisi, app iOS e Android]
-    lacks: [ricerca per contenuto, riconoscimento volti]
+    lacks: [ricerca per contenuto e riconoscimento volti (microservizio ML dedicato pianificato)]
   full:
     ram_mb: 4000
     requires:
       total_ram_mb: 16000
       cpu_flags: [avx2]
-    grants: [ricerca semantica, riconoscimento volti]
+    grants: [allocazione memoria estesa (4GB) per librerie pesanti e indicizzazione concorrente (microservizio ML dedicato pianificato)]
     notes_arm64: "funziona, da 10 a 20 volte più lento su Pi 5"
 
 ports:

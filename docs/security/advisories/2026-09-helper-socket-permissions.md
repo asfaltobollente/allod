@@ -35,7 +35,7 @@ The following remediations have been implemented in `main`:
 1. **Standard Socket Mode and Directory Access**:
    `/run/allod/helper.sock` is created with mode `0666` and `/run/allod` directory with mode `0755` (`root:allod`), enabling local processes to reach the socket without encountering kernel VFS credential caching deadlocks across login sessions.
 2. **Kernel-Level Caller Verification (`SO_PEERCRED`)**:
-   Upon accepting an incoming UNIX socket connection, `allod-helperd` queries the caller credentials via `SO_PEERCRED` (`unix.GetsockoptUcred` on Linux). Connections are accepted only if the caller's effective UID is `0` (root) or the caller belongs to `allod`, `sudo`, `wheel`, or `admin` in the system group database. Unauthorized callers are immediately rejected with `{"ok":false,"error":"caller not in group allod"}` and logged to stdout/journal.
+   Upon accepting an incoming UNIX socket connection, `allod-helperd` queries the caller credentials via `SO_PEERCRED` (`unix.GetsockoptUcred` on Linux). Connections are accepted only if the caller's effective UID is `0` (root) or the caller belongs strictly to group `allod` in the system group database. Unauthorized callers are immediately rejected with `{"ok":false,"error":"caller not in group allod"}` and logged to stdout/journal.
 3. **Removed Unauthenticated TCP Fallback**:
    The unauthenticated `net.Listen("tcp", "127.0.0.1:40000")` fallback listener has been completely eliminated from production builds.
 4. **Transparent Panel Migration**:
@@ -68,5 +68,5 @@ loginctl terminate-user $USER # or: sudo reboot
 After logging back in, verify socket permissions:
 ```bash
 ls -l /run/allod/helper.sock
-# Expected output: srw-rw---- 1 root allod ... /run/allod/helper.sock
+# Expected output: srw-rw-rw- 1 root allod ... /run/allod/helper.sock (authenticated via SO_PEERCRED)
 ```

@@ -11,7 +11,7 @@ Immich è la soluzione sovereign ad altissime prestazioni integrata in Allod per
   * Timeline cronologica fluida, mappa interattiva GPS e album condivisi tra utenti.
   * Ideale per macchine con 8 GB di RAM complessiva.
 * **`full` (4.0 GB RAM allocati)**:
-  * Aggiunge il riconoscimento biometrico dei volti (Face Recognition) e la ricerca semantica avanzata con intelligenza artificiale (CLIP).
+  * Alloca memoria estesa (4.0 GB) per librerie ampie e indicizzazione concorrente (microservizio dedicato `immich-machine-learning` pianificato per riconoscimento volti e ricerca semantica).
   * Richiede CPU con supporto alle istruzioni AVX2 e almeno 16 GB di RAM di sistema.
 
 ---
