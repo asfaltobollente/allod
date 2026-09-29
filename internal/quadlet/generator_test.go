@@ -327,3 +327,73 @@ func TestDatabaseSecretsLegacyMigration(t *testing.T) {
 		t.Errorf("expected legacy password 'postgres' in migrated secret, got:\n%s", photosSecStr)
 	}
 }
+
+func TestMeshPortBinding(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+
+	mBackup := &manifest.Manifest{
+		ID:   "backup",
+		Tier: "core",
+		Levels: map[string]manifest.Level{
+			"basic": {RAMMB: 100},
+		},
+		Ports: []manifest.Port{
+			{N: 8000, Scope: "mesh"},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/restic/rest-server", Tag: "0.13.0"},
+		},
+	}
+
+	// 1. When ALLOD_MESH_IP is explicitly set (simulating active wt0 mesh)
+	t.Setenv("ALLOD_MESH_IP", "100.64.0.42")
+	resWithMesh, err := Generate("backup", mBackup, "basic")
+	if err != nil {
+		t.Fatalf("unexpected error generating backup: %v", err)
+	}
+	contentWithMesh := resWithMesh.Files["backup.container"]
+	if !strings.Contains(contentWithMesh, "PublishPort=100.64.0.42:8000:8000") {
+		t.Errorf("expected mesh port bound to 100.64.0.42, got:\n%s", contentWithMesh)
+	}
+	if strings.Contains(contentWithMesh, "PublishPort=8000:8000") {
+		t.Errorf("mesh port must NOT be published to 0.0.0.0, got:\n%s", contentWithMesh)
+	}
+
+	// 2. When ALLOD_MESH_IP is empty and no wt0 interface is present (fallback to localhost)
+	t.Setenv("ALLOD_MESH_IP", "")
+	resFallback, err := Generate("backup", mBackup, "basic")
+	if err != nil {
+		t.Fatalf("unexpected error generating backup: %v", err)
+	}
+	contentFallback := resFallback.Files["backup.container"]
+	if !strings.Contains(contentFallback, "PublishPort=127.0.0.1:8000:8000") {
+		t.Errorf("expected mesh port fallback to 127.0.0.1, got:\n%s", contentFallback)
+	}
+	if strings.Contains(contentFallback, "PublishPort=8000:8000") {
+		t.Errorf("mesh port must NOT be published to 0.0.0.0, got:\n%s", contentFallback)
+	}
+
+	// 3. LAN scoped port publishes to 0.0.0.0
+	mLan := &manifest.Manifest{
+		ID:   "shares",
+		Tier: "core",
+		Levels: map[string]manifest.Level{
+			"basic": {RAMMB: 100},
+		},
+		Ports: []manifest.Port{
+			{N: 445, Scope: "lan"},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/dperson/samba", Tag: "latest"},
+		},
+	}
+	resLan, err := Generate("shares", mLan, "basic")
+	if err != nil {
+		t.Fatalf("unexpected error generating shares: %v", err)
+	}
+	contentLan := resLan.Files["shares.container"]
+	if !strings.Contains(contentLan, "PublishPort=445:445") {
+		t.Errorf("expected LAN port published to 0.0.0.0 (445:445), got:\n%s", contentLan)
+	}
+}

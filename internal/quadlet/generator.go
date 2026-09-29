@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/asfaltobollente/allod/internal/helper"
 	"github.com/asfaltobollente/allod/internal/manifest"
 )
 
@@ -270,6 +271,20 @@ func ResolvedStorageBaseDir() string {
 	return baseDir
 }
 
+// getMeshIP retrieves the IPv4 address of the WireGuard mesh interface (wt0).
+// If an environment override (ALLOD_MESH_IP) is set, it is used.
+// If wt0 is unavailable, it securely defaults to 127.0.0.1 (loopback) to prevent
+// exposing mesh-scoped services to the local area network or the public Internet.
+func getMeshIP() string {
+	if env := os.Getenv("ALLOD_MESH_IP"); env != "" {
+		return env
+	}
+	if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
+		return ip
+	}
+	return "127.0.0.1"
+}
+
 // GenerateNetwork returns the Quadlet .network definition for inter-container communication.
 func GenerateNetwork() string {
 	return `[Network]
@@ -326,6 +341,9 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 			}
 			if p.Scope == "localhost" || p.Scope == "loopback" {
 				sb.WriteString(fmt.Sprintf("PublishPort=127.0.0.1:%d:%d\n", p.N, cPort))
+			} else if p.Scope == "mesh" {
+				meshIP := getMeshIP()
+				sb.WriteString(fmt.Sprintf("PublishPort=%s:%d:%d\n", meshIP, p.N, cPort))
 			} else {
 				sb.WriteString(fmt.Sprintf("PublishPort=%d:%d\n", p.N, cPort))
 			}
