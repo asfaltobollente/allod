@@ -521,16 +521,16 @@ func (s *Server) processRequest(req Request) Response {
 			if content, err := os.ReadFile(smbConf); err == nil {
 				sContent := string(content)
 				if enabled {
-					// Configure [public] share for guest access without password
-					if !strings.Contains(sContent, "[public]") {
-						publicSnippet := fmt.Sprintf("\n[public]\n   comment = Cartella pubblica Allod (Jellyfin Media)\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n   hide unreadable = yes\n", pubPath)
+					// Configure [public] share only when explicitly requested
+					if (name == "public" || strings.HasSuffix(path, "/public")) && !strings.Contains(sContent, "[public]") {
+						publicSnippet := fmt.Sprintf("\n[public]\n   comment = Cartella pubblica Allod (Jellyfin Media)\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = no\n   create mask = 0660\n   directory mask = 2770\n   force create mode = 0660\n   force directory mode = 2770\n   force group = allod-data\n   hide unreadable = yes\n", pubPath)
 						sContent += publicSnippet
 					}
 
 					// Configure default share (e.g. [shares])
 					shareTag := fmt.Sprintf("[%s]", name)
-					if !strings.Contains(sContent, shareTag) {
-						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = yes\n   create mask = 0666\n   directory mask = 0777\n   force create mode = 0666\n   force directory mode = 0777\n   hide unreadable = yes\n", name, path)
+					if name != "public" && !strings.Contains(sContent, shareTag) {
+						shareSnippet := fmt.Sprintf("\n[%s]\n   path = %s\n   browseable = yes\n   read only = no\n   guest ok = no\n   create mask = 0660\n   directory mask = 2770\n   force create mode = 0660\n   force directory mode = 2770\n   force group = allod-data\n   hide unreadable = yes\n", name, path)
 						sContent += shareSnippet
 					}
 
@@ -1899,6 +1899,7 @@ func PatchSambaConfig(content string) string {
 			hasValidUsers := false
 			hasAccessBased := false
 			hasHideUnreadable := false
+			hasGuestOk := false
 
 			for _, sl := range sLines {
 				st := strings.TrimSpace(sl)
@@ -1911,6 +1912,9 @@ func PatchSambaConfig(content string) string {
 				if strings.HasPrefix(st, "hide unreadable") {
 					hasHideUnreadable = true
 				}
+				if strings.HasPrefix(st, "guest ok") {
+					hasGuestOk = true
+				}
 			}
 
 			if hasValidUsers {
@@ -1920,11 +1924,21 @@ func PatchSambaConfig(content string) string {
 				if !hasHideUnreadable {
 					sLines = append(sLines, "   hide unreadable = yes")
 				}
+				if hasGuestOk {
+					for i, sl := range sLines {
+						st := strings.TrimSpace(sl)
+						if strings.HasPrefix(st, "guest ok") {
+							sLines[i] = "   guest ok = no"
+						}
+					}
+				} else {
+					sLines = append(sLines, "   guest ok = no")
+				}
 			} else if secLower == "shares" {
 				if !hasHideUnreadable {
 					sLines = append(sLines, "   hide unreadable = yes")
 				}
-				// Hide root pool [shares] so it does not duplicate user shares in Windows Explorer
+				// Hide root pool [shares] so it does not duplicate user shares in Windows Explorer and disallow guest access
 				hasBrowseable := false
 				for i, sl := range sLines {
 					st := strings.TrimSpace(sl)
@@ -1932,9 +1946,16 @@ func PatchSambaConfig(content string) string {
 						sLines[i] = "   browseable = no"
 						hasBrowseable = true
 					}
+					if strings.HasPrefix(st, "guest ok") {
+						sLines[i] = "   guest ok = no"
+						hasGuestOk = true
+					}
 				}
 				if !hasBrowseable {
 					sLines = append(sLines, "   browseable = no")
+				}
+				if !hasGuestOk {
+					sLines = append(sLines, "   guest ok = no")
 				}
 			} else if secLower == "public" {
 				if !hasHideUnreadable {
@@ -1955,31 +1976,6 @@ func PatchSambaConfig(content string) string {
 		}
 
 		output = append(output, sLines...)
-	}
-
-	// Ensure [public] share is always present for family media & Jellyfin
-	hasPublic := false
-	for _, sec := range sectionOrder {
-		if strings.EqualFold(sec, "public") {
-			hasPublic = true
-			break
-		}
-	}
-	if !hasPublic {
-		output = append(output,
-			"",
-			"[public]",
-			"   comment = Cartella pubblica Allod (Jellyfin Media & Family)",
-			"   path = /mnt/allod-storage/shares/public",
-			"   browseable = yes",
-			"   read only = no",
-			"   guest ok = yes",
-			"   create mask = 0666",
-			"   directory mask = 0777",
-			"   force create mode = 0666",
-			"   force directory mode = 0777",
-			"   hide unreadable = yes",
-		)
 	}
 
 	return strings.Join(output, "\n")

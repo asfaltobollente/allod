@@ -575,7 +575,7 @@ func TestPatchSambaConfig(t *testing.T) {
    path = /mnt/allod-storage/shares/bob
    browseable = yes
    read only = no
-   guest ok = no
+   guest ok = yes
    valid users = bob
    create mask = 0660
    directory mask = 0770
@@ -599,17 +599,19 @@ func TestPatchSambaConfig(t *testing.T) {
 		t.Errorf("expected hide unreadable = yes to be added to user shares and shares")
 	}
 
-	// Verify [shares] is browseable = no (hidden from root network view)
+	// Verify [shares] is browseable = no (hidden from root network view) and disallows guest
 	if !strings.Contains(patched, "browseable = no") {
 		t.Errorf("expected browseable = no for [shares] in patched config")
 	}
 
-	// Verify [public] exists and is browseable = yes
-	if !strings.Contains(patched, "[public]") {
-		t.Errorf("expected [public] share in patched config")
+	// Verify [public] is NOT automatically injected when not present
+	if strings.Contains(patched, "[public]") {
+		t.Errorf("expected [public] share to NOT be auto-injected into patched config")
 	}
-	if !strings.Contains(patched, "browseable = yes") {
-		t.Errorf("expected browseable = yes for [public] in patched config")
+
+	// Verify all data shares with valid users have guest ok = no (bob's guest ok = yes overridden)
+	if strings.Contains(patched, "guest ok = yes") {
+		t.Errorf("expected no guest ok = yes in patched data shares, got:\n%s", patched)
 	}
 
 	// Idempotency: patching already patched config shouldn't duplicate lines
