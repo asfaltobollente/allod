@@ -196,6 +196,18 @@ func isAllodUser(uidStr string) bool {
 	return false
 }
 
+func isAuthorizedCaller(gids []string, allodGid string) bool {
+	if allodGid == "" {
+		return false
+	}
+	for _, gid := range gids {
+		if gid == allodGid {
+			return true
+		}
+	}
+	return false
+}
+
 func validDeviceRegex(dev string) bool {
 	dev = strings.TrimSpace(dev)
 	dev = strings.TrimPrefix(dev, "/dev/")
@@ -425,13 +437,16 @@ func (s *Server) Start() error {
 	// Ensure group 'allod' exists if running as root on Linux
 	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
 		_ = exec.Command("groupadd", "-f", "allod").Run()
-		// Automatically add active logged-in users (UID >= 1000) to 'allod' group
+		// Do not auto-add users to 'allod' group (group membership is an admin decision).
+		// Log an advisory suggestion if an active logged-in user is not in the 'allod' group.
 		if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
 			for _, d := range userDirs {
 				uidStr := filepath.Base(d)
 				if uid, errU := strconv.Atoi(uidStr); errU == nil && uid >= 1000 {
 					if u, errL := user.LookupId(uidStr); errL == nil {
-						_ = exec.Command("usermod", "-aG", "allod", u.Username).Run()
+						if !isAllodUser(uidStr) {
+							log.Printf("[INFO] Active user %s (UID %s) is not in group 'allod'. To grant helper access, run: usermod -aG allod %s", u.Username, uidStr, u.Username)
+						}
 					}
 				}
 			}

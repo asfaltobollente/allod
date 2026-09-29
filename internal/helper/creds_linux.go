@@ -53,15 +53,13 @@ func (c defaultPeerCredChecker) CheckPeer(conn net.Conn) (uint32, bool, error) {
 		return uid, false, fmt.Errorf("failed to lookup group ids for user %s: %w", u.Username, err)
 	}
 
-	adminGroups := []string{"allod", "sudo", "wheel", "admin"}
-	for _, grpName := range adminGroups {
-		if grp, err := user.LookupGroup(grpName); err == nil {
-			for _, gid := range gids {
-				if gid == grp.Gid {
-					return uid, true, nil
-				}
-			}
-		}
+	allodGid := ""
+	if grp, err := user.LookupGroup("allod"); err == nil {
+		allodGid = grp.Gid
+	}
+
+	if isAuthorizedCaller(gids, allodGid) {
+		return uid, true, nil
 	}
 
 	return uid, false, nil
