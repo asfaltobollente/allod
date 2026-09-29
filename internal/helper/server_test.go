@@ -2,6 +2,7 @@ package helper
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -784,5 +785,128 @@ func TestCountMediaFiles(t *testing.T) {
 
 	if cnt := countMediaFiles(tmpDir); cnt != 4 {
 		t.Errorf("expected 4 media files, got %d", cnt)
+	}
+}
+
+func TestIsValidUUID(t *testing.T) {
+	valid := []string{
+		"123e4567-e89b-12d3-a456-426614174000",
+		"a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"00000000-0000-0000-0000-000000000000",
+		"FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+	}
+	for _, u := range valid {
+		if !isValidUUID(u) {
+			t.Errorf("expected valid UUID for %q, got false", u)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"not-a-uuid",
+		"123e4567-e89b-12d3-a456-42661417400",   // too short
+		"123e4567-e89b-12d3-a456-4266141740000", // too long
+		"123e4567_e89b_12d3_a456_426614174000",  // underscores
+		"../../../../etc/passwd",
+		"123e4567-e89b-12d3-a456-42661417400g", // non-hex 'g'
+		"'; drop table users; --",
+	}
+	for _, u := range invalid {
+		if isValidUUID(u) {
+			t.Errorf("expected invalid UUID for %q, got true", u)
+		}
+	}
+}
+
+func TestParseImmichUserUUID(t *testing.T) {
+	steveUUID := "11111111-1111-1111-1111-111111111111"
+	eveUUID := "22222222-2222-2222-2222-222222222222"
+
+	// 1. Substring collision: 'eve' must NEVER match 'steve@example.com'
+	steveOnlyDB := fmt.Sprintf("%s|steve@example.com|Steve\n", steveUUID)
+	if res := parseImmichUserUUID(steveOnlyDB, "eve"); res != "" {
+		t.Errorf("SECURITY: 'eve' matched 'steve@example.com', got UUID %s", res)
+	}
+
+	// 2. Exact match on email local-part or name
+	multiUserDB := fmt.Sprintf("%s|steve@example.com|Steve\n%s|eve@example.com|Eve\n", steveUUID, eveUUID)
+	if res := parseImmichUserUUID(multiUserDB, "eve"); res != eveUUID {
+		t.Errorf("expected exact match for 'eve' to return %s, got %s", eveUUID, res)
+	}
+	if res := parseImmichUserUUID(multiUserDB, "steve"); res != steveUUID {
+		t.Errorf("expected exact match for 'steve' to return %s, got %s", steveUUID, res)
+	}
+
+	// 3. Exact match by full email
+	if res := parseImmichUserUUID(multiUserDB, "eve@example.com"); res != eveUUID {
+		t.Errorf("expected match for 'eve@example.com' to return %s, got %s", eveUUID, res)
+	}
+
+	// 4. Exact match by UUID directly
+	if res := parseImmichUserUUID(multiUserDB, steveUUID); res != steveUUID {
+		t.Errorf("expected match for steveUUID to return %s, got %s", steveUUID, res)
+	}
+
+	// 5. Ambiguous match (>1 candidates) must be rejected
+	ambiguousDB := fmt.Sprintf(
+		"11111111-1111-1111-1111-111111111111|mario@example.com|Mario A\n" +
+			"22222222-2222-2222-2222-222222222222|mario@example.org|Mario B\n",
+	)
+	if res := parseImmichUserUUID(ambiguousDB, "mario"); res != "" {
+		t.Errorf("SECURITY: ambiguous user 'mario' returned UUID %s instead of rejecting", res)
+	}
+
+	// 6. Malformed UUID in DB must be rejected
+	malformedDB := "bad-uuid|mario@example.com|Mario\n"
+	if res := parseImmichUserUUID(malformedDB, "mario"); res != "" {
+		t.Errorf("expected malformed UUID to be rejected, got %s", res)
+	}
+
+	// 7. Path traversal in UUID in DB must be rejected
+	traversalDB := "../../../etc/passwd|mario@example.com|Mario\n"
+	if res := parseImmichUserUUID(traversalDB, "mario"); res != "" {
+		t.Errorf("expected traversal UUID to be rejected, got %s", res)
+	}
+
+	// 8. Empty username must return empty string
+	if res := parseImmichUserUUID(multiUserDB, ""); res != "" {
+		t.Errorf("expected empty username to return empty string, got %s", res)
+	}
+
+	// 9. Single user in DB must NOT be returned when searching for a different non-matching user
+	singleUserDB := fmt.Sprintf("%s|admin@example.org|Administrator\n", steveUUID)
+	if res := parseImmichUserUUID(singleUserDB, "luigi"); res != "" {
+		t.Errorf("SECURITY: non-matching user 'luigi' fell back to single DB user %s", res)
+	}
+}
+
+func TestFindImmichPhotosSourceNoDangerousFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	basePhotos := filepath.Join(tmpDir, "photos", "upload")
+
+	steveUUID := "11111111-1111-1111-1111-111111111111"
+	eveUUID := "22222222-2222-2222-2222-222222222222"
+
+	// Steve has 10 photos in upload/<steveUUID>
+	steveUploadDir := filepath.Join(basePhotos, "upload", steveUUID)
+	_ = os.MkdirAll(steveUploadDir, 0755)
+	for i := 0; i < 10; i++ {
+		_ = os.WriteFile(filepath.Join(steveUploadDir, fmt.Sprintf("photo_%d.jpg", i)), []byte("photo"), 0644)
+	}
+
+	// Eve has 0 photos in upload/<eveUUID>
+	eveUploadDir := filepath.Join(basePhotos, "upload", eveUUID)
+	_ = os.MkdirAll(eveUploadDir, 0755)
+
+	// Since there are 2 UUID folders and no DB running, 'eve' must NEVER get Steve's folder
+	resEve := findImmichPhotosSource(basePhotos, "eve")
+	if strings.Contains(resEve, steveUUID) {
+		t.Fatalf("SECURITY: findImmichPhotosSource for 'eve' fell back to Steve's folder with more photos: %s", resEve)
+	}
+
+	// An unknown user must also NEVER get Steve's folder
+	resUnknown := findImmichPhotosSource(basePhotos, "unknown")
+	if strings.Contains(resUnknown, steveUUID) {
+		t.Fatalf("SECURITY: findImmichPhotosSource for 'unknown' fell back to Steve's folder: %s", resUnknown)
 	}
 }
