@@ -84,3 +84,20 @@ func LoadManifest(path string) (*Manifest, error) {
 
 	return &m, nil
 }
+
+// KnownModules defines the allowlist of valid modules in Allod.
+var KnownModules = map[string]bool{
+	"backup":  true,
+	"cloud":   true,
+	"media":   true,
+	"network": true,
+	"photos":  true,
+	"shares":  true,
+	"storage": true,
+	"watch":   true,
+}
+
+// IsValidModule checks if the given module name belongs to the allowlist of known modules.
+func IsValidModule(name string) bool {
+	return KnownModules[name]
+}

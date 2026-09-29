@@ -4021,6 +4021,12 @@ WantedBy=default.target
 			return
 		}
 
+		if !manifest.IsValidModule(req.Module) {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Modulo non valido o non consentito"})
+			return
+		}
+
 		modID := req.Module
 
 		// 1. Forcibly stop and remove Podman containers and Quadlet units
