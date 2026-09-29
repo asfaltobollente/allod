@@ -1197,3 +1197,15 @@ func TestHelperInputValidation(t *testing.T) {
 		t.Errorf("expected PatchAvahiDaemonConfig to fall back to host-name=allod")
 	}
 }
+
+func TestVerifyWsddChecksum(t *testing.T) {
+	if verifyWsddChecksum([]byte("tampered content")) {
+		t.Errorf("SECURITY: verifyWsddChecksum accepted tampered content")
+	}
+	if len(wsddExpectedSHA256) != 64 {
+		t.Errorf("expected wsddExpectedSHA256 to be 64 hex characters, got %d", len(wsddExpectedSHA256))
+	}
+	if !strings.Contains(wsddURL, "v0.8") {
+		t.Errorf("expected wsddURL to be pinned to release tag v0.8, got %s", wsddURL)
+	}
+}
