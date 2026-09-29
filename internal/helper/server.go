@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf16"
+
+	"github.com/google/uuid"
 )
 
 // AllowedActions is the single source of truth for the actions supported by the root helper.
@@ -157,6 +159,42 @@ func hashArgs(args map[string]interface{}) string {
 
 var validNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 var validUnitRegex = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,64}$`)
+var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+func isValidUUID(u string) bool {
+	if !uuidRegex.MatchString(u) {
+		return false
+	}
+	_, err := uuid.Parse(u)
+	return err == nil
+}
+
+func isAllodUser(uidStr string) bool {
+	u, err := user.LookupId(uidStr)
+	if err != nil {
+		return false
+	}
+	if u.Username == "allod" {
+		return true
+	}
+	if envUser := os.Getenv("ALLOD_USER"); envUser != "" && u.Username == envUser {
+		return true
+	}
+	grp, err := user.LookupGroup("allod")
+	if err != nil {
+		return false
+	}
+	gids, err := u.GroupIds()
+	if err != nil {
+		return false
+	}
+	for _, gid := range gids {
+		if gid == grp.Gid {
+			return true
+		}
+	}
+	return false
+}
 
 func validDeviceRegex(dev string) bool {
 	dev = strings.TrimSpace(dev)
@@ -565,15 +603,20 @@ func (s *Server) processRequest(req Request) Response {
 
 		if targetUser != "" && validNameRegex.MatchString(targetUser) {
 			userSrc := findImmichPhotosSource(basePhotosRoot, targetUser)
+			if userSrc == "" && enabled && !req.Plan {
+				return Response{Ok: false, Error: fmt.Sprintf("Immich photo library not found for user %q (no matching user or ambiguous)", targetUser)}
+			}
 			userTgt := filepath.Join(baseShares, targetUser, "photos")
 			targets = append(targets, [2]string{userSrc, userTgt})
 		} else {
 			// Shared / global photos library
 			globalSrc := findImmichPhotosSource(basePhotosRoot, "")
-			targets = append(targets, [2]string{
-				globalSrc,
-				filepath.Join(baseShares, "photos"),
-			})
+			if globalSrc != "" || !enabled {
+				targets = append(targets, [2]string{
+					globalSrc,
+					filepath.Join(baseShares, "photos"),
+				})
+			}
 			// Per-user photo shares for every registered user directory in shares
 			if entries, err := os.ReadDir(baseShares); err == nil {
 				for _, e := range entries {
@@ -584,7 +627,13 @@ func (s *Server) processRequest(req Request) Response {
 					if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
 						continue
 					}
+					if !validNameRegex.MatchString(uName) {
+						continue
+					}
 					uSrc := findImmichPhotosSource(basePhotosRoot, uName)
+					if uSrc == "" && enabled {
+						continue
+					}
 					targets = append(targets, [2]string{
 						uSrc,
 						filepath.Join(baseShares, uName, "photos"),
@@ -603,17 +652,31 @@ func (s *Server) processRequest(req Request) Response {
 				src := pair[0]
 				tgt := pair[1]
 
+				if src == "" && enabled {
+					continue
+				}
+
+				if !isAllowedPath(tgt) || !strings.HasPrefix(filepath.ToSlash(filepath.Clean(tgt)), filepath.ToSlash(baseShares)+"/") {
+					return Response{Ok: false, Error: fmt.Sprintf("Target path outside shares: %s", tgt)}
+				}
+				if enabled && (!isAllowedPath(src) || strings.Contains(src, "..")) {
+					return Response{Ok: false, Error: fmt.Sprintf("Source path invalid: %s", src)}
+				}
+
 				if enabled {
-					_ = os.MkdirAll(src, 0775)
-					_ = os.MkdirAll(tgt, 0775)
+					_ = os.MkdirAll(src, 0750)
+					_ = os.MkdirAll(tgt, 0750)
 					_ = exec.Command("umount", "-l", tgt).Run()
 					cmd := exec.Command("mount", "--bind", src, tgt)
 					if out, err := cmd.CombinedOutput(); err != nil {
 						return Response{Ok: false, Error: fmt.Sprintf("mount --bind %s to %s failed: %v (%s)", src, tgt, err, strings.TrimSpace(string(out)))}
 					}
-					// Ensure files and directories are accessible to Samba user
-					_ = exec.Command("chmod", "-R", "a+rX", src).Run()
-					_ = exec.Command("chmod", "-R", "0775", tgt).Run()
+					// Remount read-only to avoid broadening permissions and prevent modifications
+					cmdRo := exec.Command("mount", "-o", "remount,ro,bind", tgt)
+					if out, err := cmdRo.CombinedOutput(); err != nil {
+						_ = exec.Command("umount", "-l", tgt).Run()
+						return Response{Ok: false, Error: fmt.Sprintf("remount ro %s failed: %v (%s)", tgt, err, strings.TrimSpace(string(out)))}
+					}
 					updateFstabBindMount(src, tgt, true)
 				} else {
 					_ = exec.Command("umount", "-l", tgt).Run()
@@ -1754,6 +1817,9 @@ func findNetBirdTarget() (string, []string, bool, bool) {
 	if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
 		for _, dir := range userDirs {
 			uid := filepath.Base(dir)
+			if !isAllodUser(uid) {
+				continue
+			}
 			prefix := []string{"runuser", "-u", "#" + uid, "--"}
 			args := append(prefix, "podman", "ps", "--format", "{{.Names}}")
 			if out, err := exec.Command(args[0], args[1:]...).Output(); err == nil {
@@ -1781,6 +1847,9 @@ func findNetBirdTarget() (string, []string, bool, bool) {
 	if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
 		for _, dir := range userDirs {
 			uid := filepath.Base(dir)
+			if !isAllodUser(uid) {
+				continue
+			}
 			prefix := []string{"runuser", "-u", "#" + uid, "--"}
 			args := append(prefix, "podman", "ps", "-a", "--format", "{{.Names}}")
 			if out, err := exec.Command(args[0], args[1:]...).Output(); err == nil {
@@ -2349,10 +2418,13 @@ func runPodmanCmd(args ...string) ([]byte, error) {
 		return out, nil
 	}
 
-	// 2. Try rootless users in /run/user/<uid>
+	// 2. Try rootless users in /run/user/<uid> (only allod user or members of allod group)
 	if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
 		for _, dir := range userDirs {
 			uid := filepath.Base(dir)
+			if !isAllodUser(uid) {
+				continue
+			}
 			prefix := []string{"runuser", "-u", "#" + uid, "--", "podman"}
 			fullArgs := append(prefix, args...)
 			c := exec.Command(fullArgs[0], fullArgs[1:]...)
@@ -2427,40 +2499,91 @@ func dirHasPhotosOrFiles(dir string) bool {
 	return countMediaFiles(dir) > 0
 }
 
-func getImmichUserUUIDFromDB(username string) string {
+type immichDbUser struct {
+	id    string
+	email string
+	name  string
+}
+
+// parseImmichUserUUID matches an Allod username against Immich DB users using exact match.
+// Returns the UUID if exactly 1 match is found; returns empty string if 0 or >1 (ambiguous).
+func parseImmichUserUUID(psqlOutput, username string) string {
+	userLower := strings.ToLower(strings.TrimSpace(username))
+	if userLower == "" {
+		return ""
+	}
+
+	lines := strings.Split(psqlOutput, "\n")
+	var candidates []immichDbUser
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" {
+			continue
+		}
+		parts := strings.Split(trimmed, "|")
+		if len(parts) < 1 {
+			continue
+		}
+		id := strings.TrimSpace(parts[0])
+		if !isValidUUID(id) {
+			continue
+		}
+		email := ""
+		if len(parts) >= 2 {
+			email = strings.ToLower(strings.TrimSpace(parts[1]))
+		}
+		name := ""
+		if len(parts) >= 3 {
+			name = strings.ToLower(strings.TrimSpace(parts[2]))
+		}
+		candidates = append(candidates, immichDbUser{
+			id:    id,
+			email: email,
+			name:  name,
+		})
+	}
+
+	var matches []string
+	for _, u := range candidates {
+		// Exact match by UUID, email, or name
+		if u.id == userLower || u.email == userLower || u.name == userLower {
+			matches = append(matches, u.id)
+			continue
+		}
+		// Exact match by email local-part (e.g. "mario" matches "mario@example.com")
+		if emailParts := strings.Split(u.email, "@"); len(emailParts) > 0 && emailParts[0] == userLower {
+			matches = append(matches, u.id)
+			continue
+		}
+	}
+
+	// Refuse ambiguous match (>1) or no match (0)
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return ""
+}
+
+// queryImmichUserUUID queries Immich Postgres containers and returns the matched user UUID,
+// and whether the database was successfully contacted.
+func queryImmichUserUUID(username string) (uuid string, dbQueried bool) {
+	if strings.TrimSpace(username) == "" {
+		return "", false
+	}
 	pgContainers := []string{"photos-postgres", "systemd-photos-postgres", "immich-postgres", "immich_postgres"}
 	for _, cName := range pgContainers {
 		out, err := runPodmanCmd("exec", "-i", cName, "psql", "-U", "postgres", "-d", "immich", "-t", "-A", "-c", "SELECT id, email, name FROM users;")
 		if err != nil || len(out) == 0 {
 			continue
 		}
-		lines := strings.Split(string(out), "\n")
-		var validUsers []string
-		for _, l := range lines {
-			parts := strings.Split(strings.TrimSpace(l), "|")
-			if len(parts) >= 1 && len(parts[0]) == 36 {
-				uuid := parts[0]
-				validUsers = append(validUsers, uuid)
-				if username != "" {
-					userLower := strings.ToLower(username)
-					if len(parts) >= 3 {
-						email := strings.ToLower(parts[1])
-						name := strings.ToLower(parts[2])
-						if strings.Contains(email, userLower) || strings.Contains(name, userLower) {
-							return uuid
-						}
-					}
-				}
-			}
-		}
-		if username == "" && len(validUsers) > 0 {
-			return validUsers[0]
-		}
-		if len(validUsers) == 1 {
-			return validUsers[0]
-		}
+		return parseImmichUserUUID(string(out), username), true
 	}
-	return ""
+	return "", false
+}
+
+func getImmichUserUUIDFromDB(username string) string {
+	uuid, _ := queryImmichUserUUID(username)
+	return uuid
 }
 
 // findImmichPhotosSource searches for the actual photos directory of a user in Immich storage.
@@ -2504,8 +2627,43 @@ func findImmichPhotosSource(basePhotosRoot, username string) string {
 	}
 
 	primaryRoot := roots[0]
-	userUUID := getImmichUserUUIDFromDB(username)
 
+	var userUUID string
+	if username != "" {
+		if isValidUUID(username) {
+			userUUID = username
+		} else {
+			var dbQueried bool
+			userUUID, dbQueried = queryImmichUserUUID(username)
+			// Only check disk for a single-user UUID if DB was unreachable (e.g. single-user offline/tests)
+			if userUUID == "" && !dbQueried {
+				var diskUUIDs []string
+				seenDiskUUID := make(map[string]bool)
+				for _, r := range roots {
+					for _, sub := range []string{"library", "upload"} {
+						subPath := filepath.Join(r, sub)
+						if entries, err := os.ReadDir(subPath); err == nil {
+							for _, e := range entries {
+								if !e.IsDir() {
+									continue
+								}
+								candUUID := e.Name()
+								if isValidUUID(candUUID) && !seenDiskUUID[candUUID] {
+									seenDiskUUID[candUUID] = true
+									diskUUIDs = append(diskUUIDs, candUUID)
+								}
+							}
+						}
+					}
+				}
+				if len(diskUUIDs) == 1 {
+					userUUID = diskUUIDs[0]
+				}
+			}
+		}
+	}
+
+	// Candidates must be strictly tied to THIS user (never scan or include other users' directories)
 	var candidates []string
 	seenCand := make(map[string]bool)
 	addCandidate := func(c string) {
@@ -2520,33 +2678,15 @@ func findImmichPhotosSource(basePhotosRoot, username string) string {
 		if userUUID != "" {
 			addCandidate(filepath.Join(r, "library", userUUID))
 			addCandidate(filepath.Join(r, "upload", userUUID))
-			addCandidate(filepath.Join(r, userUUID))
 		}
-		if username != "" {
+		if username != "" && !isValidUUID(username) {
 			addCandidate(filepath.Join(r, "library", username))
 			addCandidate(filepath.Join(r, "upload", username))
-			addCandidate(filepath.Join(r, username))
 		}
-
-		// Scan subdirectories in library and upload
-		for _, sub := range []string{"library", "upload"} {
-			subPath := filepath.Join(r, sub)
-			if entries, err := os.ReadDir(subPath); err == nil {
-				for _, e := range entries {
-					if !e.IsDir() {
-						continue
-					}
-					n := strings.ToLower(e.Name())
-					if n == "thumbs" || n == "profile" || n == "encoded-video" || n == "temp" || strings.HasPrefix(n, ".") {
-						continue
-					}
-					addCandidate(filepath.Join(subPath, e.Name()))
-				}
-			}
+		if username == "" {
+			addCandidate(filepath.Join(r, "library"))
+			addCandidate(filepath.Join(r, "upload"))
 		}
-
-		addCandidate(filepath.Join(r, "library"))
-		addCandidate(filepath.Join(r, "upload"))
 	}
 
 	bestCandidate := ""
@@ -2578,7 +2718,7 @@ func findImmichPhotosSource(basePhotosRoot, username string) string {
 		return bestCandidate
 	}
 
-	// Fallbacks if no media files exist yet
+	// Fallbacks if no media files exist yet (must only point to this user's directory)
 	if userUUID != "" {
 		libUUID := filepath.Join(primaryRoot, "library", userUUID)
 		if fi, err := os.Stat(libUUID); err == nil && fi.IsDir() {
@@ -2592,8 +2732,17 @@ func findImmichPhotosSource(basePhotosRoot, username string) string {
 	}
 
 	if username != "" {
-		return filepath.Join(primaryRoot, "library", username)
+		libUser := filepath.Join(primaryRoot, "library", username)
+		if fi, err := os.Stat(libUser); err == nil && fi.IsDir() {
+			return libUser
+		}
+		uplUser := filepath.Join(primaryRoot, "upload", username)
+		if fi, err := os.Stat(uplUser); err == nil && fi.IsDir() {
+			return uplUser
+		}
+		return libUser
 	}
+
 	return filepath.Join(primaryRoot, "library")
 }
 
@@ -2604,7 +2753,7 @@ func updateFstabBindMount(src, tgt string, enabled bool) {
 	}
 	lines := strings.Split(string(data), "\n")
 	var newLines []string
-	bindEntry := fmt.Sprintf("%s %s none bind,nofail 0 0", src, tgt)
+	bindEntry := fmt.Sprintf("%s %s none bind,ro,nofail 0 0", src, tgt)
 	exists := false
 
 	for _, l := range lines {
@@ -2644,9 +2793,22 @@ func AutoBindPhotos() {
 		if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
 			continue
 		}
+		if !validNameRegex.MatchString(uName) {
+			continue
+		}
 		tgt := filepath.Join(baseShares, uName, "photos")
+		if !isAllowedPath(tgt) || !strings.HasPrefix(filepath.ToSlash(filepath.Clean(tgt)), filepath.ToSlash(baseShares)+"/") {
+			continue
+		}
+
 		src := findImmichPhotosSource(basePhotosRoot, uName)
-		if src == "" {
+		if src == "" || !isAllowedPath(src) || strings.Contains(src, "..") {
+			log.Printf("[PHOTOS] Immich photo library not found or invalid for user %s, skipping bind-mount", uName)
+			continue
+		}
+
+		if fi, err := os.Stat(src); err != nil || !fi.IsDir() {
+			log.Printf("[PHOTOS] Immich photo source directory does not exist for user %s: %s, skipping bind-mount", uName, src)
 			continue
 		}
 
@@ -2662,12 +2824,10 @@ func AutoBindPhotos() {
 		// Lazy unmount any existing stale/empty mount
 		_ = exec.Command("umount", "-l", tgt).Run()
 
-		_ = os.MkdirAll(src, 0775)
-		_ = os.MkdirAll(tgt, 0775)
+		_ = os.MkdirAll(tgt, 0750)
 
 		if out, err := exec.Command("mount", "--bind", src, tgt).CombinedOutput(); err == nil {
-			_ = exec.Command("chmod", "-R", "a+rX", src).Run()
-			_ = exec.Command("chmod", "-R", "0775", tgt).Run()
+			_ = exec.Command("mount", "-o", "remount,ro,bind", tgt).Run()
 			updateFstabBindMount(src, tgt, true)
 		} else {
 			_ = out
