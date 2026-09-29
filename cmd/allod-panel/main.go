@@ -3640,9 +3640,10 @@ WantedBy=default.target
 		}
 
 		var req struct {
-			Disks []string `json:"disks"`
-			Mode  string   `json:"mode"`
-			Mount string   `json:"mount"`
+			Disks       []string `json:"disks"`
+			Mode        string   `json:"mode"`
+			Mount       string   `json:"mount"`
+			ConfirmWipe bool     `json:"confirm_wipe"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			// Optional body

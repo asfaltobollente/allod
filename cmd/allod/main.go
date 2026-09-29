@@ -994,19 +994,21 @@ var storageInitCmd = &cobra.Command{
 		// Call helper daemon over socket
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		res, err := client.Execute("storage.init", map[string]interface{}{
-			"disks": disks,
-			"mode":  mode,
-			"mount": mountPoint,
-			"user":  os.Getenv("USER"),
+			"disks":        disks,
+			"mode":         mode,
+			"mount":        mountPoint,
+			"user":         os.Getenv("USER"),
+			"confirm_wipe": true,
 		}, false)
 
 		if err != nil {
 			client.SocketPath = "allod-helper.sock"
 			res, err = client.Execute("storage.init", map[string]interface{}{
-				"disks": disks,
-				"mode":  mode,
-				"mount": mountPoint,
-				"user":  os.Getenv("USER"),
+				"disks":        disks,
+				"mode":         mode,
+				"mount":        mountPoint,
+				"user":         os.Getenv("USER"),
+				"confirm_wipe": true,
 			}, false)
 		}
 

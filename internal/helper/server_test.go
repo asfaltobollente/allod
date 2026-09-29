@@ -942,3 +942,110 @@ func TestIsAuthorizedCallerOnlyAllodGroup(t *testing.T) {
 		t.Errorf("expected rejection when allodGid is empty")
 	}
 }
+
+func TestGetParentDiskName(t *testing.T) {
+	cases := map[string]string{
+		"sda":            "sda",
+		"/dev/sda":       "sda",
+		"sda1":           "sda",
+		"/dev/sda2":      "sda",
+		"nvme0n1":        "nvme0n1",
+		"/dev/nvme0n1":   "nvme0n1",
+		"nvme0n1p1":      "nvme0n1",
+		"/dev/nvme0n1p2": "nvme0n1",
+		"mmcblk0p1":      "mmcblk0",
+		"vda1":           "vda",
+	}
+	for in, expected := range cases {
+		got := getParentDiskName(in)
+		if got != expected {
+			t.Errorf("getParentDiskName(%q) = %q, expected %q", in, got, expected)
+		}
+	}
+}
+
+func TestIsSystemOrMountedDisk(t *testing.T) {
+	mockMounts := strings.Join([]string{
+		"/dev/nvme0n1p2 / ext4 rw,relatime 0 0",
+		"/dev/nvme0n1p1 /boot/efi vfat rw,relatime 0 0",
+		"/dev/sda1 /boot ext4 rw,relatime 0 0",
+		"/dev/sdb1 /mnt/allod-storage btrfs rw,relatime 0 0",
+		"tmpfs /run tmpfs rw,nosuid,nodev 0 0",
+	}, "\n")
+
+	// 1. Root partition /dev/nvme0n1p2 -> must be BLOCKED (system storage)
+	blocked, reason := isSystemOrMountedDisk("nvme0n1p2", mockMounts)
+	if !blocked || !strings.Contains(reason, "system storage") {
+		t.Errorf("expected nvme0n1p2 to be blocked as system storage, got blocked=%v, reason=%s", blocked, reason)
+	}
+
+	// 2. Parent disk of root /dev/nvme0n1 -> must be BLOCKED (system storage)
+	blocked, reason = isSystemOrMountedDisk("nvme0n1", mockMounts)
+	if !blocked || !strings.Contains(reason, "system storage") {
+		t.Errorf("expected nvme0n1 parent disk to be blocked as system storage, got blocked=%v, reason=%s", blocked, reason)
+	}
+
+	// 3. /boot disk /dev/sda and /dev/sda1 -> must be BLOCKED (system storage)
+	blocked, reason = isSystemOrMountedDisk("sda", mockMounts)
+	if !blocked || !strings.Contains(reason, "system storage") {
+		t.Errorf("expected sda to be blocked as system storage (/boot), got blocked=%v, reason=%s", blocked, reason)
+	}
+	blocked, _ = isSystemOrMountedDisk("sda1", mockMounts)
+	if !blocked {
+		t.Errorf("expected sda1 partition to be blocked as system storage (/boot)")
+	}
+
+	// 4. Mounted data disk /dev/sdb and /dev/sdb1 -> must be BLOCKED (active mount)
+	blocked, reason = isSystemOrMountedDisk("sdb", mockMounts)
+	if !blocked || !strings.Contains(reason, "active mount") {
+		t.Errorf("expected sdb to be blocked as active mount, got blocked=%v, reason=%s", blocked, reason)
+	}
+
+	// 5. Unmounted clean data disks sdc and sdd -> must be ALLOWED
+	blocked, reason = isSystemOrMountedDisk("sdc", mockMounts)
+	if blocked {
+		t.Errorf("expected clean unmounted disk sdc to be allowed, got blocked=true, reason=%s", reason)
+	}
+	blocked, reason = isSystemOrMountedDisk("sdd", mockMounts)
+	if blocked {
+		t.Errorf("expected clean unmounted disk sdd to be allowed, got blocked=true, reason=%s", reason)
+	}
+}
+
+func TestStorageInitGuards(t *testing.T) {
+	s := &Server{}
+
+	// 1. Without confirm_wipe: true when Plan: false -> must be REJECTED
+	reqNoWipe := Request{
+		Action: "storage.init",
+		Plan:   false,
+		Args: map[string]interface{}{
+			"disks": []interface{}{"sdc", "sdd"},
+			"mode":  "raid1",
+		},
+	}
+	resNoWipe := s.processRequest(reqNoWipe)
+	if resNoWipe.Ok {
+		t.Errorf("SECURITY: storage.init executed without confirm_wipe: true")
+	}
+	if !strings.Contains(resNoWipe.Error, "confirm_wipe") {
+		t.Errorf("expected error to mention confirm_wipe, got: %s", resNoWipe.Error)
+	}
+
+	// 2. Dry-run Plan: true with valid clean disks -> must succeed
+	reqPlan := Request{
+		Action: "storage.init",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"disks": []interface{}{"sdc", "sdd"},
+			"mode":  "raid1",
+		},
+	}
+	resPlan := s.processRequest(reqPlan)
+	if !resPlan.Ok {
+		t.Errorf("expected storage.init plan to succeed, got error: %s", resPlan.Error)
+	}
+	if len(resPlan.Plan) == 0 {
+		t.Errorf("expected non-empty plan for storage.init")
+	}
+}
