@@ -215,6 +215,112 @@ func validDeviceRegex(dev string) bool {
 	return validNameRegex.MatchString(dev)
 }
 
+var nvmePartRegex = regexp.MustCompile(`^(nvme[0-9]+n[0-9]+|mmcblk[0-9]+|loop[0-9]+|nbd[0-9]+)p[0-9]+$`)
+var sdPartRegex = regexp.MustCompile(`^([a-zA-Z]+)[0-9]+$`)
+
+func getParentDiskName(devName string) string {
+	clean := strings.TrimSpace(devName)
+	clean = strings.TrimPrefix(clean, "/dev/")
+	clean = strings.TrimPrefix(clean, "disk/by-id/")
+	clean = filepath.Base(clean)
+
+	if m := nvmePartRegex.FindStringSubmatch(clean); len(m) == 2 {
+		return m[1]
+	}
+	if m := sdPartRegex.FindStringSubmatch(clean); len(m) == 2 {
+		return m[1]
+	}
+	return clean
+}
+
+// isSystemOrMountedDisk checks if a target disk (or any of its partitions) backs critical
+// system mount points (/, /boot, etc.) or is currently mounted anywhere on the host.
+func isSystemOrMountedDisk(disk string, mountsContent string) (isBlocked bool, reason string) {
+	if disk == "" {
+		return false, ""
+	}
+	cleanDisk := strings.TrimSpace(disk)
+	cleanDisk = strings.TrimPrefix(cleanDisk, "/dev/")
+	cleanDisk = strings.TrimPrefix(cleanDisk, "disk/by-id/")
+	cleanDisk = filepath.Base(cleanDisk)
+	targetParent := getParentDiskName(cleanDisk)
+
+	// If mountsContent is empty, try reading /proc/mounts (on Linux)
+	if mountsContent == "" {
+		if data, err := os.ReadFile("/proc/mounts"); err == nil {
+			mountsContent = string(data)
+		}
+	}
+
+	systemMounts := map[string]bool{
+		"/":         true,
+		"/boot":     true,
+		"/boot/efi": true,
+		"/usr":      true,
+		"/var":      true,
+		"/etc":      true,
+	}
+
+	if mountsContent != "" {
+		lines := strings.Split(mountsContent, "\n")
+		for _, l := range lines {
+			fields := strings.Fields(l)
+			if len(fields) < 2 {
+				continue
+			}
+			devSpec := fields[0]
+			mountPoint := fields[1]
+
+			if !strings.HasPrefix(devSpec, "/dev/") && devSpec != "/dev/root" {
+				continue
+			}
+
+			devBase := filepath.Base(devSpec)
+			devParent := getParentDiskName(devBase)
+
+			// Check if this mount belongs to the target disk or any of its partitions
+			if devBase == cleanDisk || devParent == cleanDisk || devParent == targetParent || devBase == targetParent {
+				if systemMounts[mountPoint] || strings.HasPrefix(mountPoint, "/boot/") {
+					return true, fmt.Sprintf("device %s is part of system storage (mounted on %s)", disk, mountPoint)
+				}
+				return true, fmt.Sprintf("device %s has an active mount on %s", disk, mountPoint)
+			}
+		}
+	}
+
+	// Dynamic check via findmnt if running on live Linux host
+	if runtime.GOOS == "linux" {
+		for _, sysPath := range []string{"/", "/boot", "/boot/efi"} {
+			if out, err := exec.Command("findmnt", "-n", "-o", "SOURCE", sysPath).Output(); err == nil {
+				src := strings.TrimSpace(string(out))
+				if src != "" {
+					srcBase := filepath.Base(src)
+					srcParent := getParentDiskName(srcBase)
+					if srcBase == cleanDisk || srcParent == cleanDisk || srcParent == targetParent || srcBase == targetParent {
+						return true, fmt.Sprintf("device %s backs %s (detected via findmnt)", disk, sysPath)
+					}
+				}
+			}
+		}
+
+		// Dynamic check via lsblk if running on live Linux host
+		devPath := disk
+		if !strings.HasPrefix(devPath, "/dev/") {
+			devPath = "/dev/" + devPath
+		}
+		if out, err := exec.Command("lsblk", "-no", "MOUNTPOINTS", devPath).Output(); err == nil {
+			for _, m := range strings.Split(string(out), "\n") {
+				m = strings.TrimSpace(m)
+				if m != "" {
+					return true, fmt.Sprintf("device %s has active partition mount on %s (detected via lsblk)", disk, m)
+				}
+			}
+		}
+	}
+
+	return false, ""
+}
+
 func resolveExecutable(preferred string, fallbacks ...string) string {
 	if p, err := exec.LookPath(preferred); err == nil {
 		return p
@@ -932,6 +1038,13 @@ func (s *Server) processRequest(req Request) Response {
 			username = "root"
 		}
 
+		// Guard: Reject system disks (backing /, /boot, etc.) and currently mounted disks
+		for _, d := range disks {
+			if blocked, reason := isSystemOrMountedDisk(d, ""); blocked {
+				return Response{Ok: false, Error: fmt.Sprintf("Cannot initialize storage on %s: %s", d, reason)}
+			}
+		}
+
 		plan := []string{
 			fmt.Sprintf("mkfs.btrfs -d %s -m %s -f %s", mode, mode, strings.Join(disks, " ")),
 			fmt.Sprintf("mkdir -p %s", mountPoint),
@@ -942,6 +1055,13 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		if !req.Plan {
+			confirmWipe, _ := req.Args["confirm_wipe"].(bool)
+			if !confirmWipe {
+				return Response{Ok: false, Error: "Destructive operation requires 'confirm_wipe: true' argument"}
+			}
+
+			log.Printf("[AUDIT] [STORAGE] Executing storage.init (wipe and format) on devices: %v with mode %s at %s", disks, mode, mountPoint)
+
 			for _, d := range disks {
 				devPath := d
 				if !strings.HasPrefix(devPath, "/dev/") {

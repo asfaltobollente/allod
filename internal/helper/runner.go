@@ -146,10 +146,11 @@ func (c *Client) RestartService(unit string) error {
 // InitStorage formats physical drives and creates the Btrfs pool on the specified mount point.
 func (c *Client) InitStorage(mode string, disks []string, mountPoint, user string) error {
 	res, err := c.Execute("storage.init", map[string]interface{}{
-		"mode":  mode,
-		"disks": disks,
-		"mount": mountPoint,
-		"user":  user,
+		"mode":         mode,
+		"disks":        disks,
+		"mount":        mountPoint,
+		"user":         user,
+		"confirm_wipe": true,
 	}, false)
 	if err != nil {
 		return fmt.Errorf("helper connection error: %w", err)
