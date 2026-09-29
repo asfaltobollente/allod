@@ -1038,6 +1038,10 @@ var purgeCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		modName := args[0]
+		if !manifest.IsValidModule(modName) {
+			fmt.Printf("Modulo '%s' non valido o inesistente.\n", modName)
+			os.Exit(1)
+		}
 		manifestPath := filepath.Join("modules", modName, "module.yaml")
 		if _, err := os.Stat(manifestPath); err != nil && modName != "storage" {
 			fmt.Printf("Modulo '%s' inesistente.\n", modName)
