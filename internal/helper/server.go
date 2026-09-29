@@ -2553,6 +2553,16 @@ func PatchAvahiDaemonConfig(content string, hostnames ...string) string {
 	return out
 }
 
+const (
+	wsddURL            = "https://raw.githubusercontent.com/christgau/wsdd/v0.8/src/wsdd.py"
+	wsddExpectedSHA256 = "a25263168006443c80ce55783af3630c2d75bdb349542f50493cf77d0ed24de2"
+)
+
+func verifyWsddChecksum(data []byte) bool {
+	sum := sha256.Sum256(data)
+	return strings.EqualFold(hex.EncodeToString(sum[:]), wsddExpectedSHA256)
+}
+
 // ensureWsddInstalledAndUnit ensures wsdd executable exists, writes /etc/systemd/system/wsdd.service if missing, and reloads systemd.
 func ensureWsddInstalledAndUnit() error {
 	wsddBin := resolveExecutable("wsdd", "/usr/bin/wsdd", "/usr/sbin/wsdd", "/usr/local/bin/wsdd")
@@ -2567,13 +2577,22 @@ func ensureWsddInstalledAndUnit() error {
 		wsddBin = resolveExecutable("wsdd", "/usr/bin/wsdd", "/usr/sbin/wsdd", "/usr/local/bin/wsdd")
 	}
 
-	// 2. Fallback: if apt package was not found, download official standalone wsdd.py
+	// 2. Fallback: if apt package was not found, download official standalone wsdd.py pinned to release tag and verify SHA-256
 	if wsddBin == "" {
 		curlBin := resolveExecutable("curl", "/usr/bin/curl", "/bin/curl")
 		if curlBin != "" {
-			_ = exec.Command(curlBin, "-sSL", "https://raw.githubusercontent.com/christgau/wsdd/master/src/wsdd.py", "-o", "/usr/local/bin/wsdd").Run()
-			_ = os.Chmod("/usr/local/bin/wsdd", 0755)
-			wsddBin = resolveExecutable("wsdd", "/usr/local/bin/wsdd")
+			tmpPath := "/usr/local/bin/wsdd.tmp"
+			if err := exec.Command(curlBin, "-fsSL", wsddURL, "-o", tmpPath).Run(); err == nil {
+				if data, readErr := os.ReadFile(tmpPath); readErr == nil && verifyWsddChecksum(data) {
+					if err := os.Rename(tmpPath, "/usr/local/bin/wsdd"); err == nil {
+						_ = os.Chmod("/usr/local/bin/wsdd", 0755)
+						wsddBin = resolveExecutable("wsdd", "/usr/local/bin/wsdd")
+					}
+				} else {
+					log.Printf("[SECURITY] wsdd.py checksum verification failed; discarding downloaded binary")
+					_ = os.Remove(tmpPath)
+				}
+			}
 		}
 	}
 
