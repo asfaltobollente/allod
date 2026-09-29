@@ -477,7 +477,6 @@ func (h *AuthHandler) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		Message: "Password amministratore configurata con successo!",
 		Data: map[string]interface{}{
 			"authenticated": true,
-			"token":         token,
 		},
 	})
 }
@@ -572,7 +571,6 @@ func (h *AuthHandler) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		Message: "Autenticazione riuscita",
 		Data: map[string]interface{}{
 			"authenticated": true,
-			"token":         token,
 		},
 	})
 }
@@ -725,7 +723,6 @@ func (h *AuthHandler) handlePortalLogin(w http.ResponseWriter, r *http.Request) 
 			"first_name": member.FirstName,
 			"last_name":  member.LastName,
 			"role":       member.Role,
-			"token":      token,
 		},
 	})
 }
