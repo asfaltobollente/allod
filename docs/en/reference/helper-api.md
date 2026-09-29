@@ -1,11 +1,11 @@
 # Reference: Root Helper Socket API (`allod-helperd`)
 
 The `allod-helperd` root daemon listens on a local UNIX domain socket (`/run/allod/helper.sock`, mode `0666`, group `allod`) and accepts JSON-encoded requests for privileged administrative actions.
-Security is strictly enforced via kernel-level peer credential checking (`SO_PEERCRED`), rejecting any caller whose UID does not belong to authorized administrative groups (`allod`, `sudo`, `wheel`, `admin`, or root UID 0).
+Security is strictly enforced via kernel-level peer credential checking (`SO_PEERCRED`), rejecting any caller whose UID does not belong to the authorized `allod` group (or root UID 0).
 
 1. **UNIX Socket Permissions (`0666`)**: The socket file `/run/allod/helper.sock` has file mode `0666` allowing local processes to connect, while all administrative authorization is enforced via unforgeable kernel peer credentials (`SO_PEERCRED`).
 2. **Kernel-Level Caller Verification (`SO_PEERCRED`)**: On Linux, every incoming socket connection is checked at the kernel level via `SO_PEERCRED` (`unix.GetsockoptUcred`). The helper verifies that the caller's effective UID is `0` (`root`) or that the caller's UID belongs to group `allod`. Calls from unauthorized UIDs are rejected with `{"ok":false,"error":"caller not in group allod"}` and logged to stdout/journal.
-3. **Audit Logging**: Every incoming request is logged to systemd journal with structured fields: `time`, `uid`, `action`, `args_hash` (truncated SHA-256 of parameters), `ok`, and `applied`.
+3. **Audit Logging**: Every incoming request is logged to systemd journal with structured fields: `time`, `uid`, `action`, `args_hash` (truncated 8-byte SHA-256 of parameters), `ok`, and `applied`.
 4. **No Unauthenticated Fallbacks**: There is no unauthenticated TCP fallback. Communication strictly occurs over the authenticated UNIX domain socket.
 
 ---
@@ -30,7 +30,7 @@ Security is strictly enforced via kernel-level peer credential checking (`SO_PEE
   "ok": true,
   "applied": true,
   "plan": [
-    "mkdir -p /mnt/allod-storage/shares && chmod -R 0777 /mnt/allod-storage/shares",
+    "mkdir -p /mnt/allod-storage/shares && chmod -R 0770 /mnt/allod-storage/shares",
     "configure share [documents] at /mnt/allod-storage/shares in /etc/samba/smb.conf",
     "systemctl restart smbd"
   ]
@@ -39,24 +39,25 @@ Security is strictly enforced via kernel-level peer credential checking (`SO_PEE
 
 ---
 
-## Closed Actions Whitelist (16 Actions)
+## Closed Actions Whitelist (24 Actions)
 
-The root helper operates exclusively on a closed whitelist of 16 actions defined in `internal/helper/server.go` (`AllowedActions`) and mirrored in `schemas/helper-api.schema.json`:
+The root helper operates exclusively on a closed whitelist of 24 actions defined in `internal/helper/server.go` (`AllowedActions`) and mirrored in `schemas/helper-api.schema.json`:
 
 | Action | Purpose | Arguments | What Runs as Root |
 | :--- | :--- | :--- | :--- |
-| `shares.apply` | Configure Samba share and directory permissions | `name` (regex), `path` (allowed path), `enabled` (bool) | `mkdir -p`, `chmod`, modifies `/etc/samba/smb.conf`, restarts `smbd` |
+| `shares.apply` | Configure Samba share and directory permissions | `name` (regex), `path` (allowed path), `enabled` (bool) | `mkdir -p`, `chmod 0770`, modifies `/etc/samba/smb.conf`, restarts `smbd` |
 | `shares.bind_photos` | Bind-mount Immich photo library into Samba shares | `username` (optional regex), `enabled` (bool) | `mkdir -p`, `mount --bind`, `umount`, `chmod` |
 | `shares.set_password` | Configure Samba password and private share for user | `username` (regex), `password` (string) | `useradd` (if missing), `smbpasswd -a -s`, `chmod`, `chown`, `systemctl reload smbd` |
 | `shares.verify_password` | Verify if password matches user's Samba credentials | `username` (regex), `password` (string) | `pdbedit -u <user> -w`, validates NT-Hash in-memory |
 | `users.create` | Create unprivileged Linux user for share authentication | `username` (regex) | `useradd -M -s /usr/sbin/nologin <user>`, `mkdir -p`, `chmod 0770` |
 | `users.passwd` | Alias for `shares.set_password` | `username` (regex), `password` (string) | `useradd` (if missing), `smbpasswd -a -s`, `chmod`, `chown`, `systemctl reload smbd` |
-| `firewall.apply` | Reload host firewall configuration | *(none)* | `nftables reload /etc/allod/nftables.conf` |
-| `snapshots.create` | Create read-only Btrfs subvolume snapshot | `subvolume` (optional regex, default: `data`) | `btrfs subvolume snapshot /data/<subvol> /data/.snapshots/<subvol>` |
-| `snapshots.prune` | Delete expired Btrfs subvolume snapshots | *(none)* | `btrfs subvolume delete` on expired snapshots |
-| `smart.read` | Query SMART health status of a physical storage drive | `disk` (regex device / ID) | `smartctl -H /dev/disk/by-id/<disk>` |
-| `service.restart` | Restart an allowed Allod systemd service | `unit` (regex from `AllowedServiceUnits`) | `systemctl restart <unit>` (special update logic for `allod-helperd`) |
+| `firewall.apply` | Reload host firewall configuration *(planned stub)* | *(none)* | Validates input; planned: `nftables reload /etc/allod/nftables.conf` |
+| `snapshots.create` | Create read-only Btrfs snapshot *(planned stub)* | `subvolume` (optional regex, default: `data`) | Validates input; planned: `btrfs subvolume snapshot /data/<subvol> /data/.snapshots/<subvol>` |
+| `snapshots.prune` | Delete expired Btrfs snapshots *(planned stub)* | *(none)* | Validates input; planned: `btrfs subvolume delete` on expired snapshots |
+| `smart.read` | Query SMART health of physical drive *(planned stub)* | `disk` (regex device / ID) | Validates input; planned: `smartctl -H /dev/disk/by-id/<disk>` |
+| `service.restart` | Restart an allowed Allod systemd service | `unit` (regex from `AllowedServiceUnits`) | `systemctl restart <unit>` (no unprivileged binary replacement) |
 | `storage.init` | Format disks and create initial Btrfs pool structure | `disks` (list/string of regex devices), `mode` (`single`\|`raid1`), `mount` (allowed path), `user` (optional regex) | `umount`, `mkfs.btrfs`, `mount`, `mkdir -p`, `chmod`, `chown` |
+| `storage.diagnostics` | Query Btrfs filesystem usage and device error stats | `mount` (allowed path) | `btrfs filesystem usage`, `btrfs device stats`, `df` |
 | `network.netbird_status` | Query NetBird mesh status and connected peers in JSON | *(none)* | `podman exec <container> netbird status --json` |
 | `network.netbird_cli` | Execute controlled NetBird CLI query | `command` (`status`\|`status_detail`) | `podman exec <container> netbird status ...` |
 | `network.netbird_up` | Connect node to NetBird overlay mesh | *(none)* | `podman exec <container> netbird up` |
@@ -65,6 +66,8 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 | `network.server_up` | Start local managed NetBird control plane container | `domain` (FQDN or IP), `port` (int), `dash_port` (int) | Runs `netbirdio/netbird-server` & `netbirdio/dashboard` |
 | `network.server_down` | Stop local managed NetBird control plane container | *(none)* | Stops and removes managed NetBird server & dashboard |
 | `network.server_status` | Query status of local managed NetBird control plane | *(none)* | Inspects managed server containers and port bindings |
+| `network.zeroconfig_status` | Query mDNS (Avahi) and WSDD network discovery status | *(none)* | Checks `avahi-daemon` and `wsdd` systemd service states |
+| `network.zeroconfig_setup` | Configure local hostname in `/etc/hosts` and discovery | `hostname` (regex) | Updates `/etc/hosts`, configures and restarts `avahi-daemon` and `wsdd` |
 | `containers.prune` | Safely prune exited root containers and dangling images | *(none)* | `podman container prune -f`, `podman image prune -f` |
 
 ---
@@ -74,14 +77,14 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 ### 1. `shares.apply`
 * **Input & Validation**: `name` must match `^[a-zA-Z0-9_-]{1,64}$` (defaults to `"shares"`). `path` must be within `/mnt/allod-storage`, `/data`, or the configured `ALLOD_STORAGE_DIR`, strictly disallowing directory traversal (`..`).
 * **Compromised Panel Impact**: An attacker controlling `allod-panel` could alter Samba share definitions or permissions within `/mnt/allod-storage`. They cannot access arbitrary system paths (`/etc`, `/root`, `/bin`).
-* **Mitigations**: Strict path allowlist validation (`/mnt/allod-storage`, `/data`, `ALLOD_STORAGE_DIR`); system binary paths like `/usr/local/bin` and system directories are strictly rejected.
+* **Mitigations**: Strict path allowlist validation (`/mnt/allod-storage`, `/data`, `ALLOD_STORAGE_DIR`); system binary paths like `/usr/local/bin` and system directories are strictly rejected. Enforces group-accessible `0770` with setgid rather than world-writable permissions.
 * **Idempotency**: Yes, reapplying identical share settings leaves configuration and filesystem in a consistent state.
 * **Support for `plan: true`**: Yes, outputs planned commands without filesystem or Samba mutations.
 
 ### 2. `shares.bind_photos`
 * **Input & Validation**: `username` (if non-empty) is checked against `^[a-zA-Z0-9_-]{1,64}$`.
 * **Compromised Panel Impact**: Could bind or unbind photo library mount points under `/mnt/allod-storage/shares`. Cannot mount arbitrary host devices or external paths.
-* **Mitigations**: Source and target paths are hardcoded under `/mnt/allod-storage/photos` and `/mnt/allod-storage/shares`.
+* **Mitigations**: Source and target paths are hardcoded under `/mnt/allod-storage/photos` and `/mnt/allod-storage/shares`. Bind mounts are mounted read-only (`ro`) to preserve photo integrity.
 * **Idempotency**: Yes, checks existing `/proc/mounts` and unmounts prior targets before applying new bind mounts.
 * **Support for `plan: true`**: Yes.
 
@@ -101,28 +104,28 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 
 ### 6. `firewall.apply`
 * **Input & Validation**: No input parameters accepted.
-* **Compromised Panel Impact**: Could trigger a firewall reload.
+* **Implementation Status**: Planned / in development stub. Returns planned command; actual system execution will be enabled in an upcoming release.
 * **Mitigations**: Reloads strictly `/etc/allod/nftables.conf`, preventing arbitrary firewall rules from being injected via socket.
 * **Idempotency**: Yes.
 * **Support for `plan: true`**: Yes.
 
 ### 7. `snapshots.create`
 * **Input & Validation**: `subvolume` must match `^[a-zA-Z0-9_-]{1,64}$` (defaults to `"data"`).
-* **Compromised Panel Impact**: Could generate snapshot subvolumes consuming disk space.
+* **Implementation Status**: Planned / in development stub. Returns planned snapshot command without mutating the Btrfs filesystem.
 * **Mitigations**: Traversal is prevented; snapshot creation targets are restricted to `/data/.snapshots/<subvol>`.
-* **Idempotency**: Yes (new snapshots receive timestamps or unique target identifiers).
+* **Idempotency**: Yes.
 * **Support for `plan: true`**: Yes.
 
 ### 8. `snapshots.prune`
 * **Input & Validation**: No input arguments.
-* **Compromised Panel Impact**: Could prune expired snapshot retention sets.
+* **Implementation Status**: Planned / in development stub. Returns planned retention prune command.
 * **Mitigations**: Operates only on managed snapshot directories according to retention policy.
 * **Idempotency**: Yes.
 * **Support for `plan: true`**: Yes.
 
 ### 9. `smart.read`
 * **Input & Validation**: `disk` must match valid device pattern (`^[a-zA-Z0-9_-]{2,64}$`).
-* **Compromised Panel Impact**: Read-only query; an attacker could inspect SMART telemetry for disks.
+* **Implementation Status**: Planned / in development stub. Validates disk identifier and returns planned command.
 * **Mitigations**: Strictly passes sanitized identifier to `smartctl -H /dev/disk/by-id/<disk>`.
 * **Idempotency**: Yes (read-only).
 * **Support for `plan: true`**: Yes.
@@ -130,14 +133,14 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 ### 10. `service.restart`
 * **Input & Validation**: `unit` must match `^[a-zA-Z0-9_.-]{1,64}$` AND exist in `AllowedServiceUnits` (`allod-helperd`, `allod-panel`, `smbd`, `smb`, `network`, `network-netbird`, `netbird`, `cloud`, `cloud-postgres`, `photos`, `photos-postgres`, `photos-valkey`, `media`, `backup`, `storage`, `nftables`).
 * **Compromised Panel Impact**: Could restart whitelisted Allod services, causing temporary service interruption.
-* **Mitigations**: Closed allowlist of units; an attacker cannot restart arbitrary host services (e.g., `ssh`, `systemd-journald`, `login`). `service.restart allod-helperd` solely issues an asynchronous restart and does not copy, overwrite, or replace binaries.
+* **Mitigations**: Closed allowlist of units; an attacker cannot restart arbitrary host services (e.g., `ssh`, `systemd-journald`, `login`). `service.restart allod-helperd` solely issues an asynchronous restart and does not copy, overwrite, or replace binaries (binary installation requires root privileges).
 * **Idempotency**: Yes.
 * **Support for `plan: true`**: Yes.
 
 ### 11. `storage.init`
-* **Input & Validation**: `disks` must be a list or comma-separated string of identifiers matching `validDeviceRegex`. `mode` must strictly be `"single"` or `"raid1"`. `mount` must satisfy `isAllowedPath`. `user` must match `validNameRegex`.
+* **Input & Validation**: `disks` must be a list or comma-separated string of identifiers matching `validDeviceRegex`. `mode` must strictly be `"single"` or `"raid1"`. `mount` must satisfy `isAllowedPath`. `user` must match `validNameRegex`. Refuses to format system root partitions or active mounts.
 * **Compromised Panel Impact**: Reformatting storage pool. This is the most destructive action in the system.
-* **Mitigations**: Protected by `allod` group authorization, kernel `SO_PEERCRED`, strict regex on disk paths, and confirmation barriers in the UI. Disk identifiers are validated to avoid touching root OS partitions.
+* **Mitigations**: Protected by `allod` group authorization, kernel `SO_PEERCRED`, strict regex on disk paths, guards against formatting system/mounted disks, and confirmation barriers in the UI.
 * **Idempotency**: Yes, re-initializes storage to a known clean state.
 * **Support for `plan: true`**: Yes, details the wipe and mkfs commands without executing them.
 
@@ -153,4 +156,18 @@ The root helper operates exclusively on a closed whitelist of 16 actions defined
 * **Compromised Panel Impact**: Could query NetBird overlay network status, list connected peers, trigger a disconnect/reconnect of the mesh client, or control the local managed NetBird server containers.
 * **Mitigations**: Read-only queries for status. Setup keys and tokens are not accepted over the socket (they are managed in `0600` secret files). Managed server configuration is confined to `/mnt/allod-storage/network/server`.
 * **Idempotency**: Status queries are read-only. Connect/disconnect and server start/stop actions are idempotent state changes.
+* **Support for `plan: true`**: Yes.
+
+### 21. `network.zeroconfig_status` & 22. `network.zeroconfig_setup`
+* **Input & Validation**: `hostname` must match strict RFC hostname regex (`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`).
+* **Compromised Panel Impact**: Modifies local mDNS and NetBIOS advertisement hostnames in `/etc/hosts` and discovery services.
+* **Mitigations**: Rejects newlines, path characters, and arbitrary strings to prevent host-file injection.
+* **Idempotency**: Yes.
+* **Support for `plan: true`**: Yes.
+
+### 24. `containers.prune`
+* **Input & Validation**: No input arguments.
+* **Compromised Panel Impact**: Prunes stopped containers and dangling images.
+* **Mitigations**: Affects only stopped containers and unused images; running services are unharmed.
+* **Idempotency**: Yes.
 * **Support for `plan: true`**: Yes.

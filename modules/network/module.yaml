@@ -37,7 +37,7 @@ ports:
     scope: lan
 
 privileges:
-  userns: rootless
+  userns: host
   devices: [/dev/net/tun]
   caps: [NET_ADMIN]
 

@@ -11,7 +11,7 @@ Immich is Allod's high-performance sovereign solution for backing up, managing, 
   * Chronological timeline, interactive GPS map, and multi-user shared albums.
   * Recommended for systems with 8 GB of total system RAM.
 * **`full` (4.0 GB allocated RAM)**:
-  * Adds facial recognition (Face Clustering) and advanced AI semantic search (CLIP).
+  * Allocates extended memory (4.0 GB) for heavy concurrent indexing and large libraries (dedicated `immich-machine-learning` container is planned for facial recognition and semantic search).
   * Requires AVX2 CPU instructions and at least 16 GB of system RAM.
 
 ---

@@ -1,6 +1,6 @@
 # Allod — Personal Cloud & Federated Peer Backup Orchestrator
 
-**Full data ownership: modular, subscription-free, with zero exposed ports.**
+**Full data ownership: modular, subscription-free, with zero exposed router ports.**
 
 > *"I tuoi dati in piena proprietà, con la stessa comodità di prima."*  
 > *Your data, held in full ownership, with the simplicity you expect.*
@@ -19,9 +19,9 @@
 ### Core Principles
 1. **Full Data Ownership**: You own the hardware, the encryption keys, and the storage. No third-party SaaS accounts required.
 2. **Immutable Append-Only Backups**: Peer backups operate in strict append-only mode (`rest-server --append-only`). If your local server suffers a ransomware attack, the attacker cannot delete or tamper with historical backups stored on your peers' servers.
-3. **Decentralized 2-Replica Ring**: In a federation group of 3+ nodes, every critical dataset automatically maintains 2 distinct remote replicas with anti-affinity placement.
+3. **Decentralized 2-Replica Ring (In Development)**: In a federation group of 3+ nodes, the topology ring algorithm calculates 2 distinct remote replicas with anti-affinity placement (placement calculation working today; automated client backup orchestration in development).
 4. **Strict Privilege Boundary**: The web dashboard is 100% rootless; administrative tasks are delegated over a local UNIX socket to a minimal root helper with a closed action whitelist (see [Root Helper Socket API](docs/en/reference/helper-api.md)).
-5. **No Open Firewall Ports**: Natively integrates with modern WireGuard overlay mesh networking ([NetBird](https://netbird.io)) with zero open ports, automated WebRTC NAT traversal, and granular per-port access control lists (ACLs).
+5. **No Open Router Ports**: Natively integrates with modern WireGuard overlay mesh networking ([NetBird](https://netbird.io)) with zero open ports on the router/firewall (standard SMB and mDNS/WSDD discovery ports are open strictly on the local LAN), automated WebRTC NAT traversal, and granular per-port access control lists (ACLs).
 
 ---
 
@@ -79,11 +79,11 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 
 | Component / Feature | Category | State & Description |
 | :--- | :--- | :--- |
-| **Allod CLI Orchestrator** | **Funzionante oggi** *(Working Today)* | Full declarative lifecycle (`plan`, `apply`, `destroy`, `doctor`, `preflight`, `sbom`, `ring`, `purge`, `version`). Rootless Quadlet generation. |
-| **Privileged Helper Daemon** | **Funzionante oggi** *(Working Today)* | Root socket at `/run/allod/helper.sock` with `allod` group ownership, strict 16-action whitelist, and full argument audit logging. |
-| **Multi-Tenancy & Storage** | **Funzionante oggi** *(Working Today)* | Multi-user Linux provisioning with nologin shells, Samba `0770`/`0777` shares, Btrfs RAID 1/Single pool detection and auto-healing. |
-| **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update, hardware telemetry vitals pill, and streamlined navigation. |
-| **Web Panel Auth Gate** | **Funzionante oggi** *(Working Today)* | Dedicated session authentication (`/login`, `/setup`), PBKDF2-SHA256, cryptographically secure memory session tokens, and CLI emergency recovery. |
+| **Allod CLI Orchestrator** | **Funzionante oggi** *(Working Today)* | Full declarative lifecycle (`plan`, `apply`, `doctor`, `set`, `purge`, `status`, `ring`, `sbom`, `version`). Rootless Quadlet generation. |
+| **Privileged Helper Daemon** | **Funzionante oggi** *(Working Today)* | Root socket at `/run/allod/helper.sock` (mode `0666` + kernel `SO_PEERCRED`, restricted to `allod` group), strict 24-action whitelist, and truncated argument hash audit logging (SMART, snapshots, and firewall actions are planned stubs). |
+| **Multi-Tenancy & Storage** | **Funzionante oggi** *(Working Today)* | Multi-user Linux provisioning with nologin shells, Samba group/setgid `0770` shares, Btrfs RAID 1/Single pool detection and auto-healing. |
+| **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update (panel compiles helper; root installation requires sudo), hardware telemetry vitals pill, and streamlined navigation. |
+| **Web Panel Auth Gate** | **Funzionante oggi** *(Working Today)* | Dedicated session authentication (`/login`, `/setup`), argon2id password hashing, cryptographically secure session tokens persisted in SQLite (`state.db`), and CLI emergency recovery. |
 | **Family User Self-Service Portal** | **Funzionante oggi** *(Working Today)* | Dedicated family dashboard (`/portal`) with private Samba paths (`\\allod\<user>`), personal app launchpad, and autonomous password change synced via `allod-helperd`. |
 | **Telemetry & Performance History** | **Funzionante oggi** *(Working Today)* | Continuous background time-series telemetry (CPU temp, CPU load, RAM, storage) in local SQLite WAL with interactive HTML5 `<canvas>` charts (1h, 24h, 7d, 30d) and zero external JS libraries. |
 | **Wake-on-LAN Hub** | **Funzionante oggi** *(Working Today)* | Multi-subnet broadcast Magic Packet sender (`allod wol wake <mac>`, Web UI manager) for waking workstations and homelab nodes without SSH. |
@@ -103,9 +103,9 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 Set up a sovereign Allod node on **Ubuntu Server 24.04 LTS** with this 5-step walkthrough:
 
 ### 1. System Requirements & Dependencies
-Ensure your host is running **Ubuntu Server 24.04 LTS** (or compatible Debian/Ubuntu derivative) with **Go >= 1.25** and rootless Podman:
+Ensure your host is running **Ubuntu Server 24.04 LTS** (or compatible Debian/Ubuntu derivative) with **Go >= 1.25** (download from [go.dev/dl](https://go.dev/dl/) or use `GOTOOLCHAIN=auto` with apt golang) and rootless Podman:
 ```bash
-sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools
+sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools samba
 ```
 
 ### 2. Clone & Compile Binaries
@@ -214,13 +214,14 @@ Allod abandons primitive binary switches in favor of **hardware-aware resource l
 | Module | Level | RAM Allocated | Minimum System Specs | Features & Capabilities |
 | :--- | :--- | :--- | :--- | :--- |
 | **`photos`** *(Immich)* | **`standard`** | **1.5 GB** | 8 GB System RAM, SSE4.2 | Full iOS/Android auto-backup, chronological timeline, shared albums, GPS map, EXIF metadata. Ultra-lightweight and battery-friendly. |
-| **`photos`** *(Immich)* | **`full`** | **4.0 GB** | 16 GB System RAM, AVX2 | Everything in `standard` + **Facial Recognition AI** (clusters people automatically) and **Semantic AI Search** (e.g., search *"dog on a sunny beach"* without manual tags). |
+| **`photos`** *(Immich)* | **`full`** | **4.0 GB** | 16 GB System RAM, AVX2 | Allocates 4.0 GB RAM for high-concurrency photo indexing and large libraries (dedicated machine-learning container is planned). |
 | **`shares`** *(Samba)* | **`basic`** | **50 MB** | 4 GB System RAM | Unified network share `\\<SERVER-IP>\shares` for Windows, Mac, and Linux with rapid credential setup from the GUI. |
 | **`shares`** *(Samba)* | **`custom`** | **100 MB** | 4 GB System RAM | Granular multi-share permissions and independent user/group Access Control Lists (ACLs). |
 | **`media`** *(Jellyfin)* | **`basic`** | **500 MB** | 4 GB System RAM | 4K/1080p direct streaming of movies, TV shows, and music to Smart TVs, phones, and web browsers. |
 | **`media`** *(Jellyfin)* | **`full`** | **1000 MB** | 8 GB System RAM, GPU | Everything in `basic` + **Hardware Transcoding** via Intel QuickSync / AMD VA-API (`/dev/dri/renderD128`). |
 | **`network`** *(NetBird Cloud)* | **`cloud`** | **40 MB** | 4 GB System RAM | **Recommended**: NetBird European Cloud (Frankfurt, Germany). 100% GDPR, zero open router ports, automated NAT traversal, direct P2P WireGuard. |
-| **`network`** *(NetBird Self-Hosted)* | **`selfhosted`** | **40 MB** | 4 GB System RAM | Connect to your private self-hosted NetBird management server. 100% control plane and signaling sovereignty. |
+| **`network`** *(NetBird Self-Hosted)* | **`selfhosted`** / **`selfhosted_remote`** | **40 MB** | 4 GB System RAM | Connect to an external private self-hosted NetBird management server. 100% control plane and signaling sovereignty. |
+| **`network`** *(NetBird Managed)* | **`selfhosted_managed`** | **250 MB** | 4 GB System RAM | Run a local sovereign NetBird management server & dashboard container directly on the Allod node. |
 
 ### 🛡️ What Happens When You Change a Level on an Active Service?
 
@@ -243,7 +244,7 @@ Allod enforces strict boundaries between internal service databases and user-acc
 
 ---
 
-### 🌐 Remote Access & Mobile Mesh: Sovereign NetBird (Zero Open Ports)
+### 🌐 Remote Access & Mobile Mesh: Sovereign NetBird (Zero Open Router Ports)
 
 Accessing your home cloud from outside the home usually presents an impossible dilemma:
 1. **The Dangerous Route**: Open ports on your home router and expose your server to automated port-scanners, brute-force bots, and zero-day exploits.
@@ -342,7 +343,7 @@ When using residential internet providers behind **Carrier-Grade NAT (CGNAT)** �
 * **Hardware**: Minimum 4 GB RAM (8 GB recommended for AI photo indexing), 1x or 2x disks for storage.
 * **System Packages**:
   ```bash
-  sudo apt update && sudo apt install -y podman btrfs-progs git
+  sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools samba
   ```
 * **Go Compiler (≥ 1.25)**:
   Allod requires Go 1.25 or newer (for modern embedded SQLite database engines). Install it from [go.dev/dl](https://go.dev/dl/) or enable automatic toolchain fetching via `export GOTOOLCHAIN=auto`.
@@ -492,13 +493,14 @@ Complete documentation according to the official project structure is available 
 
 ## ⚠️ Known Limitations
 
-* **Backup Module (Receiver-Only PoC)**: The federated backup module is under active development. Currently, only the passive backup receiver daemon (`rest-server`) is deployed, running with `--append-only --no-auth`. While `--append-only` prevents existing historical snapshots from being altered or deleted by a compromised client, any node on the mesh network can append data. The active client engine (automated `restic`), backup scheduler, per-peer `htpasswd` authentication, and restore orchestration are not yet implemented and are planned for future releases.
+* **Backup Module (Receiver-Only PoC)**: The federated backup module is under active development. Currently, only the passive backup receiver daemon (`rest-server`) is deployed, running with `--append-only --no-auth`, with port binding restricted strictly to the WireGuard mesh interface (`wt0`) or loopback to protect against LAN exposure. While `--append-only` prevents existing historical snapshots from being altered or deleted by a compromised client, any node on the mesh network can append data. The active client engine (automated `restic`), backup scheduler, per-peer `htpasswd` authentication, and restore orchestration are not yet implemented and are planned for future releases.
 
 ---
 
 ## 🛡️ Security & Compliance
 
 * **Cyber Resilience Act (CRA)**: Formal SBOM generation via `allod sbom`.
+* **Privacy & GDPR Note**: The web panel loads typography from Google Fonts over HTTPS at runtime; for fully air-gapped or zero-outbound installations, font files can be cached or served locally.
 * **Vulnerability Disclosure**: See [SECURITY.md](SECURITY.md).
 * **Contributions**: Governed by the [Contributor License Agreement (CLA)](CLA.md).
 

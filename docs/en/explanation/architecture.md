@@ -10,7 +10,7 @@ Traditional NAS appliances run entire web applications (PHP, Node.js, Python) as
 
 Allod solves this with a strict boundary:
 * **The Web Panel (`allod-panel`)**: An unprivileged rootless process. It cannot delete partitions, execute arbitrary shell commands, or access raw disks.
-* **The Helper Daemon (`allod-helperd`)**: A tiny root service that exposes validated actions over a local UNIX domain socket (`/run/allod/helper.sock`, mode `0666`, owned by `root:allod`) with kernel-level caller verification via `SO_PEERCRED`.
+* **The Helper Daemon (`allod-helperd`)**: A tiny root service that exposes validated actions over a local UNIX domain socket (`/run/allod/helper.sock`, mode `0666`, owned by `root:allod`) with kernel-level caller verification via `SO_PEERCRED` (strictly restricted to group `allod` or root UID 0).
 * **The Container Units**: Generated as rootless systemd Quadlets managed by Podman.
 
 ---
@@ -26,9 +26,9 @@ A compromised node can only push *new* encrypted data chunks, but is mathematica
 
 ---
 
-## 3. The Ring: 2-Replica Decentralized Placement
+## 3. The Ring: 2-Replica Decentralized Placement (Planned / In Development)
 
-In a group of 3 or more nodes connected via WireGuard overlay mesh:
+Allod's topology ring algorithm calculates quorum placement across a group of 3 or more nodes connected via WireGuard overlay mesh (placement calculation working today; automated client backup orchestration in development):
 1. Every critical dataset is replicated on **at least 2 distinct remote nodes**.
 2. **Anti-Affinity Rule**: Replicas are never placed on the dataset's owner node.
 3. If any node goes offline, the remaining nodes detect the condition via reciprocal watchdog monitoring and calculate an automated rebalancing plan.
@@ -49,7 +49,7 @@ Rather than deploying heavyweight enterprise Single Sign-On (SSO) frameworks (su
   ┌───────────────────────────────┐               ┌───────────────────────────────┐
   │    ADMIN GATE (/login)        │               │   FAMILY PORTAL (/portal)     │
   │  - Requires Admin Password    │               │  - Household Member Login     │
-  │  - PBKDF2-SHA256 (state.db)   │               │  - Private SMB Network Paths  │
+  │  - argon2id (state.db)        │               │  - Private SMB Network Paths  │
   │  - Protects Dashboard (/)     │               │  - Launchpad (Immich/Jellyfin)│
   │  - Protects System APIs       │               │  - Self-Service Password Reset│
   │  - CLI Recovery:              │               │    (Syncs Linux + Samba via   │
@@ -60,8 +60,8 @@ Rather than deploying heavyweight enterprise Single Sign-On (SSO) frameworks (su
 1. **Administrator Protection Gate**:
    * All administrative views (`/`) and mutating/monitoring endpoints (`/api/*`) are guarded by `adminProtectedHandler`.
    * On first boot, if no admin password exists, users are guided through an onboarding setup wizard at `/setup`.
-   * Password hashes are calculated using PBKDF2 with HMAC-SHA256 (600,000 iterations) with a 16-byte cryptographically secure random salt, stored in the embedded SQLite `state.db`.
-   * Authenticated sessions are issued crypto-random 32-byte session tokens managed entirely in memory and transmitted via secure `HttpOnly` session cookies or `X-Allod-Session` headers.
+   * Password hashes are calculated using argon2id with a cryptographically secure random salt, stored in the embedded SQLite `state.db` (legacy PBKDF2/HMAC-SHA256 hashes are automatically upgraded on successful login).
+   * Authenticated sessions are issued crypto-random 32-byte session tokens persisted in SQLite (`state.db`) and transmitted via secure `HttpOnly` session cookies or `X-Allod-Session` headers.
    * Emergency console recovery is provided by `allod admin-password reset [password]`.
 
 2. **Family Member Self-Service Portal (`/portal`)**:
