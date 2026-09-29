@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
@@ -167,6 +168,63 @@ func isValidUUID(u string) bool {
 	}
 	_, err := uuid.Parse(u)
 	return err == nil
+}
+
+var validHostnameRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+var validDomainLabelRegex = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
+var validSetupKeyRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,256}$`)
+
+func isValidHostname(h string) bool {
+	clean := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(h), ".local"))
+	return validHostnameRegex.MatchString(clean)
+}
+
+func isValidDomainOrURL(val string) bool {
+	if val == "" || len(val) > 255 {
+		return false
+	}
+	if strings.ContainsAny(val, " \t\r\n\"'`\\#%&{}<>,;^~") {
+		return false
+	}
+	if strings.HasPrefix(val, "http://") || strings.HasPrefix(val, "https://") {
+		u, err := url.Parse(val)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return false
+		}
+		host := u.Hostname()
+		if net.ParseIP(host) != nil {
+			return true
+		}
+		labels := strings.Split(host, ".")
+		for _, l := range labels {
+			if !validDomainLabelRegex.MatchString(l) {
+				return false
+			}
+		}
+		return true
+	}
+
+	host := val
+	if h, _, err := net.SplitHostPort(val); err == nil {
+		host = h
+	}
+	if net.ParseIP(host) != nil {
+		return true
+	}
+	labels := strings.Split(host, ".")
+	for _, l := range labels {
+		if !validDomainLabelRegex.MatchString(l) {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidManagementURL(val string) bool {
+	if !strings.HasPrefix(val, "http://") && !strings.HasPrefix(val, "https://") {
+		return false
+	}
+	return isValidDomainOrURL(val)
 }
 
 func isAllodUser(uidStr string) bool {
@@ -1331,6 +1389,17 @@ func (s *Server) processRequest(req Request) Response {
 		return Response{Ok: true, Applied: false, Plan: plan}
 
 	case "network.netbird_up":
+		if key, ok := req.Args["setup_key"].(string); ok && key != "" {
+			if !validSetupKeyRegex.MatchString(key) {
+				return Response{Ok: false, Error: "invalid setup_key: must contain only alphanumeric characters, dashes, and underscores"}
+			}
+		}
+		if mgmt, ok := req.Args["management_url"].(string); ok && mgmt != "" {
+			if !isValidManagementURL(mgmt) {
+				return Response{Ok: false, Error: "invalid management_url: must be a valid http or https URL without newlines or spaces"}
+			}
+		}
+
 		// Ensure kernel tun and wireguard drivers are loaded
 		_ = exec.Command("modprobe", "tun").Run()
 		_ = exec.Command("modprobe", "wireguard").Run()
@@ -1443,6 +1512,16 @@ func (s *Server) processRequest(req Request) Response {
 		return Response{Ok: true, Applied: false, Plan: plan}
 
 	case "network.install_native":
+		if key, ok := req.Args["setup_key"].(string); ok && key != "" {
+			if !validSetupKeyRegex.MatchString(key) {
+				return Response{Ok: false, Error: "invalid setup_key: must contain only alphanumeric characters, dashes, and underscores"}
+			}
+		}
+		if mgmt, ok := req.Args["management_url"].(string); ok && mgmt != "" {
+			if !isValidManagementURL(mgmt) {
+				return Response{Ok: false, Error: "invalid management_url: must be a valid http or https URL without newlines or spaces"}
+			}
+		}
 		plan := []string{
 			"curl -fsSL https://pkgs.netbird.io/install.sh | sh",
 			"podman rm -f allod-netbird",
@@ -1509,6 +1588,9 @@ func (s *Server) processRequest(req Request) Response {
 		domain := "127.0.0.1"
 		if d, ok := req.Args["domain"].(string); ok && strings.TrimSpace(d) != "" {
 			domain = strings.TrimSpace(d)
+		}
+		if !isValidDomainOrURL(domain) {
+			return Response{Ok: false, Error: "invalid domain: must be a valid hostname, IP address, or http(s) URL without newlines or YAML control characters"}
 		}
 		port := 33073
 		if p, ok := req.Args["port"].(float64); ok && p > 0 && p <= 65535 {
@@ -1778,7 +1860,10 @@ server:
 		if hostname == "" {
 			hostname = "allod"
 		}
-		cleanHost := strings.ToLower(strings.TrimSuffix(hostname, ".local"))
+		cleanHost := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(hostname), ".local"))
+		if !validHostnameRegex.MatchString(cleanHost) {
+			return Response{Ok: false, Error: "invalid hostname: must be a valid DNS hostname (alphanumeric and hyphens, max 63 chars, no spaces or newlines)"}
+		}
 		lanIP := getHostLANIP()
 		netbirdIP := getHostNetBirdIP()
 
@@ -2389,7 +2474,10 @@ func getHostNetBirdIP() string {
 func PatchAvahiDaemonConfig(content string, hostnames ...string) string {
 	targetHost := "allod"
 	if len(hostnames) > 0 && strings.TrimSpace(hostnames[0]) != "" {
-		targetHost = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(hostnames[0]), ".local"))
+		candidate := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(hostnames[0]), ".local"))
+		if validHostnameRegex.MatchString(candidate) {
+			targetHost = candidate
+		}
 	}
 
 	lines := strings.Split(content, "\n")

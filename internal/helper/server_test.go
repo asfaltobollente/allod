@@ -1049,3 +1049,151 @@ func TestStorageInitGuards(t *testing.T) {
 		t.Errorf("expected non-empty plan for storage.init")
 	}
 }
+
+func TestHelperInputValidation(t *testing.T) {
+	s := &Server{}
+
+	// 1. network.zeroconfig_setup: hostname injection testing
+	invalidHostnames := []string{
+		"allod\n127.0.0.1 evil.local",
+		"allod; rm -rf /",
+		"allod evil",
+		"-leading-dash",
+		"trailing-dash-",
+		"host..double.dot",
+		"host@name",
+		"toolongname" + strings.Repeat("a", 60),
+	}
+	for _, h := range invalidHostnames {
+		req := Request{
+			Action: "network.zeroconfig_setup",
+			Plan:   true,
+			Args: map[string]interface{}{
+				"hostname": h,
+			},
+		}
+		res := s.processRequest(req)
+		if res.Ok {
+			t.Errorf("SECURITY: expected zeroconfig_setup to reject invalid hostname %q", h)
+		}
+	}
+
+	validHostnames := []string{"allod", "my-nas", "node1", "allod.local"}
+	for _, h := range validHostnames {
+		req := Request{
+			Action: "network.zeroconfig_setup",
+			Plan:   true,
+			Args: map[string]interface{}{
+				"hostname": h,
+			},
+		}
+		res := s.processRequest(req)
+		if !res.Ok {
+			t.Errorf("expected valid hostname %q to be accepted, got error: %s", h, res.Error)
+		}
+	}
+
+	// 2. network.server_up: domain YAML injection testing
+	invalidDomains := []string{
+		"mesh.example.com\n  evil: true",
+		"mesh.example.com\" quote",
+		"mesh.example.com; drop",
+		"mesh example com",
+		"mesh#comment",
+		"mesh{bracket}",
+	}
+	for _, d := range invalidDomains {
+		req := Request{
+			Action: "network.server_up",
+			Plan:   true,
+			Args: map[string]interface{}{
+				"domain": d,
+			},
+		}
+		res := s.processRequest(req)
+		if res.Ok {
+			t.Errorf("SECURITY: expected server_up to reject invalid domain %q", d)
+		}
+	}
+
+	validDomains := []string{"127.0.0.1", "mesh.example.com", "allod", "https://mesh.example.com:33073"}
+	for _, d := range validDomains {
+		req := Request{
+			Action: "network.server_up",
+			Plan:   true,
+			Args: map[string]interface{}{
+				"domain": d,
+			},
+		}
+		res := s.processRequest(req)
+		if !res.Ok {
+			t.Errorf("expected valid domain %q to be accepted, got error: %s", d, res.Error)
+		}
+	}
+
+	// 3. network.netbird_up: setup_key and management_url injection testing
+	invalidKeys := []string{
+		"key\nNB_ADMIN=true",
+		"key; command",
+		"key with spaces",
+		"key\"quote",
+	}
+	for _, k := range invalidKeys {
+		req := Request{
+			Action: "network.netbird_up",
+			Plan:   true,
+			Args: map[string]interface{}{
+				"setup_key": k,
+			},
+		}
+		res := s.processRequest(req)
+		if res.Ok {
+			t.Errorf("SECURITY: expected netbird_up to reject invalid setup_key %q", k)
+		}
+	}
+
+	invalidURLs := []string{
+		"https://api.netbird.io\nEVIL=1",
+		"ftp://api.netbird.io",
+		"javascript:alert(1)",
+		"http://api.netbird.io; rm",
+	}
+	for _, u := range invalidURLs {
+		req := Request{
+			Action: "network.netbird_up",
+			Plan:   true,
+			Args: map[string]interface{}{
+				"setup_key":      "valid-key-123",
+				"management_url": u,
+			},
+		}
+		res := s.processRequest(req)
+		if res.Ok {
+			t.Errorf("SECURITY: expected netbird_up to reject invalid management_url %q", u)
+		}
+	}
+
+	// Valid netbird_up setup_key & management_url
+	reqValidNB := Request{
+		Action: "network.netbird_up",
+		Plan:   true,
+		Args: map[string]interface{}{
+			"setup_key":      "valid-key-123_XYZ",
+			"management_url": "https://api.netbird.io:443",
+		},
+	}
+	resValidNB := s.processRequest(reqValidNB)
+	if !resValidNB.Ok {
+		t.Errorf("expected valid netbird_up request to succeed, got error: %s", resValidNB.Error)
+	}
+
+	// 4. PatchAvahiDaemonConfig hostname fallback
+	conf := "[server]\nuse-ipv4=yes\n"
+	patchedBad := PatchAvahiDaemonConfig(conf, "bad\nhost\ninjection")
+	if strings.Contains(patchedBad, "bad") {
+		t.Errorf("SECURITY: PatchAvahiDaemonConfig accepted bad hostname with newlines")
+	}
+	if !strings.Contains(patchedBad, "host-name=allod") {
+		t.Errorf("expected PatchAvahiDaemonConfig to fall back to host-name=allod")
+	}
+}
