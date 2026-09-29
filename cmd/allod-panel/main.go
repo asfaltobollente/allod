@@ -542,6 +542,21 @@ func main() {
 
 	// Auth Handler & Routes
 	authHandler := panel.NewAuthHandler(dbPath, &helper.Client{SocketPath: "/run/allod/helper.sock"})
+	if stInit, errInit := state.Open(dbPath); errInit == nil {
+		hasAdmin, _ := stInit.HasAdminAuth()
+		if !hasAdmin {
+			tokenBytes := make([]byte, 16)
+			_, _ = rand.Read(tokenBytes)
+			setupToken := hex.EncodeToString(tokenBytes)
+			authHandler.SetupToken = setupToken
+			fmt.Printf("[SECURITY] =================================================================\n")
+			fmt.Printf("[SECURITY] PRIMO SETUP AMMINISTRATORE RICHIESTO\n")
+			fmt.Printf("[SECURITY] Accedi da localhost (http://127.0.0.1:8080/setup) oppure usa il token:\n")
+			fmt.Printf("[SECURITY] SETUP TOKEN: %s\n", setupToken)
+			fmt.Printf("[SECURITY] =================================================================\n")
+		}
+		stInit.Close()
+	}
 	authHandler.EnsureSystemUser = func(client panel.HelperClient, username string) error {
 		hc, ok := client.(*helper.Client)
 		if !ok {

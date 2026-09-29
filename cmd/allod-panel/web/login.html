@@ -316,6 +316,13 @@
           </div>
         </div>
 
+        <div class="form-group" id="setup-token-group">
+          <label class="form-label" for="setup-token">Token di Setup (richiesto solo per accessi da remoto/LAN):</label>
+          <div class="input-wrapper">
+            <input type="text" id="setup-token" class="form-input" placeholder="Token monouso stampato nei log all'avvio">
+          </div>
+        </div>
+
         <button type="submit" id="btn-setup" class="btn-submit">
           <span>🚀 Attiva Server & Entra nella Dashboard</span>
         </button>
@@ -438,6 +445,8 @@
         return;
       }
 
+      const tok = document.getElementById('setup-token') ? document.getElementById('setup-token').value.trim() : '';
+
       btn.disabled = true;
       btn.innerHTML = '<span class="loading-spinner"></span> <span>Salvataggio e attivazione...</span>';
 
@@ -445,7 +454,7 @@
         const res = await fetch('/api/auth/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: p1 })
+          body: JSON.stringify({ password: p1, setup_token: tok })
         });
         const data = await res.json();
 
