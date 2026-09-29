@@ -910,3 +910,35 @@ func TestFindImmichPhotosSourceNoDangerousFallback(t *testing.T) {
 		t.Fatalf("SECURITY: findImmichPhotosSource for 'unknown' fell back to Steve's folder: %s", resUnknown)
 	}
 }
+
+func TestIsAuthorizedCallerOnlyAllodGroup(t *testing.T) {
+	allodGid := "1002"
+	sudoGid := "27"
+	wheelGid := "10"
+	adminGid := "1001"
+
+	// 1. Caller only in 'allod' group -> authorized
+	if !isAuthorizedCaller([]string{allodGid}, allodGid) {
+		t.Errorf("expected caller in 'allod' group to be authorized")
+	}
+
+	// 2. Caller in 'allod' and other groups -> authorized
+	if !isAuthorizedCaller([]string{"1000", sudoGid, allodGid}, allodGid) {
+		t.Errorf("expected caller in 'allod' plus other groups to be authorized")
+	}
+
+	// 3. Caller in 'sudo' only -> must be REJECTED
+	if isAuthorizedCaller([]string{sudoGid}, allodGid) {
+		t.Errorf("SECURITY: caller with only 'sudo' group was authorized to call root helper")
+	}
+
+	// 4. Caller in 'wheel' and 'admin' only -> must be REJECTED
+	if isAuthorizedCaller([]string{wheelGid, adminGid}, allodGid) {
+		t.Errorf("SECURITY: caller with 'wheel'/'admin' groups was authorized to call root helper")
+	}
+
+	// 5. Empty allodGid -> must be REJECTED
+	if isAuthorizedCaller([]string{sudoGid}, "") {
+		t.Errorf("expected rejection when allodGid is empty")
+	}
+}
