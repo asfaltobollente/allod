@@ -133,14 +133,24 @@ func TestReceiverPushMode(t *testing.T) {
 		MemoryTotalMB: 4096,
 	}
 
-	// Test bad token
-	err := w.HandleHeartbeat(payload, "wrong-token")
-	if err == nil {
+	// Test unconfigured secretToken on watcher
+	wUnauth := NewWatcher(100*time.Millisecond, 20*time.Millisecond)
+	if err := wUnauth.HandleHeartbeat(payload, "any-token"); err == nil {
+		t.Fatalf("expected error when secretToken is not configured, got nil")
+	}
+
+	// Test bad token: different length
+	if err := w.HandleHeartbeat(payload, "short"); err == nil {
+		t.Fatalf("expected error on different length token, got nil")
+	}
+
+	// Test bad token: same length but wrong
+	if err := w.HandleHeartbeat(payload, "secret-token-999"); err == nil {
 		t.Fatalf("expected error on invalid token, got nil")
 	}
 
 	// Test good token
-	err = w.HandleHeartbeat(payload, "secret-token-123")
+	err := w.HandleHeartbeat(payload, "secret-token-123")
 	if err != nil {
 		t.Fatalf("unexpected error on valid heartbeat: %v", err)
 	}
@@ -188,9 +198,9 @@ func TestReceiverPushMode(t *testing.T) {
 
 	// 4. Test High Temperature Warning
 	hotPayload := &NodeHealthPayload{
-		NodeName: "nas-server",
+		NodeName:  "nas-server",
 		StorageOK: true,
-		CPUTemp: 85.5,
+		CPUTemp:   85.5,
 	}
 	_ = w.HandleHeartbeat(hotPayload, "secret-token-123")
 	for i := 0; i < 50 && !warningReceived.Load(); i++ {
@@ -200,4 +210,3 @@ func TestReceiverPushMode(t *testing.T) {
 		t.Errorf("expected high temp warning, but none received")
 	}
 }
-

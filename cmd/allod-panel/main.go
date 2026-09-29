@@ -192,9 +192,9 @@ func buildPushEndpoint(rawHost string, port int) string {
 		raw = raw[:len(raw)-len(".alwaysdata.com")] + ".alwaysdata.net"
 	}
 
-	// Auto-upgrade to https if port is 443 or host contains alwaysdata.net and no explicit scheme was given
+	// Auto-upgrade to https if port is 443, 8443 or host contains alwaysdata.net and no explicit scheme was given
 	if !hasScheme {
-		if port == 443 || strings.Contains(strings.ToLower(raw), "alwaysdata.net") {
+		if port == 443 || port == 8443 || strings.Contains(strings.ToLower(raw), "alwaysdata.net") {
 			scheme = "https"
 		}
 	}
