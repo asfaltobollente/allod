@@ -49,8 +49,8 @@ images:
     tag: "0.79.0"
     channel: patch
   - ref: docker.io/netbirdio/dashboard
-    tag: "latest"
-    channel: patch
+    tag: "v2.94.0"
+    channel: pinned
 
 update:
   requires_release_notes: false
