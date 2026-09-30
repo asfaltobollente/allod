@@ -697,6 +697,33 @@ func main() {
 		json.NewEncoder(w).Encode(resp)
 	})
 
+	// 2b-3. API System Top Processes (GET /api/system/processes?limit=10&sort=cpu|mem)
+	mux.HandleFunc("/api/system/processes", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		limitStr := r.URL.Query().Get("limit")
+		sortBy := r.URL.Query().Get("sort")
+		limit := 10
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 50 {
+			limit = l
+		}
+		if sortBy != "mem" {
+			sortBy = "cpu"
+		}
+		procs, err := preflight.GetTopProcesses(limit, sortBy)
+		if err != nil {
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data: map[string]interface{}{
+				"processes": procs,
+				"sort_by":   sortBy,
+				"count":     len(procs),
+			},
+		})
+	})
+
 	// 2c. API Health (sentinel prober endpoint for external watchdog)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -4410,6 +4437,7 @@ func startMetricsCollector(dbPath string) {
 		vitals := preflight.GetServerVitals()
 		ram := preflight.GetRealRAMStats()
 		totBytes, usedBytes, _ := preflight.GetDiskUsage("/mnt/allod-storage")
+		topProc := preflight.GetTopProcessSummary()
 
 		st, err := state.Open(dbPath)
 		if err != nil {
@@ -4425,6 +4453,7 @@ func startMetricsCollector(dbPath string) {
 			RAMTotalMB:        int64(ram.TotalMB),
 			StorageUsedBytes:  usedBytes,
 			StorageTotalBytes: totBytes,
+			TopProcess:        topProc,
 		}
 		_ = st.RecordSystemMetric(sample)
 	}

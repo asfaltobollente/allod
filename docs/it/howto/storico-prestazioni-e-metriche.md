@@ -84,11 +84,42 @@ GET /api/system/history?range=24h
         "ram_used_mb": 2150,
         "ram_total_mb": 15890,
         "storage_used_bytes": 145892300000,
-        "storage_total_bytes": 980000000000
+        "storage_total_bytes": 980000000000,
+        "top_process": "immich-server (21.4%)"
       }
     ]
   }
 }
+```
+
+### Endpoint Top Consumer in Tempo Reale
+```http
+GET /api/system/processes?limit=10&sort=cpu
+```
+Restituisce i top processi attivi con PID, nome, container/modulo associato, consumo CPU % e RAM (MB / %).
+
+---
+
+## ⚡ Analisi Spike e Comando CLI `allod top`
+
+Allod include strumenti per diagnosticare immediatamente cosa consuma risorse sul nodo:
+
+### 1. Attribuzione Spike nei Grafici
+Quando si verifica un picco o uno scalino di carico (CPU o temperatura), il collector di Allod associa al punto di campionamento il processo o container che ha determinato il consumo massimo.
+Passando il mouse o toccando qualsiasi punto del grafico nella Web UI, il tooltip mostra direttamente il processo colpevole:
+> **⚡ Top Processo**: `immich-server (21.4%)`
+
+### 2. Comando CLI `allod top`
+Da terminale SSH puoi lanciare in qualsiasi momento:
+```bash
+# Vista istantanea ordinata per CPU
+allod top
+
+# Vista ordinata per consumo RAM con limite di 5 processi
+allod top --sort mem --limit 5
+
+# Modalità continua con auto-refresh ogni 2 secondi (stile htop)
+allod top --watch
 ```
 
 ---
@@ -98,3 +129,4 @@ GET /api/system/history?range=24h
 L'eliminazione dei campioni obsoleti avviene in background senza necessità di interventi manuali:
 - Tutti i record con età superiore a 30 giorni vengono automaticamente eliminati (`DELETE FROM metrics_history WHERE timestamp < ?`).
 - Il file SQLite opera in modalità `WAL` (*Write-Ahead Logging*), consentendo scritture al secondo da parte del collector senza bloccare le letture dell'interfaccia web o di altri processi.
+

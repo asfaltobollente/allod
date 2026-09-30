@@ -84,11 +84,41 @@ GET /api/system/history?range=24h
         "ram_used_mb": 2150,
         "ram_total_mb": 15890,
         "storage_used_bytes": 145892300000,
-        "storage_total_bytes": 980000000000
+        "storage_total_bytes": 980000000000,
+        "top_process": "immich-server (21.4%)"
       }
     ]
   }
 }
+```
+
+### Real-Time Top Consumers Endpoint
+```http
+GET /api/system/processes?limit=10&sort=cpu
+```
+Returns live active processes with PID, name, container/module association, CPU %, and RAM (MB / %).
+
+---
+
+## ⚡ Spike Attribution & `allod top` CLI
+
+Allod provides built-in tools to instantly diagnose resource consumption:
+
+### 1. Spike Attribution in Charts
+When a CPU or thermal spike occurs, Allod's collector records the top consumer process. Hovering or touching any point on the telemetry graphs in the Web UI instantly displays the culprit in the tooltip:
+> **⚡ Top Process**: `immich-server (21.4%)`
+
+### 2. `allod top` CLI Command
+Run anytime via SSH terminal:
+```bash
+# Instant snapshot sorted by CPU
+allod top
+
+# Sorted by RAM usage with a 5-process limit
+allod top --sort mem --limit 5
+
+# Continuous live monitoring refreshing every 2 seconds (htop style)
+allod top --watch
 ```
 
 ---

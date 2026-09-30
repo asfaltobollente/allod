@@ -78,6 +78,7 @@ type SystemMetricRecord struct {
 	RAMTotalMB        int64   `json:"ram_total_mb"`
 	StorageUsedBytes  int64   `json:"storage_used_bytes"`
 	StorageTotalBytes int64   `json:"storage_total_bytes"`
+	TopProcess        string  `json:"top_process,omitempty"`
 }
 
 type Store struct {
@@ -166,7 +167,8 @@ func Open(dbPath string) (*Store, error) {
 		ram_used_mb INTEGER,
 		ram_total_mb INTEGER,
 		storage_used_bytes INTEGER,
-		storage_total_bytes INTEGER
+		storage_total_bytes INTEGER,
+		top_process TEXT DEFAULT ''
 	);
 	CREATE INDEX IF NOT EXISTS idx_metrics_history_ts ON metrics_history(timestamp);
 	`
@@ -184,6 +186,7 @@ func Open(dbPath string) (*Store, error) {
 	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN vps_port INTEGER DEFAULT 8443")
 	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN secret_token TEXT DEFAULT ''")
 	_, _ = db.Exec("ALTER TABLE sentinel_config ADD COLUMN push_interval_seconds INTEGER DEFAULT 60")
+	_, _ = db.Exec("ALTER TABLE metrics_history ADD COLUMN top_process TEXT DEFAULT ''")
 
 	return &Store{db: db}, nil
 }
@@ -796,9 +799,9 @@ func (s *Store) RecordSystemMetric(m *SystemMetricRecord) error {
 		ts = time.Now().Unix()
 	}
 	_, err := s.db.Exec(`
-		INSERT INTO metrics_history (timestamp, cpu_temp_c, cpu_usage_pct, ram_used_mb, ram_total_mb, storage_used_bytes, storage_total_bytes)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, ts, m.CPUTempC, m.CPUUsagePct, m.RAMUsedMB, m.RAMTotalMB, m.StorageUsedBytes, m.StorageTotalBytes)
+		INSERT INTO metrics_history (timestamp, cpu_temp_c, cpu_usage_pct, ram_used_mb, ram_total_mb, storage_used_bytes, storage_total_bytes, top_process)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, ts, m.CPUTempC, m.CPUUsagePct, m.RAMUsedMB, m.RAMTotalMB, m.StorageUsedBytes, m.StorageTotalBytes, m.TopProcess)
 	return err
 }
 
@@ -831,7 +834,7 @@ func (s *Store) GetMetricsHistory(rangeStr string) ([]SystemMetricRecord, error)
 
 	if step <= 0 {
 		rows, err = s.db.Query(`
-			SELECT timestamp, cpu_temp_c, cpu_usage_pct, ram_used_mb, ram_total_mb, storage_used_bytes, storage_total_bytes
+			SELECT timestamp, cpu_temp_c, cpu_usage_pct, ram_used_mb, ram_total_mb, storage_used_bytes, storage_total_bytes, COALESCE(top_process, '')
 			FROM metrics_history
 			WHERE timestamp >= ?
 			ORDER BY timestamp ASC
@@ -844,7 +847,9 @@ func (s *Store) GetMetricsHistory(rangeStr string) ([]SystemMetricRecord, error)
 			       CAST(AVG(ram_used_mb) AS INTEGER),
 			       CAST(MAX(ram_total_mb) AS INTEGER),
 			       CAST(AVG(storage_used_bytes) AS INTEGER),
-			       CAST(MAX(storage_total_bytes) AS INTEGER)
+			       CAST(MAX(storage_total_bytes) AS INTEGER),
+			       COALESCE(top_process, ''),
+			       MAX(cpu_usage_pct) AS max_cpu
 			FROM metrics_history
 			WHERE timestamp >= ?
 			GROUP BY bucket
@@ -860,8 +865,15 @@ func (s *Store) GetMetricsHistory(rangeStr string) ([]SystemMetricRecord, error)
 	var records []SystemMetricRecord
 	for rows.Next() {
 		var r SystemMetricRecord
-		if err := rows.Scan(&r.Timestamp, &r.CPUTempC, &r.CPUUsagePct, &r.RAMUsedMB, &r.RAMTotalMB, &r.StorageUsedBytes, &r.StorageTotalBytes); err != nil {
-			return nil, err
+		if step <= 0 {
+			if err := rows.Scan(&r.Timestamp, &r.CPUTempC, &r.CPUUsagePct, &r.RAMUsedMB, &r.RAMTotalMB, &r.StorageUsedBytes, &r.StorageTotalBytes, &r.TopProcess); err != nil {
+				return nil, err
+			}
+		} else {
+			var maxCPU float64
+			if err := rows.Scan(&r.Timestamp, &r.CPUTempC, &r.CPUUsagePct, &r.RAMUsedMB, &r.RAMTotalMB, &r.StorageUsedBytes, &r.StorageTotalBytes, &r.TopProcess, &maxCPU); err != nil {
+				return nil, err
+			}
 		}
 		records = append(records, r)
 	}

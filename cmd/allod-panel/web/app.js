@@ -84,6 +84,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof fetchLiveVitals === 'function') {
       fetchLiveVitals();
     }
+    const activeTab = document.querySelector('.nav-item.active');
+    if (activeTab && activeTab.dataset.tab === 'overview') {
+      if (typeof loadTopProcesses === 'function') {
+        loadTopProcesses(true);
+      }
+    }
   }, 10000);
 
   // Periodic metrics history update every 60s if Overview tab is active
@@ -128,8 +134,13 @@ function switchToTab(tab) {
   if (pageTitle) pageTitle.textContent = t(`page_${tab}_title`, 'Node Overview');
   if (pageSubtitle) pageSubtitle.textContent = t(`page_${tab}_sub`, 'System state, hardware resources, and security boundary');
 
-  if (tab === 'overview' && typeof loadMetricsHistory === 'function') {
-    loadMetricsHistory(currentMetricsRange);
+  if (tab === 'overview') {
+    if (typeof loadMetricsHistory === 'function') {
+      loadMetricsHistory(currentMetricsRange);
+    }
+    if (typeof loadTopProcesses === 'function') {
+      loadTopProcesses();
+    }
   }
 }
 
@@ -5335,7 +5346,8 @@ function drawMetricsChart(cfg, hoverIdx = -1) {
     x: getX(p.t),
     y: getY(p.v),
     t: p.t,
-    v: p.v
+    v: p.v,
+    raw: p.raw
   }));
   wrap._chartPoints = mappedPoints;
 
@@ -5436,11 +5448,22 @@ function drawMetricsChart(cfg, hoverIdx = -1) {
         const dateStr = date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
         const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
+        let topProcHtml = '';
+        if (pt.raw && pt.raw.top_process) {
+          const topLabel = typeof t === 'function' ? t('metrics_top_process', 'Top Processo') : 'Top Processo';
+          topProcHtml = `
+            <div style="margin-top:6px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.15); font-size:11px; color:#fca5a5; display:flex; align-items:center; gap:4px;">
+              <span>⚡</span> <span>${topLabel}: <b>${escapeHtml(pt.raw.top_process)}</b></span>
+            </div>
+          `;
+        }
+
         tooltip.innerHTML = `
           <div style="font-weight:700; font-size:12px; color:${activeCfg.color}; margin-bottom:2px;">
             ${pt.v.toFixed(activeCfg.decimals !== undefined ? activeCfg.decimals : 1)} ${activeCfg.unit}
           </div>
           <div style="font-size:10.5px; color:#cbd5e1;">${dateStr} ${timeStr}</div>
+          ${topProcHtml}
         `;
         tooltip.style.left = `${clientX}px`;
         tooltip.style.top = `${clientY}px`;
@@ -5467,6 +5490,135 @@ window.loadMetricsHistory = loadMetricsHistory;
 window.changeMetricsRange = changeMetricsRange;
 window.renderAllMetricsCharts = renderAllMetricsCharts;
 window.drawMetricsChart = drawMetricsChart;
+
+// ==========================================
+// Top Resource Consumers (Processes & Containers)
+// ==========================================
+
+let currentTopProcessesSort = 'cpu';
+let isTopProcessesLoading = false;
+
+async function loadTopProcesses(isSilent = false) {
+  const tbody = document.getElementById('top-processes-tbody');
+  const loadingEl = document.getElementById('top-processes-loading');
+  const emptyEl = document.getElementById('top-processes-empty');
+  if (!tbody) return;
+
+  if (!isSilent && (!tbody.children || tbody.children.length === 0)) {
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (emptyEl) emptyEl.classList.add('hidden');
+  }
+
+  isTopProcessesLoading = true;
+  try {
+    const res = await fetch(`/api/system/processes?sort=${encodeURIComponent(currentTopProcessesSort)}&limit=8`);
+    const json = await res.json();
+    if (json && json.status === 'ok' && json.data && Array.isArray(json.data.processes)) {
+      renderTopProcessesTable(json.data.processes);
+    } else {
+      renderTopProcessesTable([]);
+    }
+  } catch (err) {
+    console.error('Error fetching top processes:', err);
+    if (!isSilent) {
+      if (emptyEl) {
+        emptyEl.textContent = 'Errore campionamento processi';
+        emptyEl.classList.remove('hidden');
+      }
+    }
+  } finally {
+    isTopProcessesLoading = false;
+    if (loadingEl) loadingEl.classList.add('hidden');
+  }
+}
+
+function renderTopProcessesTable(procs) {
+  const tbody = document.getElementById('top-processes-tbody');
+  const emptyEl = document.getElementById('top-processes-empty');
+  if (!tbody) return;
+
+  if (!procs || procs.length === 0) {
+    tbody.innerHTML = '';
+    if (emptyEl) emptyEl.classList.remove('hidden');
+    return;
+  }
+
+  if (emptyEl) emptyEl.classList.add('hidden');
+
+  let rowsHtml = '';
+  procs.forEach((p) => {
+    const procName = escapeHtml(p.name || 'unknown');
+    const pid = p.pid || 0;
+    const cmdline = p.cmdline ? escapeHtml(p.cmdline) : '';
+
+    let containerBadge = '';
+    if (p.container) {
+      containerBadge = `<span class="badge badge-primary" style="font-size:11px; padding:3px 8px; font-weight:600;">📦 ${escapeHtml(p.container)}</span>`;
+    } else {
+      containerBadge = `<span style="color:var(--text-muted); font-size:11px;">Host / Sistema</span>`;
+    }
+
+    const cpuVal = typeof p.cpu_percent === 'number' ? p.cpu_percent : 0;
+    const cpuColor = cpuVal >= 15 ? '#ef4444' : (cpuVal >= 5 ? '#f59e0b' : '#38bdf8');
+    const cpuWidth = Math.min(100, Math.max(4, cpuVal * 2.5));
+
+    const ramMB = typeof p.memory_mb === 'number' ? p.memory_mb : 0;
+    const ramPct = typeof p.memory_pct === 'number' ? p.memory_pct : 0;
+    const ramWidth = Math.min(100, Math.max(4, ramPct * 3.5));
+
+    rowsHtml += `
+      <tr style="border-bottom:1px solid var(--card-border); transition: background 0.15s ease;">
+        <td style="padding:10px 14px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-weight:700; color:var(--text-bright);">${procName}</span>
+            <span style="font-size:11px; color:var(--text-muted); font-family:monospace;">(PID ${pid})</span>
+          </div>
+          ${cmdline ? `<div style="font-size:10.5px; color:var(--text-muted); font-family:monospace; margin-top:2px; max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${cmdline}">${cmdline}</div>` : ''}
+        </td>
+        <td style="padding:10px 14px; vertical-align:middle;">
+          ${containerBadge}
+        </td>
+        <td style="padding:10px 14px; text-align:right; vertical-align:middle;">
+          <div style="font-weight:700; font-family:monospace; color:${cpuColor};">${cpuVal.toFixed(1)}%</div>
+          <div style="background:rgba(255,255,255,0.08); border-radius:3px; height:4px; width:70px; margin-left:auto; margin-top:3px; overflow:hidden;">
+            <div style="background:${cpuColor}; height:100%; width:${cpuWidth}%;"></div>
+          </div>
+        </td>
+        <td style="padding:10px 14px; text-align:right; vertical-align:middle;">
+          <div style="font-weight:700; font-family:monospace; color:var(--text-bright);">${ramMB} <span style="font-size:10.5px; font-weight:normal; color:var(--text-muted);">MB</span></div>
+          <div style="background:rgba(255,255,255,0.08); border-radius:3px; height:4px; width:70px; margin-left:auto; margin-top:3px; overflow:hidden;">
+            <div style="background:#a855f7; height:100%; width:${ramWidth}%;"></div>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = rowsHtml;
+}
+
+function switchTopProcessesSort(sortBy) {
+  if (sortBy !== 'cpu' && sortBy !== 'mem') return;
+  currentTopProcessesSort = sortBy;
+
+  const btnCpu = document.getElementById('btn-top-procs-cpu');
+  const btnMem = document.getElementById('btn-top-procs-mem');
+  if (btnCpu && btnMem) {
+    if (sortBy === 'cpu') {
+      btnCpu.classList.add('active');
+      btnMem.classList.remove('active');
+    } else {
+      btnCpu.classList.remove('active');
+      btnMem.classList.add('active');
+    }
+  }
+
+  loadTopProcesses();
+}
+
+window.loadTopProcesses = loadTopProcesses;
+window.switchTopProcessesSort = switchTopProcessesSort;
+
 
 
 
