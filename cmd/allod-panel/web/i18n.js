@@ -78,6 +78,19 @@ const i18n = {
     metrics_max: "Max",
     metrics_min: "Min",
     metrics_latest: "Latest",
+    metrics_top_process: "Top Process",
+
+    // Top Processes & Consumers
+    top_processes_title: "Top Resource Consumers (Processes & Containers)",
+    top_processes_subtitle: "Active processes and containers consuming the most computing power and memory",
+    top_processes_tab_cpu: "Top CPU",
+    top_processes_tab_mem: "Top RAM",
+    top_processes_col_name: "Process / Service",
+    top_processes_col_container: "Container / Unit",
+    top_processes_col_cpu: "CPU %",
+    top_processes_col_mem: "RAM (MB)",
+    top_processes_empty: "No running processes detected",
+    top_processes_loading: "Sampling top processes...",
 
     // Metrics
     metric_ram: "RAM Memory",
@@ -539,6 +552,19 @@ const i18n = {
     metrics_max: "Max",
     metrics_min: "Min",
     metrics_latest: "Attuale",
+    metrics_top_process: "Top Processo",
+
+    // Top Processes & Consumers
+    top_processes_title: "Top Consumer Risorse (Processi & Container)",
+    top_processes_subtitle: "Processi e container attivi con il maggior consumo di calcolo e memoria",
+    top_processes_tab_cpu: "Top CPU",
+    top_processes_tab_mem: "Top RAM",
+    top_processes_col_name: "Processo / Servizio",
+    top_processes_col_container: "Container / Modulo",
+    top_processes_col_cpu: "CPU %",
+    top_processes_col_mem: "RAM (MB)",
+    top_processes_empty: "Nessun processo attivo rilevato",
+    top_processes_loading: "Campionamento top processi in corso...",
 
     // Metrics
     metric_ram: "Memoria RAM",

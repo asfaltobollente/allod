@@ -432,6 +432,47 @@ systemctl --user enable --now allod-panel</pre>
           </div>
         </div>
 
+        <!-- Top Resource Consumers (Processes & Containers) Card -->
+        <div class="card mt-4" id="card-top-processes">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <h3 data-i18n="top_processes_title" style="margin-bottom:2px;">⚡ Top Consumer Risorse (Processi & Container)</h3>
+              <p class="text-muted" style="font-size:12px; margin:0;" data-i18n="top_processes_subtitle">Processi e container attivi con il maggior consumo di calcolo e memoria</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge badge-success" id="badge-top-procs-status" style="font-size:11px; padding:3px 8px;">LIVE</span>
+              <div class="metrics-range-switcher" role="group">
+                <button type="button" class="metrics-range-btn active" id="btn-top-procs-cpu" onclick="switchTopProcessesSort('cpu')">Top CPU</button>
+                <button type="button" class="metrics-range-btn" id="btn-top-procs-mem" onclick="switchTopProcessesSort('mem')">Top RAM</button>
+              </div>
+              <button type="button" class="btn btn-secondary" onclick="loadTopProcesses()" title="Aggiorna lista processi" style="padding:4px 8px; font-size:12px; line-height:1;">🔄</button>
+            </div>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <div id="top-processes-loading" class="hidden" style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;" data-i18n="top_processes_loading">
+              Campionamento top processi in corso...
+            </div>
+            <div id="top-processes-empty" class="hidden" style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;" data-i18n="top_processes_empty">
+              Nessun processo attivo rilevato
+            </div>
+            <div class="table-responsive" id="wrap-top-processes-table" style="overflow-x:auto;">
+              <table class="data-table" style="width:100%; border-collapse:collapse;">
+                <thead>
+                  <tr>
+                    <th style="width:35%;" data-i18n="top_processes_col_name">Processo / Servizio</th>
+                    <th style="width:25%;" data-i18n="top_processes_col_container">Container / Modulo</th>
+                    <th style="width:20%; text-align:right;" data-i18n="top_processes_col_cpu">CPU %</th>
+                    <th style="width:20%; text-align:right;" data-i18n="top_processes_col_mem">RAM (MB)</th>
+                  </tr>
+                </thead>
+                <tbody id="top-processes-tbody">
+                  <!-- Dynamically populated by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <div class="card mt-4">
           <div class="card-header">
             <h3 data-i18n="storage_pool_title">Physical Disks & NAS Storage Pool</h3>

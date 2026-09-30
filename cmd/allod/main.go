@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -42,6 +44,9 @@ var (
 	storageInitForce bool
 	wolBroadcast     string
 	wolPort          int
+	topLimit         int
+	topSort          string
+	topWatch         bool
 )
 
 var rootCmd = &cobra.Command{
@@ -502,6 +507,94 @@ var statusCmd = &cobra.Command{
 			fmt.Printf("%-15s %-12s %-25s %s\n", modName, modCfg.Level, statusIcon, unit)
 		}
 	},
+}
+
+// topCmd shows real-time system resource metrics and top consumer processes
+var topCmd = &cobra.Command{
+	Use:   "top",
+	Short: "Monitoraggio in tempo reale delle risorse e dei top processi",
+	Long:  `Visualizza in tempo reale le risorse di sistema (CPU, RAM, Temperatura, Storage) e i processi/container con il maggior impatto.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		runTop()
+	},
+}
+
+func runTop() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+
+	if topLimit <= 0 {
+		topLimit = 10
+	}
+	if topSort != "mem" {
+		topSort = "cpu"
+	}
+
+	renderOnce := func() {
+		vitals := preflight.GetServerVitals()
+		ram := preflight.GetRealRAMStats()
+		totBytes, usedBytes, _ := preflight.GetDiskUsage("/mnt/allod-storage")
+		procs, _ := preflight.GetTopProcesses(topLimit, topSort)
+
+		if topWatch {
+			fmt.Print("\033[H\033[2J") // Clear terminal screen
+		}
+
+		fmt.Println("================================================================================")
+		fmt.Printf("⚡ ALLOD TOP - Monitoraggio Risorse & Processi (Ordinato per: %s)\n", strings.ToUpper(topSort))
+		fmt.Println("================================================================================")
+		fmt.Printf("CPU: %5.1f%% (%d core) | Temp: %4.1f°C | Load: %.2f %.2f %.2f | Uptime: %s\n",
+			vitals.CPUUsagePercent, vitals.CPUCores, vitals.CPUTempC, vitals.LoadAvg1, vitals.LoadAvg5, vitals.LoadAvg15, vitals.UptimeFormatted)
+
+		ramPct := 0.0
+		if ram.TotalMB > 0 {
+			ramPct = float64(ram.UsedMB) / float64(ram.TotalMB) * 100.0
+		}
+		storageUsedGB := float64(usedBytes) / (1024 * 1024 * 1024)
+		storageTotGB := float64(totBytes) / (1024 * 1024 * 1024)
+		fmt.Printf("RAM: %d MB / %d MB (%4.1f%%) | Storage Pool: %.1f GB / %.1f GB\n",
+			ram.UsedMB, ram.TotalMB, ramPct, storageUsedGB, storageTotGB)
+		fmt.Println(strings.Repeat("-", 80))
+		fmt.Printf("%-7s %-22s %-16s %8s %11s %7s %6s\n", "PID", "PROCESSO", "CONTAINER", "CPU %", "RAM (MB)", "RAM %", "STATO")
+		fmt.Println(strings.Repeat("-", 80))
+
+		for _, p := range procs {
+			cnt := p.Container
+			if cnt == "" {
+				cnt = "-"
+			} else if len(cnt) > 16 {
+				cnt = cnt[:15] + "…"
+			}
+			name := p.Name
+			if len(name) > 22 {
+				name = name[:21] + "…"
+			}
+			fmt.Printf("%-7d %-22s %-16s %7.1f%% %9d MB %6.1f%% %5s\n",
+				p.PID, name, cnt, p.CPUPercent, p.MemoryMB, p.MemoryPct, p.State)
+		}
+		fmt.Println("================================================================================")
+		if topWatch {
+			fmt.Println("Aggiornamento continuo ogni 2s (Premi Ctrl+C per uscire)...")
+		}
+	}
+
+	renderOnce()
+	if !topWatch {
+		return
+	}
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			renderOnce()
+		case <-sigChan:
+			fmt.Println("\nUscita da allod top.")
+			return
+		}
+	}
 }
 
 func cleanModuleUnits(outDir, modName string) {
@@ -1448,6 +1541,11 @@ func init() {
 	rootCmd.AddCommand(purgeCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(setCmd)
+	topCmd.Flags().IntVarP(&topLimit, "limit", "n", 10, "Numero massimo di processi da visualizzare")
+	topCmd.Flags().StringVarP(&topSort, "sort", "s", "cpu", "Criterio di ordinamento: 'cpu' oppure 'mem'")
+	topCmd.Flags().BoolVarP(&topWatch, "watch", "w", false, "Modalità continua con aggiornamento ogni 2 secondi")
+	rootCmd.AddCommand(topCmd)
+
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(storageCmd)
 	rootCmd.AddCommand(installCmd)

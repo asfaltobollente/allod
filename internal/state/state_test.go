@@ -420,9 +420,9 @@ func TestMetricsHistory(t *testing.T) {
 
 	// 1. Record sample metrics across time
 	samples := []*SystemMetricRecord{
-		{Timestamp: now - 3500, CPUTempC: 40.5, CPUUsagePct: 15.0, RAMUsedMB: 2000, RAMTotalMB: 8000, StorageUsedBytes: 100 * 1024 * 1024 * 1024, StorageTotalBytes: 500 * 1024 * 1024 * 1024},
-		{Timestamp: now - 1800, CPUTempC: 45.2, CPUUsagePct: 30.5, RAMUsedMB: 2200, RAMTotalMB: 8000, StorageUsedBytes: 100 * 1024 * 1024 * 1024, StorageTotalBytes: 500 * 1024 * 1024 * 1024},
-		{Timestamp: now - 60, CPUTempC: 42.0, CPUUsagePct: 10.0, RAMUsedMB: 2100, RAMTotalMB: 8000, StorageUsedBytes: 101 * 1024 * 1024 * 1024, StorageTotalBytes: 500 * 1024 * 1024 * 1024},
+		{Timestamp: now - 3500, CPUTempC: 40.5, CPUUsagePct: 15.0, RAMUsedMB: 2000, RAMTotalMB: 8000, StorageUsedBytes: 100 * 1024 * 1024 * 1024, StorageTotalBytes: 500 * 1024 * 1024 * 1024, TopProcess: "photoprism (15.0%)"},
+		{Timestamp: now - 1800, CPUTempC: 45.2, CPUUsagePct: 30.5, RAMUsedMB: 2200, RAMTotalMB: 8000, StorageUsedBytes: 100 * 1024 * 1024 * 1024, StorageTotalBytes: 500 * 1024 * 1024 * 1024, TopProcess: "immich-server (30.5%)"},
+		{Timestamp: now - 60, CPUTempC: 42.0, CPUUsagePct: 10.0, RAMUsedMB: 2100, RAMTotalMB: 8000, StorageUsedBytes: 101 * 1024 * 1024 * 1024, StorageTotalBytes: 500 * 1024 * 1024 * 1024, TopProcess: "allod-panel (1.2%)"},
 		{Timestamp: now - (40 * 86400), CPUTempC: 38.0, CPUUsagePct: 5.0, RAMUsedMB: 1800, RAMTotalMB: 8000, StorageUsedBytes: 90 * 1024 * 1024 * 1024, StorageTotalBytes: 500 * 1024 * 1024 * 1024}, // 40 days old
 	}
 
@@ -439,6 +439,9 @@ func TestMetricsHistory(t *testing.T) {
 	}
 	if len(h1) != 3 {
 		t.Errorf("expected 3 samples in last 1h, got %d", len(h1))
+	}
+	if h1[0].TopProcess != "photoprism (15.0%)" {
+		t.Errorf("expected top process photoprism (15.0%%), got %q", h1[0].TopProcess)
 	}
 
 	// 3. Query 24h (aggregated)
