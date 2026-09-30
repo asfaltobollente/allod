@@ -157,7 +157,7 @@ func (t *TelegramNotifier) SendDailyDigest(report DigestReport) error {
 
 	weatherSection := ""
 	if report.WeatherInfo != "" {
-		weatherSection = fmt.Sprintf("🌤️ <b>Meteo di Oggi:</b>\n%s\n\n", html.EscapeString(report.WeatherInfo))
+		weatherSection = fmt.Sprintf("🌤️ <b>Meteo di Oggi:</b>\n%s\n\n", report.WeatherInfo)
 	}
 
 	vitalsInfo := ""
