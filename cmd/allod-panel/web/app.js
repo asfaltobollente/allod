@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof setLanguage === 'function') {
     setLanguage(currentLang);
   }
-  switchToTab('launchpad');
+  switchToTab('overview');
   refreshData();
   // Live vitals polling every 10 seconds for real-time temperature and CPU stats
   setInterval(() => {
@@ -579,6 +579,32 @@ function renderOverview() {
 
   if (currentStatus.vitals) {
     renderServerVitals(currentStatus.vitals);
+  }
+
+  // Cloud Overall Health Pill Update
+  const healthStatusEl = document.getElementById('overview-cloud-health-status');
+  const healthDotEl = document.querySelector('.overview-status-dot');
+  const healthPillEl = document.querySelector('.overview-status-pill');
+  if (healthStatusEl && healthDotEl && healthPillEl) {
+    if (currentStatus.storage && currentStatus.storage.has_warning) {
+      healthStatusEl.textContent = t('cloud_status_storage_warning', 'Attenzione Storage');
+      healthDotEl.style.background = 'var(--warning)';
+      healthPillEl.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+      healthPillEl.style.color = 'var(--warning)';
+      healthPillEl.style.background = 'rgba(245, 158, 11, 0.1)';
+    } else if (currentStatus.helper_permission_denied) {
+      healthStatusEl.textContent = t('cloud_status_helper_denied', 'Permesso Helper Richiesto');
+      healthDotEl.style.background = 'var(--destructive)';
+      healthPillEl.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+      healthPillEl.style.color = 'var(--destructive)';
+      healthPillEl.style.background = 'rgba(239, 68, 68, 0.1)';
+    } else {
+      healthStatusEl.textContent = t('cloud_status_healthy', 'Tutti i sistemi operativi');
+      healthDotEl.style.background = 'var(--success)';
+      healthPillEl.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+      healthPillEl.style.color = 'var(--success)';
+      healthPillEl.style.background = 'rgba(16, 185, 129, 0.1)';
+    }
   }
 
   // Helper Permission Denied banner (EACCES migration)

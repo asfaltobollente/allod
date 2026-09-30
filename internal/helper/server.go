@@ -416,6 +416,12 @@ func GetInterfaceIPv4(ifaceName string) string {
 	return ""
 }
 
+func addUserToAllodData(username string) {
+	_ = exec.Command("groupadd", "-f", "allod-data").Run()
+	usermodBin := resolveExecutable("usermod", "/usr/sbin/usermod", "/sbin/usermod", "/bin/usermod")
+	_ = exec.Command(usermodBin, "-aG", "allod-data", username).Run()
+}
+
 func ensureLinuxUser(username string) error {
 	if !validNameRegex.MatchString(username) {
 		return fmt.Errorf("invalid username '%s'", username)
@@ -426,12 +432,14 @@ func ensureLinuxUser(username string) error {
 		for _, line := range strings.Split(string(passwdData), "\n") {
 			parts := strings.Split(line, ":")
 			if len(parts) > 0 && parts[0] == username {
+				addUserToAllodData(username)
 				return nil // User already exists in OS!
 			}
 		}
 	}
 	idBin := resolveExecutable("id", "/usr/bin/id", "/bin/id")
 	if err := exec.Command(idBin, "-u", username).Run(); err == nil {
+		addUserToAllodData(username)
 		return nil // User already exists in OS!
 	}
 
@@ -452,18 +460,21 @@ func ensureLinuxUser(username string) error {
 	cmd := exec.Command(useraddBin, "-M", "-s", nologinShell, username)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
+		addUserToAllodData(username)
 		return nil
 	}
 
 	// 3b. Try useradd without creating a group of same name (-N)
 	cmd1b := exec.Command(useraddBin, "-M", "-N", "-s", nologinShell, username)
 	if _, err1b := cmd1b.CombinedOutput(); err1b == nil {
+		addUserToAllodData(username)
 		return nil
 	}
 
 	// 3c. Try useradd with existing group 'users'
 	cmd1c := exec.Command(useraddBin, "-M", "-g", "users", "-s", nologinShell, username)
 	if _, err1c := cmd1c.CombinedOutput(); err1c == nil {
+		addUserToAllodData(username)
 		return nil
 	}
 
@@ -471,6 +482,7 @@ func ensureLinuxUser(username string) error {
 	cmd2 := exec.Command(useraddBin, "-m", username)
 	out2, err2 := cmd2.CombinedOutput()
 	if err2 == nil {
+		addUserToAllodData(username)
 		return nil
 	}
 
@@ -479,11 +491,13 @@ func ensureLinuxUser(username string) error {
 	cmd3 := exec.Command(adduserBin, "--disabled-password", "--gecos", "", "--no-create-home", username)
 	out3, err3 := cmd3.CombinedOutput()
 	if err3 == nil {
+		addUserToAllodData(username)
 		return nil
 	}
 
 	// 6. Check if user exists despite any warnings/non-zero codes
 	if errCheck := exec.Command(idBin, "-u", username).Run(); errCheck == nil {
+		addUserToAllodData(username)
 		return nil
 	}
 
@@ -518,6 +532,7 @@ func ensureLinuxUser(username string) error {
 				_, _ = shadow.WriteString(fmt.Sprintf("%s:*:19000:0:99999:7:::\n", username))
 				shadow.Close()
 			}
+			addUserToAllodData(username)
 			return nil
 		}
 	}
@@ -715,22 +730,22 @@ func (s *Server) processRequest(req Request) Response {
 		if !req.Plan {
 			_ = exec.Command("groupadd", "-f", "allod-data").Run()
 
-			_ = os.MkdirAll(path, 0770)
-			_ = exec.Command("chmod", "2770", path).Run()
+			_ = os.MkdirAll(path, 0775)
+			_ = exec.Command("chmod", "2775", path).Run()
 			_ = exec.Command("chown", "root:allod-data", path).Run()
 
-			// Ensure public folder and media subfolders with 2770
+			// Ensure public folder and media subfolders with 2775
 			pubPath := filepath.Join(path, "public")
 			if strings.HasSuffix(path, "/public") {
 				pubPath = path
 			}
-			_ = os.MkdirAll(pubPath, 0770)
-			_ = exec.Command("chmod", "2770", pubPath).Run()
+			_ = os.MkdirAll(pubPath, 0775)
+			_ = exec.Command("chmod", "2775", pubPath).Run()
 			_ = exec.Command("chown", "root:allod-data", pubPath).Run()
 			for _, sub := range []string{"film", "musica", "serie", "movies", "tv", "music"} {
 				subDir := filepath.Join(pubPath, sub)
-				_ = os.MkdirAll(subDir, 0770)
-				_ = exec.Command("chmod", "2770", subDir).Run()
+				_ = os.MkdirAll(subDir, 0775)
+				_ = exec.Command("chmod", "2775", subDir).Run()
 				_ = exec.Command("chown", "root:allod-data", subDir).Run()
 			}
 
@@ -927,10 +942,14 @@ func (s *Server) processRequest(req Request) Response {
 			}
 			_ = exec.Command(smbpasswdBin, "-e", username).Run()
 
+			// Ensure parent shares directory exists and allows traversal
+			chmodBin := resolveExecutable("chmod", "/bin/chmod", "/usr/bin/chmod")
+			_ = exec.Command(chmodBin, "2775", "/mnt/allod-storage/shares").Run()
+			addUserToAllodData(username)
+
 			// Ensure user directory /mnt/allod-storage/shares/<username> exists with 2700
 			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
 			_ = os.MkdirAll(userSharePath, 0700)
-			chmodBin := resolveExecutable("chmod", "/bin/chmod", "/usr/bin/chmod")
 			_ = exec.Command(chmodBin, "2700", userSharePath).Run()
 			chownBin := resolveExecutable("chown", "/bin/chown", "/usr/bin/chown")
 			_ = exec.Command(chownBin, "-R", fmt.Sprintf("%s:%s", username, username), userSharePath).Run()
@@ -1108,7 +1127,7 @@ func (s *Server) processRequest(req Request) Response {
 			fmt.Sprintf("mkdir -p %s", mountPoint),
 			fmt.Sprintf("mount %s %s", disks[0], mountPoint),
 			fmt.Sprintf("mkdir -p %s/{cloud,photos,shares,backup,media}", mountPoint),
-			fmt.Sprintf("chmod 2770 %s", mountPoint),
+			fmt.Sprintf("chmod 2775 %s", mountPoint),
 			fmt.Sprintf("chown root:allod-data %s", mountPoint),
 		}
 
@@ -1158,10 +1177,14 @@ func (s *Server) processRequest(req Request) Response {
 			for _, sub := range subdirs {
 				p := filepath.Join(mountPoint, sub)
 				_ = os.MkdirAll(p, 0770)
-				_ = exec.Command("chmod", "2770", p).Run()
+				mode := "2770"
+				if sub == "shares" || sub == "shares/public" {
+					mode = "2775"
+				}
+				_ = exec.Command("chmod", mode, p).Run()
 				_ = exec.Command("chown", "root:allod-data", p).Run()
 			}
-			_ = exec.Command("chmod", "2770", mountPoint).Run()
+			_ = exec.Command("chmod", "2775", mountPoint).Run()
 			_ = exec.Command("chown", "root:allod-data", mountPoint).Run()
 		}
 

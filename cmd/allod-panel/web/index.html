@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Allod — Sovereign Personal Cloud & NAS</title>
   <link rel="stylesheet" href="style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@500;600;700&family=Roboto:wght@400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <script>
     (function() {
       const saved = localStorage.getItem('allod_theme');
@@ -47,10 +44,10 @@
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-item active" data-tab="launchpad" id="nav-tab-launchpad">
+        <button class="nav-item" data-tab="launchpad" id="nav-tab-launchpad">
           <span class="icon">🚀</span> <span data-i18n="tab_launchpad">Launchpad</span>
         </button>
-        <button class="nav-item" data-tab="overview" id="nav-tab-overview">
+        <button class="nav-item active" data-tab="overview" id="nav-tab-overview">
           <span class="icon">📊</span> <span data-i18n="tab_overview">Overview</span>
         </button>
         <button class="nav-item" data-tab="modules" id="nav-tab-modules">
@@ -82,8 +79,8 @@
     <main class="main-content">
       <header class="topbar">
         <div class="topbar-title">
-          <h1 id="page-title" data-i18n="page_launchpad_title">Launchpad & Centro Applicazioni</h1>
-          <p class="subtitle" id="page-subtitle" data-i18n="page_launchpad_sub">Accesso rapido con un click a tutte le tue app cloud, streaming e cartelle condivise</p>
+          <h1 id="page-title" data-i18n="page_overview_title">Node Overview</h1>
+          <p class="subtitle" id="page-subtitle" data-i18n="page_overview_sub">System state, hardware resources, and security boundary</p>
         </div>
         <div class="topbar-actions">
           <!-- Theme Quick Button -->
@@ -143,7 +140,7 @@
       </div>
 
       <!-- TAB 0: LAUNCHPAD (App Portal) -->
-      <section id="tab-launchpad" class="tab-pane active">
+      <section id="tab-launchpad" class="tab-pane">
         <div class="launchpad-toolbar">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="font-size:24px;">🚀</span>
@@ -198,49 +195,63 @@
       </section>
 
       <!-- TAB 1: OVERVIEW -->
-      <section id="tab-overview" class="tab-pane">
+      <section id="tab-overview" class="tab-pane active">
+        <!-- OVERVIEW PAGE HEADER & HEALTH STATUS -->
+        <div class="overview-header-row">
+          <div>
+            <div class="overview-headline">
+              <h2 class="overview-title" data-i18n="page_overview_title">Node Overview</h2>
+              <span class="overview-status-pill">
+                <span class="overview-status-dot"></span>
+                <span id="overview-cloud-health-status" data-i18n="cloud_status_healthy">Cloud Operativo</span>
+              </span>
+            </div>
+            <p class="overview-subtitle" data-i18n="overview_banner_desc">Stato del cloud personale, salute hardware e telemetria storage sovrano</p>
+          </div>
+        </div>
+
         <!-- FIRST SETUP & BOOT PERSISTENCE GUIDE (Auto-hides once all_ready is true) -->
-        <div id="first-setup-card" class="card hidden" style="border: 2px solid var(--warning); background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(15, 23, 42, 0.95)); margin-bottom: 24px; box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15);">
-          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div id="first-setup-card" class="card hidden" style="border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.04); margin-bottom: 24px;">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:24px;">🚀</span>
+              <span style="font-size:20px;">🛡️</span>
               <div>
-                <h3 style="margin:0; font-size:16px; color:#f59e0b;" data-i18n="first_setup_title">Benvenuto su Allod — Configurazione Iniziale Boot 24/7</h3>
-                <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);" data-i18n="first_setup_sub">Garantisci la persistenza di tutti i servizi e dei container Podman anche dopo il riavvio del server</p>
+                <h3 style="margin:0; font-size:15px; color:#f59e0b;" data-i18n="first_setup_title">Benvenuto su Allod — Configurazione Iniziale Boot 24/7</h3>
+                <p style="margin:2px 0 0 0; font-size:12px; color:var(--muted-foreground);" data-i18n="first_setup_sub">Garantisci la persistenza di tutti i servizi e dei container Podman anche dopo il riavvio del server</p>
               </div>
             </div>
-            <button class="btn btn-primary" id="btn-first-setup-action" onclick="runFirstSetupAuto()" style="font-weight:700; padding:8px 16px;">
-              ⚡ <span data-i18n="first_setup_btn_1click">Completa Configurazione Boot (1-Click)</span>
+            <button class="btn btn-primary" id="btn-first-setup-action" onclick="runFirstSetupAuto()" style="padding:6px 14px; font-weight:600;">
+              <span data-i18n="first_setup_btn_1click">Completa Configurazione Boot (1-Click)</span>
             </button>
           </div>
 
-          <div style="margin-top:14px; font-size:12.5px; line-height:1.5; color:var(--text);">
-            <p data-i18n="first_setup_desc" style="margin-bottom:12px;">
+          <div style="margin-top:12px; font-size:12.5px; line-height:1.5; color:var(--foreground);">
+            <p data-i18n="first_setup_desc" style="margin-bottom:12px; color:var(--muted-foreground);">
               Allod e Podman operano in modalità rootless per la massima sicurezza. Su Ubuntu, i container utente (Immich, Nextcloud, Samba) e la dashboard necessitano dell'abilitazione del linger e del servizio systemd per ripartire in autonomia all'accensione della macchina senza bisogno di login SSH.
             </p>
 
-            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:14px;">
-              <div id="setup-check-linger" style="display:flex; align-items:center; gap:8px; background:rgba(30,41,59,0.7); padding:6px 12px; border-radius:6px; font-size:12px;">
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+              <div id="setup-check-linger" style="display:flex; align-items:center; gap:8px; background:var(--muted); border:1px solid var(--border); padding:6px 12px; border-radius:var(--radius-sm); font-size:12px;">
                 <span id="setup-icon-linger">⏳</span>
                 <span data-i18n="first_setup_check_linger">Systemd User Linger (Container 24/7)</span>
               </div>
-              <div id="setup-check-panel" style="display:flex; align-items:center; gap:8px; background:rgba(30,41,59,0.7); padding:6px 12px; border-radius:6px; font-size:12px;">
+              <div id="setup-check-panel" style="display:flex; align-items:center; gap:8px; background:var(--muted); border:1px solid var(--border); padding:6px 12px; border-radius:var(--radius-sm); font-size:12px;">
                 <span id="setup-icon-panel">⏳</span>
                 <span data-i18n="first_setup_check_panel">Servizio allod-panel (Web UI al Boot)</span>
               </div>
             </div>
 
             <!-- Manual CLI Commands with Quick Copy Button -->
-            <div style="background:rgba(0,0,0,0.35); border:1px solid var(--card-border); border-radius:6px; padding:10px 14px;">
+            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span style="font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;" data-i18n="first_setup_cli_title">
-                  💻 Oppure esegui manualmente via CLI sul server:
+                <span style="font-size:11px; font-weight:600; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.5px;" data-i18n="first_setup_cli_title">
+                  Oppure esegui manualmente via CLI sul server:
                 </span>
-                <button class="btn btn-sm btn-outline-secondary" onclick="copyFirstSetupCli(this)" style="padding:2px 10px; font-size:11px;">
-                  📋 <span data-i18n="btn_copy">Copia Comandi</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyFirstSetupCli(this)" style="padding:2px 8px; font-size:11px;">
+                  <span data-i18n="btn_copy">Copia Comandi</span>
                 </button>
               </div>
-              <pre id="first-setup-cli-code" style="margin:0; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#38bdf8; overflow-x:auto; line-height:1.4;">loginctl enable-linger $USER
+              <pre id="first-setup-cli-code" style="margin:0; font-family:var(--font-mono); font-size:11.5px; color:#38bdf8; overflow-x:auto; line-height:1.45;">loginctl enable-linger $USER
 mkdir -p ~/.config/systemd/user
 cp ~/allod/configs/allod-panel.service ~/.config/systemd/user/
 systemctl --user daemon-reload
@@ -249,11 +260,12 @@ systemctl --user enable --now allod-panel</pre>
           </div>
         </div>
 
+        <!-- 4 KPI Stat Cards -->
         <div class="metrics-grid">
           <div class="card metric-card">
             <div class="metric-header">
               <span class="metric-title" data-i18n="metric_ram">RAM Memory</span>
-              <span class="icon">🧠</span>
+              <span class="metric-icon">🧠</span>
             </div>
             <div class="metric-value" id="ram-used">2.3 / 8.0 GB</div>
             <div class="progress-bar-bg">
@@ -265,7 +277,7 @@ systemctl --user enable --now allod-panel</pre>
           <div class="card metric-card">
             <div class="metric-header">
               <span class="metric-title" data-i18n="metric_modules">Active Modules</span>
-              <span class="icon">📦</span>
+              <span class="metric-icon">📦</span>
             </div>
             <div class="metric-value" id="active-modules-count">5 / 7</div>
             <div class="metric-subtext" id="active-modules-list">photos, storage, shares, backup, watch</div>
@@ -274,7 +286,7 @@ systemctl --user enable --now allod-panel</pre>
           <div class="card metric-card">
             <div class="metric-header">
               <span class="metric-title" data-i18n="metric_ring">Federation Ring</span>
-              <span class="icon">🌐</span>
+              <span class="metric-icon">🌐</span>
             </div>
             <div class="metric-value" id="ring-status-badge">1 Node (Local)</div>
             <div class="metric-subtext" id="ring-status-subtext">Standalone Mode (0 remote peers)</div>
@@ -283,7 +295,7 @@ systemctl --user enable --now allod-panel</pre>
           <div class="card metric-card">
             <div class="metric-header">
               <span class="metric-title" data-i18n="metric_security">Security & Boundary</span>
-              <span class="icon">🔒</span>
+              <span class="metric-icon">🔒</span>
             </div>
             <div class="metric-value text-success" id="security-status-badge">Rootless Safe</div>
             <div class="metric-subtext" id="security-status-subtext">Unprivileged Panel</div>
@@ -293,16 +305,13 @@ systemctl --user enable --now allod-panel</pre>
         <!-- Server Health & Hardware Sensors Card -->
         <div class="card mt-4" id="card-server-vitals">
           <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:20px;">🩺</span>
-              <div>
-                <h3 data-i18n="vitals_title" style="margin:0;">Salute Server & Sensori Hardware</h3>
-                <p class="text-muted" data-i18n="vitals_subtitle" style="margin:2px 0 0 0; font-size:12px;">Monitoraggio termico in tempo reale, carico processore e stabilità di sistema</p>
-              </div>
+            <div>
+              <h3 data-i18n="vitals_title" style="margin:0;">Salute Server & Sensori Hardware</h3>
+              <p class="text-muted" data-i18n="vitals_subtitle" style="margin:2px 0 0 0; font-size:12px;">Monitoraggio termico in tempo reale, carico processore e stabilità di sistema</p>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
-              <span class="badge badge-success" id="vitals-temp-overall-badge">🟢 Normale</span>
-              <button class="btn btn-sm btn-outline-secondary" onclick="fetchLiveVitals()" style="padding:2px 8px; font-size:11px;" title="Aggiorna sensori istantaneamente">
+              <span class="badge badge-success" id="vitals-temp-overall-badge">Normale</span>
+              <button class="btn btn-sm btn-outline-secondary" onclick="fetchLiveVitals()" style="padding:4px 10px; font-size:11px;" title="Aggiorna sensori istantaneamente">
                 🔄 Aggiorna Sensori
               </button>
             </div>
@@ -343,14 +352,14 @@ systemctl --user enable --now allod-panel</pre>
                   <span class="icon">⏱️</span>
                 </div>
                 <div class="vitals-stat-value" id="vitals-uptime-val" style="font-size:18px;">--</div>
-                <div style="font-size:11.5px; color:var(--text-muted); margin-top:8px;" id="vitals-cores-val">Core rilevati: --</div>
+                <div style="font-size:11.5px; color:var(--muted-foreground); margin-top:8px;" id="vitals-cores-val">Core rilevati: --</div>
                 <div class="vitals-stat-footer" id="vitals-system-status">Kernel Linux nativo OK</div>
               </div>
             </div>
 
             <!-- Dynamic Sensors Grid -->
             <div style="margin-top:16px;">
-              <h4 style="font-size:12.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;" data-i18n="vitals_sensors_title">
+              <h4 style="font-size:12px; font-weight:600; color:var(--muted-foreground); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;" data-i18n="vitals_sensors_title">
                 Sensori Hardware Rilevati
               </h4>
               <div id="vitals-sensors-list" class="vitals-sensors-grid">
@@ -364,7 +373,7 @@ systemctl --user enable --now allod-panel</pre>
         <div class="card mt-4" id="card-metrics-history">
           <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
             <div>
-              <h3 data-i18n="metrics_history_title" style="margin-bottom:2px;">📈 Telemetria & Storico Prestazioni</h3>
+              <h3 data-i18n="metrics_history_title" style="margin-bottom:2px;">Telemetria & Storico Prestazioni</h3>
               <p class="text-muted" style="font-size:12px; margin:0;" data-i18n="metrics_history_subtitle">Monitoraggio cronologico continuo archiviato localmente ad impatto ultra-leggero</p>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
@@ -378,10 +387,10 @@ systemctl --user enable --now allod-panel</pre>
             </div>
           </div>
           <div class="card-body">
-            <div id="metrics-history-loading" class="hidden" style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;" data-i18n="metrics_loading">
+            <div id="metrics-history-loading" class="hidden" style="text-align:center; padding:20px; color:var(--muted-foreground); font-size:13px;" data-i18n="metrics_loading">
               Caricamento storico metriche...
             </div>
-            <div id="metrics-history-empty" class="hidden" style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px;" data-i18n="metrics_no_data">
+            <div id="metrics-history-empty" class="hidden" style="text-align:center; padding:30px; color:var(--muted-foreground); font-size:13px;" data-i18n="metrics_no_data">
               Nessun dato di telemetria ancora archiviato. Campionamento in corso ogni 60 secondi...
             </div>
             <div id="metrics-charts-grid" class="metrics-charts-grid">
@@ -436,11 +445,11 @@ systemctl --user enable --now allod-panel</pre>
         <div class="card mt-4" id="card-top-processes">
           <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
             <div>
-              <h3 data-i18n="top_processes_title" style="margin-bottom:2px;">⚡ Top Consumer Risorse (Processi & Container)</h3>
+              <h3 data-i18n="top_processes_title" style="margin-bottom:2px;">Top Consumer Risorse (Processi & Container)</h3>
               <p class="text-muted" style="font-size:12px; margin:0;" data-i18n="top_processes_subtitle">Processi e container attivi con il maggior consumo di calcolo e memoria</p>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
-              <span class="badge badge-success" id="badge-top-procs-status" style="font-size:11px; padding:3px 8px;">LIVE</span>
+              <span class="badge badge-success" id="badge-top-procs-status" style="font-size:11px; padding:2px 8px;">LIVE</span>
               <div class="metrics-range-switcher" role="group">
                 <button type="button" class="metrics-range-btn active" id="btn-top-procs-cpu" onclick="switchTopProcessesSort('cpu')">Top CPU</button>
                 <button type="button" class="metrics-range-btn" id="btn-top-procs-mem" onclick="switchTopProcessesSort('mem')">Top RAM</button>
@@ -449,14 +458,14 @@ systemctl --user enable --now allod-panel</pre>
             </div>
           </div>
           <div class="card-body" style="padding:0;">
-            <div id="top-processes-loading" class="hidden" style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;" data-i18n="top_processes_loading">
+            <div id="top-processes-loading" class="hidden" style="text-align:center; padding:20px; color:var(--muted-foreground); font-size:13px;" data-i18n="top_processes_loading">
               Campionamento top processi in corso...
             </div>
-            <div id="top-processes-empty" class="hidden" style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;" data-i18n="top_processes_empty">
+            <div id="top-processes-empty" class="hidden" style="text-align:center; padding:20px; color:var(--muted-foreground); font-size:13px;" data-i18n="top_processes_empty">
               Nessun processo attivo rilevato
             </div>
             <div class="table-responsive" id="wrap-top-processes-table" style="overflow-x:auto;">
-              <table class="data-table" style="width:100%; border-collapse:collapse;">
+              <table class="data-table">
                 <thead>
                   <tr>
                     <th style="width:35%;" data-i18n="top_processes_col_name">Processo / Servizio</th>
@@ -473,13 +482,14 @@ systemctl --user enable --now allod-panel</pre>
           </div>
         </div>
 
+        <!-- Physical Disks & Storage Pool Card -->
         <div class="card mt-4">
           <div class="card-header">
             <h3 data-i18n="storage_pool_title">Physical Disks & NAS Storage Pool</h3>
             <span class="badge badge-primary" id="storage-mode-badge">Btrfs Storage</span>
           </div>
           <div class="card-body">
-            <p class="text-muted mb-3" id="storage-mode-summary">Automatic storage hardware detection.</p>
+            <p class="text-muted mb-3" id="storage-mode-summary" style="font-size:13px;">Automatic storage hardware detection.</p>
             <div id="storage-warning-banner" class="alert-banner alert-warning mb-3 hidden" style="margin-bottom:12px;"></div>
             <div class="nodes-visual-grid" id="storage-disks-grid">
               <!-- Rendered by JS -->
@@ -487,13 +497,14 @@ systemctl --user enable --now allod-panel</pre>
           </div>
         </div>
 
+        <!-- Federation Ring Card -->
         <div class="card mt-4">
           <div class="card-header">
             <h3 data-i18n="federation_health_title">Federation Ring Health</h3>
             <span class="badge badge-success" data-i18n="federation_active_badge">Active Quorum</span>
           </div>
           <div class="card-body">
-            <p class="text-muted mb-3" data-i18n="federation_desc">Nodes in the Ring exchange heartbeats and supervise encrypted append-only backups.</p>
+            <p class="text-muted mb-3" data-i18n="federation_desc" style="font-size:13px;">Nodes in the Ring exchange heartbeats and supervise encrypted append-only backups.</p>
             <div class="nodes-visual-grid" id="nodes-visual-grid">
               <!-- Rendered by JS -->
             </div>
