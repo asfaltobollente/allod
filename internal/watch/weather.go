@@ -3,6 +3,7 @@ package watch
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -144,8 +145,8 @@ func (w *WeatherClient) getOpenMeteoForecast(city string) (string, error) {
 
 	return fmt.Sprintf("%s <b>%s</b>: %s, Min: <b>%.0f°C</b> / Max: <b>%.0f°C</b> (Prob. pioggia: %d%%)",
 		emoji,
-		matched.Name,
-		desc,
+		html.EscapeString(matched.Name),
+		html.EscapeString(desc),
 		minT,
 		maxT,
 		rainProb,
@@ -203,7 +204,7 @@ func (w *WeatherClient) getWttrInForecast(city string) (string, error) {
 	}
 
 	return fmt.Sprintf("🌤️ <b>%s</b>: %s, Min: <b>%s°C</b> / Max: <b>%s°C</b> (Prob. pioggia: %s%%)",
-		city, desc, minT, maxT, rainProb), nil
+		html.EscapeString(city), html.EscapeString(desc), minT, maxT, rainProb), nil
 }
 
 // GetDailyForecast returns a formatted one-line forecast for the given city (e.g. "Atri", "Roma").
