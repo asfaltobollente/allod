@@ -126,9 +126,10 @@ Install the root helper daemon, configure socket permissions, and add your user 
 sudo install -m 0755 allod-helperd /usr/local/bin/allod-helperd
 sudo install -m 0644 configs/allod-helperd.service /etc/systemd/system/allod-helperd.service
 
-# Create group and add current user
+# Create groups and add current user
 sudo groupadd -f allod
-sudo usermod -aG allod $USER
+sudo groupadd -f allod-data
+sudo usermod -aG allod,allod-data $USER
 
 # Start the helper daemon
 sudo systemctl daemon-reload
@@ -406,7 +407,7 @@ nohup ./allod-panel > panel.log 2>&1 &
 ```bash
 # 1. Install & start root helper system daemon
 sudo install -o root -g root -m 0755 allod-helperd /usr/local/bin/allod-helperd
-sudo groupadd -f allod && sudo usermod -aG allod $USER
+sudo groupadd -f allod && sudo groupadd -f allod-data && sudo usermod -aG allod,allod-data $USER
 sudo cp configs/allod-helperd.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now allod-helperd

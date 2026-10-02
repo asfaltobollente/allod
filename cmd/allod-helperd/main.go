@@ -23,6 +23,7 @@ func main() {
 	sockPath := "allod-helper.sock"
 	if os.Geteuid() == 0 {
 		_ = helper.RepairSystemBinPermissions()
+		helper.AutoHealStoragePermissions()
 		if err := os.MkdirAll("/run/allod", 0755); err == nil {
 			sockPath = "/run/allod/helper.sock"
 		}

@@ -613,9 +613,11 @@ func (c *Client) Execute(action string, args map[string]interface{}, plan bool) 
 func (s *Server) Start() error {
 	os.Remove(s.SocketPath) // Pulizia vecchio socket
 
-	// Ensure group 'allod' exists if running as root on Linux
+	// Ensure groups 'allod' and 'allod-data' exist if running as root on Linux
 	if runtime.GOOS == "linux" && os.Geteuid() == 0 {
 		_ = exec.Command("groupadd", "-f", "allod").Run()
+		_ = exec.Command("groupadd", "-f", "allod-data").Run()
+		AutoHealStoragePermissions()
 		// Do not auto-add users to 'allod' group (group membership is an admin decision).
 		// Log an advisory suggestion if an active logged-in user is not in the 'allod' group.
 		if userDirs, err := filepath.Glob("/run/user/[0-9]*"); err == nil {
@@ -903,10 +905,14 @@ func (s *Server) processRequest(req Request) Response {
 			if err := ensureLinuxUser(username); err != nil {
 				return Response{Ok: false, Error: fmt.Sprintf("Failed to create Linux user '%s': %v", username, err)}
 			}
-			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
-			_ = os.MkdirAll(userSharePath, 0770)
 			chmodBin := resolveExecutable("chmod", "/bin/chmod", "/usr/bin/chmod")
-			_ = exec.Command(chmodBin, "0770", userSharePath).Run()
+			_ = exec.Command(chmodBin, "2775", "/mnt/allod-storage/shares").Run()
+
+			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
+			_ = os.MkdirAll(userSharePath, 0700)
+			_ = exec.Command(chmodBin, "2700", userSharePath).Run()
+			chownBin := resolveExecutable("chown", "/bin/chown", "/usr/bin/chown")
+			_ = exec.Command(chownBin, "-R", fmt.Sprintf("%s:%s", username, username), userSharePath).Run()
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("useradd -M -s /usr/sbin/nologin %s", username)}}
 
@@ -2293,8 +2299,56 @@ func PatchSambaConfig(content string) string {
 	return strings.Join(output, "\n")
 }
 
+// AutoHealStoragePermissions ensures that /mnt/allod-storage and /mnt/allod-storage/shares
+// have traversable permissions (2775 root:allod-data), public shares are accessible to allod-data,
+// and any existing personal user shares in /mnt/allod-storage/shares/<user> have their users
+// in the allod-data group and mode 2700 <user>:<user>.
+func AutoHealStoragePermissions() {
+	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+		return
+	}
+	_ = exec.Command("groupadd", "-f", "allod-data").Run()
+
+	storageRoot := getStorageBaseDir()
+	if fi, err := os.Stat(storageRoot); err == nil && fi.IsDir() {
+		_ = exec.Command("chmod", "2775", storageRoot).Run()
+		_ = exec.Command("chown", "root:allod-data", storageRoot).Run()
+	}
+
+	sharesDir := filepath.Join(storageRoot, "shares")
+	if fi, err := os.Stat(sharesDir); err == nil && fi.IsDir() {
+		_ = exec.Command("chmod", "2775", sharesDir).Run()
+		_ = exec.Command("chown", "root:allod-data", sharesDir).Run()
+
+		pubDir := filepath.Join(sharesDir, "public")
+		if fiPub, errP := os.Stat(pubDir); errP == nil && fiPub.IsDir() {
+			_ = exec.Command("chmod", "2775", pubDir).Run()
+			_ = exec.Command("chown", "root:allod-data", pubDir).Run()
+		}
+
+		if entries, errR := os.ReadDir(sharesDir); errR == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				uName := e.Name()
+				if uName == "public" || uName == "photos" || uName == "media" || uName == "lost+found" || strings.HasPrefix(uName, ".") {
+					continue
+				}
+				if validNameRegex.MatchString(uName) {
+					uShareDir := filepath.Join(sharesDir, uName)
+					addUserToAllodData(uName)
+					_ = exec.Command("chown", "-R", fmt.Sprintf("%s:%s", uName, uName), uShareDir).Run()
+					_ = exec.Command("chmod", "2700", uShareDir).Run()
+				}
+			}
+		}
+	}
+}
+
 // AutoHealSambaConfig checks /etc/samba/smb.conf and patches it if needed.
 func AutoHealSambaConfig() error {
+	AutoHealStoragePermissions()
 	smbConf := "/etc/samba/smb.conf"
 	data, err := os.ReadFile(smbConf)
 	if err != nil {
