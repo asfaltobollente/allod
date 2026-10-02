@@ -524,6 +524,82 @@ func ensureSystemUser(client *helper.Client, username string) error {
 	return fmt.Errorf("user '%s' was not found in /etc/passwd after creation", username)
 }
 
+// regenerateActiveQuadlets re-generates all Quadlet unit files for configured active modules
+// using the latest module manifests and optionally restarts active services.
+func regenerateActiveQuadlets(report *strings.Builder, restartRunning bool) {
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return
+	}
+	cfgPath := getConfigPath()
+	cfg, _ := config.LoadConfig(cfgPath)
+	modConfigs := make(map[string]string)
+	if cfg != nil && cfg.Modules != nil {
+		for mName, mCfg := range cfg.Modules {
+			modConfigs[mName] = mCfg.Level
+		}
+	}
+	if st, err := state.Open(dbPath); err == nil {
+		if list, err := st.ListModules(); err == nil {
+			for mName, sMod := range list {
+				if _, exists := modConfigs[mName]; !exists || modConfigs[mName] == "" {
+					modConfigs[mName] = sMod.Level
+				}
+			}
+		}
+		st.Close()
+	}
+
+	quadDir := filepath.Join(home, ".config", "containers", "systemd")
+	systemdUserDir := filepath.Join(home, ".config", "systemd", "user")
+	modDir := getModulesDir()
+	_ = os.MkdirAll(quadDir, 0755)
+	_ = os.MkdirAll(systemdUserDir, 0755)
+	quadlet.EnsureAllodNetwork(quadDir)
+
+	var toRestart []string
+	for modName, curLevel := range modConfigs {
+		if curLevel == "" || curLevel == "off" {
+			continue
+		}
+		mPath := filepath.Join(modDir, modName, "module.yaml")
+		m, err := manifest.LoadManifest(mPath)
+		if err != nil {
+			continue
+		}
+		genRes, err := quadlet.Generate(modName, m, curLevel)
+		if err != nil {
+			continue
+		}
+		for fname, content := range genRes.Files {
+			if strings.HasSuffix(fname, ".service") {
+				_ = os.WriteFile(filepath.Join(systemdUserDir, fname), []byte(content), 0644)
+			}
+			_ = os.WriteFile(filepath.Join(quadDir, fname), []byte(content), 0644)
+		}
+		if report != nil {
+			report.WriteString(fmt.Sprintf("✓ Quadlet rigenerati per '%s' (livello: %s)\n", modName, curLevel))
+		}
+
+		if restartRunning && modName != "storage" && modName != "shares" && modName != "network" {
+			out, _ := exec.Command("systemctl", "--user", "is-active", modName).Output()
+			if strings.TrimSpace(string(out)) == "active" {
+				toRestart = append(toRestart, modName)
+			}
+		}
+	}
+
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	if restartRunning {
+		for _, modName := range toRestart {
+			_ = exec.Command("systemctl", "--user", "restart", modName).Run()
+			if report != nil {
+				report.WriteString(fmt.Sprintf("✓ Modulo '%s' riavviato (porte aggiornate: LAN + Mesh)\n", modName))
+			}
+		}
+	}
+}
+
 func main() {
 	port := 8080
 	cfgPath := getConfigPath()
@@ -2067,9 +2143,15 @@ fi
 			return
 		}
 
+		var pullReport strings.Builder
+		regenerateActiveQuadlets(&pullReport, false)
+		if pullReport.Len() > 0 {
+			outputStr += "\n\n" + pullReport.String()
+		}
+
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status:  "ok",
-			Message: "Git pull completato con successo",
+			Message: "Git pull completato con successo (configurazioni Quadlet aggiornate)",
 			Data:    map[string]interface{}{"output": outputStr},
 		})
 	})
@@ -2187,6 +2269,9 @@ fi
 			}
 			st.Close()
 		}
+
+		// Regenerate Quadlets for all configured active modules and restart running services (applying new ports: LAN + Mesh)
+		regenerateActiveQuadlets(&logReport, true)
 
 		logReport.WriteString("✓ Binari aggiornati. Riavvio pannello web in background...\n")
 
@@ -2306,7 +2391,7 @@ fi
 		report.WriteString(fmt.Sprintf("=== AZIONE GLOBALE: %s ===\n", strings.ToUpper(req.Action)))
 
 		// Read active configuration
-		cfg, _ := config.LoadConfig("configs/config.example.yaml")
+		cfg, _ := config.LoadConfig(getConfigPath())
 		modConfigs := make(map[string]string)
 		if cfg != nil {
 			for mName, mCfg := range cfg.Modules {
@@ -2315,7 +2400,7 @@ fi
 		}
 
 		// Also check state.db
-		if st, err := state.Open("state.db"); err == nil {
+		if st, err := state.Open(dbPath); err == nil {
 			if list, err := st.ListModules(); err == nil {
 				for mName, sMod := range list {
 					if _, exists := modConfigs[mName]; !exists || modConfigs[mName] == "" {
@@ -2324,6 +2409,11 @@ fi
 				}
 			}
 			st.Close()
+		}
+
+		if req.Action == "start" {
+			// Auto-regenerate Quadlets before starting so any manifest updates are applied immediately
+			regenerateActiveQuadlets(&report, false)
 		}
 
 		// Read all existing modules
