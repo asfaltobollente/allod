@@ -25,7 +25,7 @@ levels:
 
 ports:
   - n: 2283
-    scope: mesh
+    scope: lan
     share: friend
 
 privileges:

@@ -22,7 +22,7 @@ levels:
 
 ports:
   - n: 8096
-    scope: mesh
+    scope: lan
     share: member
 
 privileges:

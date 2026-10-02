@@ -128,7 +128,9 @@
             "enum": [
               "loopback",
               "lan",
-              "mesh"
+              "mesh",
+              "all",
+              "both"
             ]
           },
           "share": {
