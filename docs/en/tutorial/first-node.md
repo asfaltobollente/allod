@@ -26,7 +26,8 @@ go build -o allod-helperd ./cmd/allod-helperd
 # Install the privileged helper daemon
 sudo install -m 0755 allod-helperd /usr/local/bin/allod-helperd
 sudo groupadd -f allod
-sudo usermod -aG allod $USER
+sudo groupadd -f allod-data
+sudo usermod -aG allod,allod-data $USER
 sudo systemctl restart allod-helperd
 ```
 
