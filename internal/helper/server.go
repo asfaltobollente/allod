@@ -860,8 +860,12 @@ func (s *Server) processRequest(req Request) Response {
 				}
 
 				if enabled {
-					_ = os.MkdirAll(src, 0750)
-					_ = os.MkdirAll(tgt, 0750)
+					_ = os.MkdirAll(src, 0775)
+					_ = os.MkdirAll(tgt, 0775)
+					_ = exec.Command("chmod", "2775", src).Run()
+					_ = exec.Command("chown", ":allod-data", src).Run()
+					_ = exec.Command("chmod", "2775", tgt).Run()
+					_ = exec.Command("chown", ":allod-data", tgt).Run()
 					_ = exec.Command("umount", "-l", tgt).Run()
 					cmd := exec.Command("mount", "--bind", src, tgt)
 					if out, err := cmd.CombinedOutput(); err != nil {
