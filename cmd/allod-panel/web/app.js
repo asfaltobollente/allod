@@ -268,6 +268,18 @@ function renderLaunchpad() {
       secondaryActionText: null
     },
     {
+      id: 'odysseus',
+      name: 'Odysseus AI Workspace',
+      icon: '🧠',
+      color: '#8b5cf6',
+      desc: 'Workspace AI per chat, agenti e deep research. Collegato via LAN a workstation GPU o tramite API esterne.',
+      port: 7000,
+      url: `http://${activeHost}:7000`,
+      path: null,
+      primaryActionText: '🤖 Apri Workspace AI',
+      secondaryActionText: null
+    },
+    {
       id: 'shares',
       name: 'Samba File Shares',
       icon: '📁',

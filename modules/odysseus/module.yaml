@@ -1,0 +1,62 @@
+id: odysseus
+tier: optional
+provides: [ai-workspace, ai-agent, deep-research]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  standard:
+    ram_mb: 2048
+    disk_gb: 15
+    requires:
+      modules: [storage]
+      total_ram_mb: 8000
+    grants: [chat con modelli API o workstation GPU LAN, deep research con SearXNG, RAG e memoria semantica ChromaDB]
+    lacks: [inferenza locale on-device sulla CPU del server (richiede workstation GPU esterna in LAN o API cloud)]
+  full:
+    ram_mb: 4096
+    requires:
+      total_ram_mb: 16000
+      cpu_flags: [avx2]
+    grants: [allocazione memoria estesa per scraping concorrente e carichi agentici pesanti]
+    lacks: [inferenza locale on-device sulla CPU del server (richiede workstation GPU esterna in LAN o API cloud)]
+    notes_arm64: "su Raspberry Pi 5 utilizzare esclusivamente con API cloud o workstation GPU LAN"
+
+ports:
+  - n: 7000
+    scope: mesh
+    share: family
+
+privileges:
+  userns: rootless
+  devices: []
+  caps: []
+
+images:
+  - ref: ghcr.io/odysseus-dev/odysseus
+    tag: "1.0.2"
+    channel: pinned
+  - ref: docker.io/chromadb/chroma
+    tag: "latest"
+    channel: pinned
+  - ref: docker.io/searxng/searxng
+    tag: "2026.5.31-7159b8aed"
+    channel: pinned
+
+transitions:
+  off -> standard: safe
+  standard -> full: safe
+  full -> standard: safe
+  standard -> off: safe
+  full -> off: safe
+
+datasets:
+  - id: odysseus
+    includes: [data, logs, chroma]
+    excludes: [huggingface/cache]
+
+help:
+  en: help/odysseus.en.md
+  it: help/odysseus.it.md

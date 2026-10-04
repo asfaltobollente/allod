@@ -142,6 +142,44 @@ func ensureModuleSecret(module, key, legacyValue string) error {
 	return os.WriteFile(secFile, []byte(envContent), 0600)
 }
 
+func ensureOdysseusSecret() error {
+	resBaseDir := ResolvedStorageBaseDir()
+	secDir := filepath.Join(resBaseDir, "odysseus", "secrets")
+	if err := os.MkdirAll(secDir, 0700); err != nil {
+		return err
+	}
+	secFile := filepath.Join(secDir, "odysseus.env")
+	if _, err := os.Stat(secFile); err == nil {
+		return nil
+	}
+
+	defaultContent := `# Odysseus AI Workspace Configuration for Allod
+# NOTE: Local CPU inference is disabled on this server node.
+# Connect to an external GPU Workstation in your LAN/Mesh or to Cloud APIs.
+
+# 1. External GPU Workstation (e.g. Ollama on LAN, http://192.168.1.100:11434)
+OLLAMA_BASE_URL=
+
+# 2. Cloud API Keys (optional if using LAN Ollama)
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+DEEPSEEK_API_KEY=
+OPENROUTER_API_KEY=
+
+# Internal Container Infrastructure (Allod Rootless Podman Network)
+CHROMADB_HOST=odysseus-chroma
+CHROMADB_PORT=8000
+SEARXNG_INSTANCE=http://odysseus-searxng:8080
+DATABASE_URL=sqlite:///./data/app.db
+AUTH_ENABLED=true
+ODYSSEUS_ADMIN_USER=admin
+
+# Lightweight Local Embeddings (ONNX CPU, low footprint)
+FASTEMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
+`
+	return os.WriteFile(secFile, []byte(defaultContent), 0600)
+}
+
 // EnsureStorageDirectories creates all host volume mount paths with secure group-accessible permissions.
 func EnsureStorageDirectories(modID string) {
 	baseDir := ResolvedStorageBaseDir()
@@ -233,6 +271,19 @@ func EnsureStorageDirectories(modID string) {
 			defaultNetBirdEnv := "# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=\nNB_MANAGEMENT_URL=\n"
 			_ = os.WriteFile(netbirdEnv, []byte(defaultNetBirdEnv), 0600)
 		}
+	case "odysseus":
+		dirs = []string{
+			filepath.Join(baseDir, "odysseus", "data"),
+			filepath.Join(baseDir, "odysseus", "logs"),
+			filepath.Join(baseDir, "odysseus", "chroma"),
+		}
+		for _, d := range dirs {
+			_ = os.MkdirAll(d, 0770)
+			_ = os.Chmod(d, 0770)
+		}
+		_ = os.MkdirAll(filepath.Join(baseDir, "odysseus", "secrets"), 0700)
+		_ = ensureOdysseusSecret()
+		return
 	default:
 		dirs = []string{
 			filepath.Join(baseDir, modID),
@@ -389,6 +440,17 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString(fmt.Sprintf("Volume=%s/network/netbird:/var/lib/netbird:Z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("Volume=%s/network/netbird:/etc/netbird:Z\n", baseDir))
 		sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/network/secrets/netbird.env\n", baseDir))
+	case "odysseus":
+		_ = ensureOdysseusSecret()
+		if isPrimary {
+			sb.WriteString(fmt.Sprintf("Volume=%s/odysseus/data:/app/data:Z,U\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/odysseus/logs:/app/logs:Z,U\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z,ro\n", baseDir))
+			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/odysseus/secrets/odysseus.env\n", baseDir))
+			sb.WriteString("ShmSize=512m\n")
+		} else if strings.Contains(img.Ref, "chroma") {
+			sb.WriteString(fmt.Sprintf("Volume=%s/odysseus/chroma:/chroma/chroma:Z,U\n", baseDir))
+		}
 	default:
 		sb.WriteString(fmt.Sprintf("Volume=%s/%s:/data:Z,U\n", baseDir, m.ID))
 	}

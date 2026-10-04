@@ -24,6 +24,8 @@ modules:
         level: "off"
     network:
         level: cloud
+    odysseus:
+        level: "off" # optional: AI Workspace (requires external GPU workstation on LAN or Cloud APIs)
     photos:
         level: standard
     shares:
