@@ -433,8 +433,9 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString(fmt.Sprintf("Volume=%s/backup/vault:/data:Z,U\n", baseDir))
 	case "media":
 		sb.WriteString(fmt.Sprintf("Volume=%s/media/config:/config:Z,U\n", baseDir))
-		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/media:z,U\n", baseDir))
-		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/shares/public:z,U\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/media/cache:/cache:Z,U\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/media:z,ro\n", baseDir))
+		sb.WriteString(fmt.Sprintf("Volume=%s/shares/public:/shares/public:z,ro\n", baseDir))
 		sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z,ro\n", baseDir))
 	case "network":
 		sb.WriteString(fmt.Sprintf("Volume=%s/network/netbird:/var/lib/netbird:Z\n", baseDir))

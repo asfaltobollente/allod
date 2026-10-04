@@ -159,14 +159,17 @@ func TestGenerateMediaJellyfin(t *testing.T) {
 		t.Fatalf("media.container not generated")
 	}
 
-	if !strings.Contains(unit, ":/shares:z") {
-		t.Errorf("expected /shares:z mount in media unit, got:\n%s", unit)
+	if !strings.Contains(unit, ":/shares:z,ro") {
+		t.Errorf("expected /shares:z,ro mount in media unit, got:\n%s", unit)
 	}
-	if !strings.Contains(unit, ":/media:z") {
-		t.Errorf("expected /media:z mount in media unit, got:\n%s", unit)
+	if !strings.Contains(unit, ":/media:z,ro") {
+		t.Errorf("expected /media:z,ro mount in media unit, got:\n%s", unit)
 	}
-	if !strings.Contains(unit, "shares/public:/shares/public:z") {
-		t.Errorf("expected shares/public:/shares/public:z mount in media unit, got:\n%s", unit)
+	if !strings.Contains(unit, "shares/public:/shares/public:z,ro") {
+		t.Errorf("expected shares/public:/shares/public:z,ro mount in media unit, got:\n%s", unit)
+	}
+	if strings.Contains(unit, "shares/public:/media:z,U") || strings.Contains(unit, "shares/public:/shares/public:z,U") {
+		t.Errorf("unexpected :z,U flag found on shared public volume in media unit:\n%s", unit)
 	}
 	if !strings.Contains(unit, "MemoryMax=500M") {
 		t.Errorf("expected MemoryMax=500M, got:\n%s", unit)
