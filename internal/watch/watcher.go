@@ -21,6 +21,7 @@ type NodeHealthPayload struct {
 	NodeName       string   `json:"node_name"`
 	UptimeSeconds  int64    `json:"uptime_seconds"`
 	StorageOK      bool     `json:"storage_ok"`
+	StorageStatus  string   `json:"storage_status,omitempty"`
 	StorageUsed    string   `json:"storage_used,omitempty"`
 	StorageFree    string   `json:"storage_free,omitempty"`
 	StorageFreePct int      `json:"storage_free_pct,omitempty"`

@@ -223,12 +223,43 @@ func buildNodeHealthPayload() watch.NodeHealthPayload {
 	ram := preflight.GetRealRAMStats()
 	storageTopo := preflight.DetectStorageTopology()
 
+	storagePath := "/mnt/allod-storage"
+	if _, err := os.Stat(storagePath); err != nil {
+		storagePath = quadlet.ResolvedStorageBaseDir()
+	}
+	totBytes, usedBytes, errUsage := preflight.GetDiskUsage(storagePath)
+
 	storageOK := !storageTopo.HasWarning
-	storageUsed := storageTopo.ModeSummary
-	storageFree := ""
-	freePct := 100
 	if !storageTopo.IsMounted && len(storageTopo.DataDisks) > 0 {
 		storageOK = false
+	}
+
+	modeTag := ""
+	if storageTopo.Mode == "raid1" {
+		modeTag = " (RAID 1)"
+	} else if storageTopo.Mode == "single" {
+		modeTag = " (Single)"
+	} else if storageTopo.Mode == "witness" {
+		modeTag = " (Witness)"
+	}
+
+	storageStatus := "Integro e Sano" + modeTag
+	if !storageOK {
+		storageStatus = "⚠️ Attenzione" + modeTag
+	}
+
+	storageUsed := "N/D"
+	storageFree := "N/D"
+	freePct := 100
+
+	if errUsage == nil && totBytes > 0 {
+		freeBytes := totBytes - usedBytes
+		if freeBytes < 0 {
+			freeBytes = 0
+		}
+		freePct = int(float64(freeBytes) / float64(totBytes) * 100)
+		storageUsed = formatBytes(usedBytes)
+		storageFree = formatBytes(freeBytes)
 	}
 
 	var activeMods []string
@@ -245,6 +276,7 @@ func buildNodeHealthPayload() watch.NodeHealthPayload {
 		NodeName:       nodeName,
 		UptimeSeconds:  vitals.UptimeSeconds,
 		StorageOK:      storageOK,
+		StorageStatus:  storageStatus,
 		StorageUsed:    storageUsed,
 		StorageFree:    storageFree,
 		StorageFreePct: freePct,
@@ -340,7 +372,10 @@ func formatBytes(b int64) string {
 	if b < 1024*1024*1024 {
 		return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
 	}
-	return fmt.Sprintf("%.2f GB", float64(b)/(1024*1024*1024))
+	if b < 1024*1024*1024*1024 {
+		return fmt.Sprintf("%.1f GB", float64(b)/(1024*1024*1024))
+	}
+	return fmt.Sprintf("%.2f TB", float64(b)/(1024*1024*1024*1024))
 }
 
 func getModuleRuntimeStatus(modName string, level string, runningContainers map[string]bool) string {
@@ -1038,13 +1073,29 @@ func main() {
 			weatherStr = fmt.Sprintf("🌤️ %s (Meteo temporaneamente non disponibile: %v)", city, wErr)
 		}
 
+		storagePath := "/mnt/allod-storage"
+		if _, err := os.Stat(storagePath); err != nil {
+			storagePath = quadlet.ResolvedStorageBaseDir()
+		}
+		totBytes, usedBytes, errUsage := preflight.GetDiskUsage(storagePath)
+		storageUsed := "N/D"
+		storageFree := "N/D"
+		if errUsage == nil && totBytes > 0 {
+			freeBytes := totBytes - usedBytes
+			if freeBytes < 0 {
+				freeBytes = 0
+			}
+			storageUsed = formatBytes(usedBytes)
+			storageFree = formatBytes(freeBytes)
+		}
+
 		client := watch.NewTelegramNotifier(token, chatID, 0)
 		report := watch.DigestReport{
 			NodeName:      "allod-ferretti",
 			Uptime:        24 * time.Hour,
-			StorageStatus: "Integro e Sano (Btrfs RAID 1)",
-			StorageUsed:   "N/D",
-			StorageFree:   "N/D",
+			StorageStatus: "Integro e Sano (RAID 1)",
+			StorageUsed:   storageUsed,
+			StorageFree:   storageFree,
 			RAMUsedMB:     1680,
 			RAMTotalMB:    7746,
 			ActiveModules: []string{"shares", "storage", "watch", "media", "network", "photos"},
