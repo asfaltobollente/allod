@@ -3,6 +3,7 @@ package watch
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 )
@@ -128,13 +129,23 @@ func (s *DailyDigestScheduler) dispatch() error {
 			if peer.LatestPayload.NodeName != "" {
 				report.NodeName = peer.LatestPayload.NodeName
 			}
-			if peer.LatestPayload.StorageOK {
+			if peer.LatestPayload.StorageStatus != "" {
+				report.StorageStatus = peer.LatestPayload.StorageStatus
+			} else if peer.LatestPayload.StorageOK {
 				report.StorageStatus = "Integro e Sano"
 			} else {
 				report.StorageStatus = "⚠️ Attenzione Richiesta"
 			}
 			if peer.LatestPayload.StorageUsed != "" {
-				report.StorageUsed = peer.LatestPayload.StorageUsed
+				// Handle legacy payloads where ModeSummary was erroneously passed in StorageUsed
+				if strings.Contains(peer.LatestPayload.StorageUsed, "RAID") || strings.Contains(peer.LatestPayload.StorageUsed, "Modalità") {
+					if peer.LatestPayload.StorageStatus == "" {
+						report.StorageStatus = "Integro e Sano (RAID 1)"
+					}
+					report.StorageUsed = "N/D"
+				} else {
+					report.StorageUsed = peer.LatestPayload.StorageUsed
+				}
 			}
 			if peer.LatestPayload.StorageFree != "" {
 				report.StorageFree = peer.LatestPayload.StorageFree
