@@ -3,7 +3,7 @@ package manifest
 import "testing"
 
 func TestIsValidModule(t *testing.T) {
-	validModules := []string{"backup", "cloud", "media", "network", "photos", "shares", "storage", "watch"}
+	validModules := []string{"backup", "cloud", "media", "network", "odysseus", "photos", "shares", "storage", "watch"}
 	for _, mod := range validModules {
 		if !IsValidModule(mod) {
 			t.Errorf("expected valid module %q to be recognized", mod)

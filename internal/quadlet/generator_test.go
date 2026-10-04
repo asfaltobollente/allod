@@ -397,3 +397,70 @@ func TestMeshPortBinding(t *testing.T) {
 		t.Errorf("expected LAN port published to 0.0.0.0 (445:445), got:\n%s", contentLan)
 	}
 }
+
+func TestGenerateOdysseusModule(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+	t.Setenv("ALLOD_MESH_IP", "100.64.0.5")
+
+	m := &manifest.Manifest{
+		ID:   "odysseus",
+		Tier: "optional",
+		Levels: map[string]manifest.Level{
+			"standard": {RAMMB: 2048},
+		},
+		Ports: []manifest.Port{
+			{N: 7000, Scope: "mesh"},
+		},
+		Images: []manifest.Image{
+			{Ref: "ghcr.io/odysseus-dev/odysseus", Tag: "1.0.2", Channel: "pinned"},
+			{Ref: "docker.io/chromadb/chroma", Tag: "latest", Channel: "pinned"},
+			{Ref: "docker.io/searxng/searxng", Tag: "2026.5.31-7159b8aed", Channel: "pinned"},
+		},
+	}
+
+	res, err := Generate("odysseus", m, "standard")
+	if err != nil {
+		t.Fatalf("unexpected error generating odysseus: %v", err)
+	}
+
+	if len(res.Files) != 3 {
+		t.Fatalf("expected 3 generated container units, got %d", len(res.Files))
+	}
+
+	expectedFiles := []string{"odysseus.container", "odysseus-chroma.container", "odysseus-searxng.container"}
+	for _, ef := range expectedFiles {
+		if _, ok := res.Files[ef]; !ok {
+			t.Errorf("expected generated file %s not found", ef)
+		}
+	}
+
+	mainContent := res.Files["odysseus.container"]
+	if !strings.Contains(mainContent, "Requires=odysseus-chroma.service") {
+		t.Errorf("expected dependency on odysseus-chroma, got:\n%s", mainContent)
+	}
+	if !strings.Contains(mainContent, "Requires=odysseus-searxng.service") {
+		t.Errorf("expected dependency on odysseus-searxng, got:\n%s", mainContent)
+	}
+	if !strings.Contains(mainContent, "PublishPort=100.64.0.5:7000:7000") {
+		t.Errorf("expected mesh publish port for 7000, got:\n%s", mainContent)
+	}
+	if !strings.Contains(mainContent, "ShmSize=512m") {
+		t.Errorf("expected ShmSize=512m for headless chromium in odysseus.container, got:\n%s", mainContent)
+	}
+	if !strings.Contains(mainContent, "EnvironmentFile=") || !strings.Contains(mainContent, "odysseus/secrets/odysseus.env") {
+		t.Errorf("expected EnvironmentFile for odysseus.env, got:\n%s", mainContent)
+	}
+
+	// Verify secret generation
+	secFile := filepath.Join(tempDir, "odysseus", "secrets", "odysseus.env")
+	secBytes, err := os.ReadFile(secFile)
+	if err != nil {
+		t.Fatalf("failed to read generated odysseus secret file: %v", err)
+	}
+	secStr := string(secBytes)
+	if !strings.Contains(secStr, "OLLAMA_BASE_URL=") || !strings.Contains(secStr, "CHROMADB_HOST=odysseus-chroma") {
+		t.Errorf("expected OLLAMA_BASE_URL and CHROMADB_HOST in odysseus.env, got:\n%s", secStr)
+	}
+}
+
