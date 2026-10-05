@@ -277,7 +277,8 @@ function renderLaunchpad() {
       url: `http://${activeHost}:7000`,
       path: null,
       primaryActionText: '🤖 Apri Workspace AI',
-      secondaryActionText: null
+      secondaryActionText: '🔑 Copia comando password',
+      cliCommand: 'journalctl --user -u odysseus.service --no-pager | grep -i password'
     },
     {
       id: 'shares',
@@ -403,7 +404,18 @@ function renderLaunchpad() {
               ${app.secondaryActionText}
             </button>
           ` : ''}
+          ${app.cliCommand ? `
+            <button class="launchpad-btn-secondary" onclick="copyTextToClipboard('${app.cliCommand}', this)">
+              ${app.secondaryActionText}
+            </button>
+          ` : ''}
         </div>
+        ${app.cliCommand ? `
+          <div class="launchpad-endpoint" style="margin-top:8px; flex-direction:column; align-items:flex-start; gap:4px;">
+            <span style="font-size:10px; color:var(--text-muted);">Password temporanea (utente: admin) — esegui sul server:</span>
+            <code style="font-size:11px; word-break:break-all; user-select:all;">${app.cliCommand}</code>
+          </div>
+        ` : ''}
       `;
     } else if (isInstalled && !isRunning) {
       actionButtons = `
