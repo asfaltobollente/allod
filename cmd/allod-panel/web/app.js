@@ -196,6 +196,25 @@ async function refreshData() {
 
 let launchpadMode = 'lan';
 let currentMeshIP = '--';
+let odysseusTempCreds = null;
+
+async function fetchOdysseusTempPassword(btn) {
+  try {
+    const res = await fetch('/api/modules/odysseus/temp-password', { cache: 'no-store' });
+    const data = await res.json();
+    if (data.status === 'ok' && data.data && data.data.password) {
+      odysseusTempCreds = { username: data.data.username || 'admin', password: data.data.password };
+      renderLaunchpad();
+      copyTextToClipboard(odysseusTempCreds.password, null);
+    } else {
+      odysseusTempCreds = null;
+      showAlert(data.message || 'Password temporanea non trovata nei log.', 'warning');
+    }
+  } catch (err) {
+    showAlert('Errore lettura password temporanea: ' + err.message, 'danger');
+  }
+}
+window.fetchOdysseusTempPassword = fetchOdysseusTempPassword;
 window.currentMeshIP = '--';
 
 function setLaunchpadMode(mode) {
@@ -277,8 +296,7 @@ function renderLaunchpad() {
       url: `http://${activeHost}:7000`,
       path: null,
       primaryActionText: '🤖 Apri Workspace AI',
-      secondaryActionText: '🔑 Copia comando password',
-      cliCommand: 'journalctl --user -u odysseus.service --no-pager | grep -i password'
+      secondaryActionText: '🔑 Mostra password temporanea'
     },
     {
       id: 'shares',
@@ -404,16 +422,16 @@ function renderLaunchpad() {
               ${app.secondaryActionText}
             </button>
           ` : ''}
-          ${app.cliCommand ? `
-            <button class="launchpad-btn-secondary" onclick="copyTextToClipboard('${app.cliCommand}', this)">
+          ${app.id === 'odysseus' ? `
+            <button class="launchpad-btn-secondary" onclick="fetchOdysseusTempPassword(this)">
               ${app.secondaryActionText}
             </button>
           ` : ''}
         </div>
-        ${app.cliCommand ? `
+        ${app.id === 'odysseus' && odysseusTempCreds ? `
           <div class="launchpad-endpoint" style="margin-top:8px; flex-direction:column; align-items:flex-start; gap:4px;">
-            <span style="font-size:10px; color:var(--text-muted);">Password temporanea (utente: admin) — esegui sul server:</span>
-            <code style="font-size:11px; word-break:break-all; user-select:all;">${app.cliCommand}</code>
+            <span style="font-size:10px; color:var(--text-muted);">Utente: <strong>${escapeHtml(odysseusTempCreds.username)}</strong> — password temporanea (copiata negli appunti, cambiala dopo il primo accesso):</span>
+            <code style="font-size:13px; word-break:break-all; user-select:all;">${escapeHtml(odysseusTempCreds.password)}</code>
           </div>
         ` : ''}
       `;

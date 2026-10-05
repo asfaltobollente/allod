@@ -4017,6 +4017,8 @@ WantedBy=default.target
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
 	})
 
+	mux.HandleFunc("/api/modules/odysseus/temp-password", handleOdysseusTempPassword)
+
 	// 5e. API Network Status & NetBird Control (extracted to internal/panel/network.go)
 	panel.RegisterNetworkRoutes(mux, &panel.NetworkHandler{
 		GetConfigPath: getConfigPath,
