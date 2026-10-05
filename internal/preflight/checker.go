@@ -323,7 +323,7 @@ func Check(cfg *config.Config, modName string, m *manifest.Manifest, requestedLe
 	// 2. Total system RAM check
 	if level.Requires.TotalRAMMB > 0 && totalSysRAM < level.Requires.TotalRAMMB {
 		res.Pass = false
-		res.Message = fmt.Sprintf("Richiede %d GB totali di sistema, ne hai %d GB", level.Requires.TotalRAMMB/1024, totalSysRAM/1024)
+		res.Message = fmt.Sprintf("Richiede almeno %d MB di RAM totale di sistema, rilevati %d MB", level.Requires.TotalRAMMB, totalSysRAM)
 		return res
 	}
 

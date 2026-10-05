@@ -12,7 +12,7 @@ levels:
     disk_gb: 15
     requires:
       modules: [storage]
-      total_ram_mb: 8000
+      total_ram_mb: 7000
     grants: [chat con modelli API o workstation GPU LAN, deep research con SearXNG, RAG e memoria semantica ChromaDB]
     lacks: [inferenza locale on-device sulla CPU del server (richiede workstation GPU esterna in LAN o API cloud)]
   full:
