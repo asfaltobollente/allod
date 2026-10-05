@@ -69,6 +69,7 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **`storage`** | **[Btrfs](https://btrfs.readthedocs.io)** + **smartmontools** | Hardware-safe RAID 1, instant snapshots & S.M.A.R.T. health | Native |
 | **`media`** | **[Jellyfin](https://jellyfin.org)** | Personal streaming server for movies, series & music | `8096` |
 | **`network`** | **[NetBird](https://netbird.io)** | Sovereign WireGuard mesh, remote access & zero open router ports (Cloud EU / Self-Hosted) | Mesh only |
+| **`odysseus`** | **[Odysseus](https://github.com/odysseus-dev/odysseus)** + ChromaDB + SearXNG | Sovereign AI workspace, deep research agent & local/cloud LLM orchestration | `7000` |
 | **`watch`** | **Allod Watch Sentinel** + **Telegram** | Remote blackout & recovery alerts, Telegram notifications & daily morning digest with weather | Standalone / Mesh |
 
 ---
@@ -89,6 +90,7 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **Wake-on-LAN Hub** | **Funzionante oggi** *(Working Today)* | Multi-subnet broadcast Magic Packet sender (`allod wol wake <mac>`, Web UI manager) for waking workstations and homelab nodes without SSH. |
 | **External Watch Sentinel** | **Funzionante oggi** *(Working Today)* | Dedicated ultra-light daemon (<15MB RAM) for cloud VPS or rootless PaaS (Alwaysdata free-tier) with zero-mesh push architecture, instant blackout & recovery Telegram alerts, and daily morning digest with local weather. |
 | **NetBird Sovereign Mesh** | **Funzionante oggi** *(Working Today)* | Native WireGuard overlay mesh with automated WebRTC NAT traversal, zero open router ports, EU Cloud (Frankfurt) & Self-Hosted sovereign modes. |
+| **Odysseus AI Workspace** | **Funzionante oggi** *(Working Today)* | Container stack (Odysseus, ChromaDB, SearXNG) orchestrated via Quadlet, LAN GPU (Ollama) or Cloud API offloading, and automated temporary password extraction. |
 | **Media & Photos Modules** | **In sviluppo** *(In Development)* | Immich standard/full and Jellyfin container orchestration functional; automated mobile client integration in refinement. |
 | **Cloud Module (Nextcloud)** | **In sviluppo** *(In Development)* | Nextcloud 30 with dedicated PostgreSQL 16 Alpine and dynamic secret management; automated WebDAV setup in refinement. |
 | **Federated Backup Engine** | **In sviluppo** *(In Development)* | `rest-server` 0.12.1 rootless Quadlet provisioned; federated snapshot client orchestration, automated timer scheduling, and per-peer htpasswd auth in progress. |
@@ -223,6 +225,8 @@ Allod abandons primitive binary switches in favor of **hardware-aware resource l
 | **`network`** *(NetBird Cloud)* | **`cloud`** | **40 MB** | 4 GB System RAM | **Recommended**: NetBird European Cloud (Frankfurt, Germany). 100% GDPR, zero open router ports, automated NAT traversal, direct P2P WireGuard. |
 | **`network`** *(NetBird Self-Hosted)* | **`selfhosted`** / **`selfhosted_remote`** | **40 MB** | 4 GB System RAM | Connect to an external private self-hosted NetBird management server. 100% control plane and signaling sovereignty. |
 | **`network`** *(NetBird Managed)* | **`selfhosted_managed`** | **250 MB** | 4 GB System RAM | Run a local sovereign NetBird management server & dashboard container directly on the Allod node. |
+| **`odysseus`** *(AI Workspace)* | **`standard`** | **2.0 GB** | 5 GB System RAM | Autonomous agents, web deep research with SearXNG, semantic RAG with ChromaDB, offloading to LAN GPU (Ollama) or Cloud APIs. |
+| **`odysseus`** *(AI Workspace)* | **`full`** | **4.0 GB** | 16 GB System RAM, AVX2 | High-concurrency agent workflows, intensive document processing, and expanded ChromaDB indexing memory. |
 
 ### 🛡️ What Happens When You Change a Level on an Active Service?
 
