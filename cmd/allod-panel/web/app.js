@@ -205,7 +205,11 @@ async function fetchOdysseusTempPassword(btn) {
     if (data.status === 'ok' && data.data && data.data.password) {
       odysseusTempCreds = { username: data.data.username || 'admin', password: data.data.password };
       renderLaunchpad();
-      copyTextToClipboard(odysseusTempCreds.password, null);
+      if (typeof renderModules === 'function') {
+        renderModules();
+      }
+      copyTextToClipboard(odysseusTempCreds.password, btn);
+      showAlert(`🔑 Password admin Odysseus copiata negli appunti: "${odysseusTempCreds.password}" (utente: ${odysseusTempCreds.username})`, 'success');
     } else {
       odysseusTempCreds = null;
       showAlert(data.message || 'Password temporanea non trovata nei log.', 'warning');
@@ -1063,6 +1067,14 @@ const moduleTechInfo = {
       db: 'State.db (Local SQLite)',
       dbNote: 'Idempotent state tracking for peer nodes and automated ring state transitions.',
       linkPort: null
+    },
+    odysseus: {
+      product: 'Odysseus AI Workspace',
+      desc: 'AI workspace for agents, SearXNG deep research, ChromaDB vector RAG, and LAN GPU or Cloud API execution.',
+      db: 'ChromaDB + SQLite (Embedded)',
+      dbNote: 'Vector database engine for semantic memory and conversation history storage.',
+      linkPort: 7000,
+      linkProtocol: 'http'
     }
   },
   it: {
@@ -1125,6 +1137,14 @@ const moduleTechInfo = {
       db: 'State.db (SQLite locale)',
       dbNote: 'Tracciamento idempotente dello stato dei nodi e delle transizioni del ring.',
       linkPort: null
+    },
+    odysseus: {
+      product: 'Odysseus AI Workspace',
+      desc: 'Workspace AI sovrano per agenti, deep research con SearXNG, memoria RAG ChromaDB e modelli LAN GPU o Cloud.',
+      db: 'ChromaDB + SQLite (Embedded)',
+      dbNote: 'Database vettoriale per memoria semantica RAG e archiviazione conversazioni SQLite.',
+      linkPort: 7000,
+      linkProtocol: 'http'
     }
   }
 };
@@ -1265,7 +1285,12 @@ function createModuleCard(mod) {
       ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 ${t('btn_inspect_btrfs', 'Inspect Btrfs')}</button>`
       : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
+    let odysseusQuickBtn = (mod.id === 'odysseus')
+      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
+      : ``;
+
     actionButtons = `
+      ${odysseusQuickBtn}
       ${diagBtn}
       <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="${t('btn_unlock')}">🔓 ${t('btn_unlock')}</button>
     `;
@@ -1287,8 +1312,13 @@ function createModuleCard(mod) {
       ? `<button class="btn btn-sm btn-info" onclick="showStorageDiagnostics()" style="padding:2px 8px; font-size:11px;">🔍 ${t('btn_inspect_btrfs', 'Inspect Btrfs')}</button>`
       : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
+    let odysseusQuickBtn = (mod.id === 'odysseus')
+      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
+      : ``;
+
     actionButtons = `
       ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>` : ''}
+      ${odysseusQuickBtn}
       ${diagBtn}
       <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="${t('btn_lock')}">🔒 ${t('btn_lock')}</button>
     `;
@@ -1306,8 +1336,12 @@ function createModuleCard(mod) {
   } else if (!isOff) {
     if (mod.runtime_status === 'running') {
       statusBadge = `<span class="badge badge-success">${t('status_running')}</span>`;
+      let odysseusQuickBtn = (mod.id === 'odysseus')
+        ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
+        : ``;
       actionButtons = `
         <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>
+        ${odysseusQuickBtn}
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
       `;
       
@@ -1497,6 +1531,36 @@ function createModuleCard(mod) {
     `;
   }
 
+  let odysseusBoxHtml = '';
+  if (mod.id === 'odysseus') {
+    odysseusBoxHtml = `
+      <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <div style="font-size:11.5px; font-weight:600; color:var(--text-main);">🔑 Password Temporanea Admin</div>
+            <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Utente di default: <code>admin</code> (generata nei log al primo avvio)</div>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:4px 12px; font-size:11px; font-weight:600;">
+              🔑 Leggi e Copia Password
+            </button>
+            <a href="http://${host}:7000" target="_blank" class="btn btn-sm btn-outline-info" style="padding:4px 12px; font-size:11px; font-weight:600; text-decoration:none;">
+              🌐 Apri Web (Port 7000) ↗
+            </a>
+          </div>
+        </div>
+        ${odysseusTempCreds ? `
+          <div style="margin-top:8px; padding:8px 10px; background:#0f172a; border-radius:6px; border:1px solid rgba(56,189,248,0.4); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+            <div style="font-size:11.5px;">
+              Utente: <strong>${escapeHtml(odysseusTempCreds.username)}</strong> | Password: <code style="font-size:12px; color:var(--primary); font-weight:bold;">${escapeHtml(odysseusTempCreds.password)}</code>
+            </div>
+            <span class="badge badge-success" style="font-size:10px;">✓ Copiata negli appunti!</span>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
   const tierLabel = t('tier_' + mod.tier, mod.tier);
   const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
   const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
@@ -1511,7 +1575,12 @@ function createModuleCard(mod) {
     if (isStarting) {
       primaryActionBtn = `<button class="btn btn-sm btn-secondary" disabled style="flex:1; opacity:0.75; cursor:wait; padding:7px 12px; font-size:12px; font-weight:600;">⏳ ${t('status_starting', 'Avvio in corso...')}</button>`;
     } else if (isRunning) {
-      if (tech.linkPort) {
+      if (mod.id === 'odysseus') {
+        primaryActionBtn = `
+          <a href="http://${host}:7000" target="_blank" class="btn btn-sm btn-primary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none; padding:7px 12px; font-weight:600;">🌐 Apri Workspace ↗</a>
+          <button class="btn btn-sm btn-secondary" onclick="fetchOdysseusTempPassword(this)" style="padding:7px 12px; font-size:12px; font-weight:600;">🔑 Password</button>
+        `;
+      } else if (tech.linkPort) {
         primaryActionBtn = `<a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" class="btn btn-sm btn-primary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none; padding:7px 12px; font-weight:600;">🌐 ${t('btn_open_app', 'Apri')} ↗</a>`;
       } else if (mod.id === 'shares') {
         primaryActionBtn = `<button class="btn btn-sm btn-primary" onclick="openSmbPasswordModal()" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🔑 ${t('btn_smb_password', 'Password SMB')}</button>`;
@@ -1588,6 +1657,7 @@ function createModuleCard(mod) {
             ${sharesSmbBoxHtml}
             ${networkBoxHtml}
             ${watchBoxHtml}
+            ${odysseusBoxHtml}
             ${(mod.id === 'storage' && isUnlocked) ? `
               <div style="margin-top:6px; padding:8px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
                 <p style="color:#fca5a5; font-size:10.5px; margin-bottom:6px;">Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici.</p>
@@ -1652,6 +1722,7 @@ function createModuleCard(mod) {
       ${sharesSmbBoxHtml}
       ${networkBoxHtml}
       ${watchBoxHtml}
+      ${odysseusBoxHtml}
       ${isLocked ? `
         <div class="card-protected-bar">
           <span>🔒 <strong>${t('status_protected_short', 'Dati Protetti')}:</strong> ${t('protected_pool_note', 'Salvati su pool NAS RAID 1. Clicca Sblocca per modifiche.')}</span>
