@@ -4376,7 +4376,8 @@ WantedBy=default.target
 			strings.HasPrefix(path, "/api/auth/") ||
 			strings.HasPrefix(path, "/api/portal/") ||
 			strings.HasPrefix(path, "/assets/") ||
-			path == "/style.css" || path == "/app.js" || path == "/i18n.js" || path == "/favicon.ico" {
+			path == "/style.css" || path == "/app.js" || path == "/i18n.js" ||
+			path == "/favicon.ico" || path == "/favicon.png" || path == "/apple-touch-icon.png" || path == "/favicon-192.png" {
 			mux.ServeHTTP(w, r)
 			return
 		}
