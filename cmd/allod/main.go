@@ -53,6 +53,13 @@ var rootCmd = &cobra.Command{
 	Use:   "allod",
 	Short: "Allod - Orchestratore per cloud personale",
 	Long:  `Allod gestisce un cloud personale basato su Podman tramite configurazioni dichiarative.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if !cmd.Flags().Changed("config") {
+			if _, err := os.Stat("config.yaml"); err == nil {
+				cfgFile = "config.yaml"
+			}
+		}
+	},
 }
 
 func computeCombinedHash(files map[string]string) string {

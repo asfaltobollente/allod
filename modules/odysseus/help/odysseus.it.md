@@ -23,7 +23,7 @@ Il modulo avvia uno stack rootless Podman coordinato da Quadlet:
 ## Porte e Rete
 
 * **Porta Web UI**: `7000` (HTTP).
-* **Ambito di Rete (`scope`)**: `mesh` (NetBird WireGuard). Accessibile in sicurezza da qualsiasi tuo client federato o in LAN senza esporre alcuna porta sul router.
+* **Ambito di Rete (`scope`)**: `lan` (Default per i servizi Allod con UI). Accessibile sia dalla rete locale interna (`192.168.1.X:7000`) sia da remoto via Mesh NetBird WireGuard (`100.x.x.x:7000`), con zero porte aperte sul router.
 
 ---
 
