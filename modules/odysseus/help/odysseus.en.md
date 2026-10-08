@@ -23,7 +23,7 @@ The module deploys a multi-container rootless Podman stack via systemd Quadlets:
 ## Ports & Networking
 
 * **Web UI Port**: `7000` (HTTP).
-* **Network Scope**: `mesh` (NetBird WireGuard). Safely accessible across your personal devices without opening any router ports.
+* **Network Scope (`scope`)**: `lan` (Default for Allod UI services). Accessible both from local LAN (`192.168.1.X:7000`) and remotely over NetBird WireGuard mesh (`100.x.x.x:7000`), with zero router ports opened.
 
 ---
 

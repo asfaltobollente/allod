@@ -125,6 +125,7 @@
           },
           "scope": {
             "type": "string",
+            "default": "lan",
             "enum": [
               "loopback",
               "lan",

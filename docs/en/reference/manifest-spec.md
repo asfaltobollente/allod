@@ -31,7 +31,7 @@ levels:
 
 ports:
   - n: 2283
-    scope: mesh          # loopback | lan | mesh
+    scope: lan           # lan (default: LAN + Mesh) | mesh (mesh-only) | loopback
     share: member        # none | friend | member
 
 privileges:
