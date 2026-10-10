@@ -467,3 +467,65 @@ func TestGenerateOdysseusModule(t *testing.T) {
 	}
 }
 
+func TestBackupModuleQuadletExec(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+
+	// Case 1: manifest has only flags in args: ["--append-only", "--no-auth"]
+	mLegacy := &manifest.Manifest{
+		ID:   "backup",
+		Tier: "core",
+		Levels: map[string]manifest.Level{
+			"peers": {RAMMB: 150},
+		},
+		Ports: []manifest.Port{
+			{N: 8000, Scope: "mesh"},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/restic/rest-server", Tag: "0.12.1", Args: []string{"--append-only", "--no-auth"}},
+		},
+	}
+
+	res, err := Generate("backup", mLegacy, "peers")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	content := res.Files["backup.container"]
+	if !strings.Contains(content, "Exec=/usr/bin/rest-server --append-only --no-auth --path /data") {
+		t.Errorf("expected normalized Exec with /usr/bin/rest-server and --path /data, got:\n%s", content)
+	}
+	if !strings.Contains(content, "/backup/vault:/data:Z,U") {
+		t.Errorf("expected /backup/vault volume mount, got:\n%s", content)
+	}
+
+	// Verify storage directory was created with mode 0770
+	vaultDir := filepath.Join(tempDir, "backup", "vault")
+	if fi, err := os.Stat(vaultDir); err != nil || !fi.IsDir() {
+		t.Errorf("expected backup/vault directory to exist, err: %v", err)
+	}
+
+	// Case 2: manifest already has /usr/bin/rest-server specified
+	mExplicit := &manifest.Manifest{
+		ID:   "backup",
+		Tier: "core",
+		Levels: map[string]manifest.Level{
+			"peers": {RAMMB: 150},
+		},
+		Ports: []manifest.Port{
+			{N: 8000, Scope: "mesh"},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/restic/rest-server", Tag: "0.12.1", Args: []string{"/usr/bin/rest-server", "--append-only", "--no-auth", "--path", "/data"}},
+		},
+	}
+
+	resExp, err := Generate("backup", mExplicit, "peers")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	contentExp := resExp.Files["backup.container"]
+	if !strings.Contains(contentExp, "Exec=/usr/bin/rest-server --append-only --no-auth --path /data") {
+		t.Errorf("expected explicit Exec command to be preserved, got:\n%s", contentExp)
+	}
+}
+
