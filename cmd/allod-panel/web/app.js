@@ -5785,6 +5785,421 @@ function switchTopProcessesSort(sortBy) {
 window.loadTopProcesses = loadTopProcesses;
 window.switchTopProcessesSort = switchTopProcessesSort;
 
+// ==============================================================================
+// 15. NETBIRD CLOUD API INTEGRATION & STANDALONE VAULT PROVISIONER
+// ==============================================================================
 
+let currentNetBirdAPIAvailable = false;
+let currentVaultTab = 'vps';
+let currentVaultArtifacts = null;
+let vaultDebounceTimer = null;
 
+// --- NetBird API Modal Functions ---
+async function openNetBirdAPIModal() {
+  const modal = document.getElementById('netbird-api-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
 
+  const testResult = document.getElementById('nb-api-test-result');
+  if (testResult) testResult.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/settings/netbird-api');
+    const json = await res.json();
+    if (json.status === 'ok' && json.data) {
+      const data = json.data;
+      const statusBadge = document.getElementById('nb-api-status-badge');
+      const tokenInput = document.getElementById('nb-api-token');
+      const mgmtUrlInput = document.getElementById('nb-api-mgmt-url');
+      const btnDelete = document.getElementById('btn-delete-nb-api');
+
+      if (mgmtUrlInput) mgmtUrlInput.value = data.mgmt_url || 'https://api.netbird.io';
+
+      if (data.configured) {
+        currentNetBirdAPIAvailable = true;
+        if (statusBadge) {
+          statusBadge.className = 'badge badge-success';
+          statusBadge.textContent = 'Configurato & Attivo';
+        }
+        if (tokenInput) {
+          tokenInput.value = '';
+          tokenInput.placeholder = data.masked_token ? `Salvato (${data.masked_token})` : '••••••••••••••••••••';
+        }
+        if (btnDelete) btnDelete.classList.remove('hidden');
+      } else {
+        currentNetBirdAPIAvailable = false;
+        if (statusBadge) {
+          statusBadge.className = 'badge badge-secondary';
+          statusBadge.textContent = 'Non Configurato';
+        }
+        if (tokenInput) {
+          tokenInput.value = '';
+          tokenInput.placeholder = 'es. nbp_live_xxxxxxxxxxxxxxxxxxxxxxxx';
+        }
+        if (btnDelete) btnDelete.classList.add('hidden');
+      }
+    }
+  } catch (err) {
+    console.error('Errore caricamento impostazioni NetBird API:', err);
+  }
+}
+
+function closeNetBirdAPIModal() {
+  const modal = document.getElementById('netbird-api-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function toggleNetBirdTokenVisibility() {
+  const input = document.getElementById('nb-api-token');
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+async function testNetBirdAPI() {
+  const tokenInput = document.getElementById('nb-api-token');
+  const mgmtUrlInput = document.getElementById('nb-api-mgmt-url');
+  const resultDiv = document.getElementById('nb-api-test-result');
+
+  const token = tokenInput ? tokenInput.value.trim() : '';
+  const mgmtUrl = mgmtUrlInput ? mgmtUrlInput.value.trim() : 'https://api.netbird.io';
+
+  if (resultDiv) {
+    resultDiv.classList.remove('hidden');
+    resultDiv.style.background = 'rgba(56,189,248,0.1)';
+    resultDiv.style.border = '1px solid rgba(56,189,248,0.3)';
+    resultDiv.style.color = '#38bdf8';
+    resultDiv.textContent = 'Verifica connessione con NetBird API in corso...';
+  }
+
+  try {
+    const res = await fetch('/api/settings/netbird-api/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token, mgmt_url: mgmtUrl })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      const email = json.data && json.data.primary_email ? json.data.primary_email : 'Amministratore';
+      const count = json.data && json.data.users_count !== undefined ? json.data.users_count : 1;
+      resultDiv.style.background = 'rgba(16,185,129,0.1)';
+      resultDiv.style.border = '1px solid rgba(16,185,129,0.3)';
+      resultDiv.style.color = '#34d399';
+      resultDiv.textContent = `✓ Connessione riuscita! Account: ${email} (${count} utenti rilevati).`;
+      showToast('Connessione NetBird API verificata con successo!', 'success');
+    } else {
+      resultDiv.style.background = 'rgba(239,68,68,0.1)';
+      resultDiv.style.border = '1px solid rgba(239,68,68,0.3)';
+      resultDiv.style.color = '#f87171';
+      resultDiv.textContent = '✗ ' + (json.message || 'Test fallito');
+    }
+  } catch (err) {
+    if (resultDiv) {
+      resultDiv.style.background = 'rgba(239,68,68,0.1)';
+      resultDiv.style.border = '1px solid rgba(239,68,68,0.3)';
+      resultDiv.style.color = '#f87171';
+      resultDiv.textContent = '✗ Errore di rete: ' + err.message;
+    }
+  }
+}
+
+async function saveNetBirdAPI() {
+  const tokenInput = document.getElementById('nb-api-token');
+  const mgmtUrlInput = document.getElementById('nb-api-mgmt-url');
+
+  const token = tokenInput ? tokenInput.value.trim() : '';
+  const mgmtUrl = mgmtUrlInput ? mgmtUrlInput.value.trim() : 'https://api.netbird.io';
+
+  try {
+    const res = await fetch('/api/settings/netbird-api', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token, mgmt_url: mgmtUrl })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      showToast('Impostazioni NetBird API salvate!', 'success');
+      await openNetBirdAPIModal();
+    } else {
+      showToast('Errore: ' + (json.message || 'Impossibile salvare'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione: ' + err.message, 'error');
+  }
+}
+
+async function deleteNetBirdAPI() {
+  if (!confirm('Vuoi davvero rimuovere il Personal Access Token di NetBird da Allod?')) return;
+  try {
+    const res = await fetch('/api/settings/netbird-api', { method: 'DELETE' });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      showToast('Token NetBird rimosso con successo', 'info');
+      await openNetBirdAPIModal();
+    } else {
+      showToast('Errore rimozione: ' + json.message, 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione: ' + err.message, 'error');
+  }
+}
+
+// --- Vault Remote Modal Functions (Two-Way Design) ---
+async function openVaultModal() {
+  const modal = document.getElementById('vault-remote-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  switchVaultTab('vps');
+
+  // Verifica se l'API NetBird è configurata
+  try {
+    const res = await fetch('/api/settings/netbird-api');
+    const json = await res.json();
+    currentNetBirdAPIAvailable = json.status === 'ok' && json.data && json.data.configured;
+  } catch (e) {
+    currentNetBirdAPIAvailable = false;
+  }
+
+  const banner = document.getElementById('vault-auth-banner');
+  const manualWrapper = document.getElementById('vault-manual-key-wrapper');
+
+  if (currentNetBirdAPIAvailable) {
+    if (banner) {
+      banner.style.background = 'rgba(16,185,129,0.1)';
+      banner.style.border = '1px solid rgba(16,185,129,0.3)';
+      banner.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px;">✨</span>
+          <div>
+            <strong style="color:#10b981; font-size:12.5px;">Modalità Automatica Attiva (NetBird API):</strong>
+            <div style="color:var(--text-muted); font-size:11.5px;">La Setup Key viene generata e configurata in automatico senza aprire il sito di NetBird.</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openNetBirdAPIModal()" style="font-size:11px; padding:3px 8px;">
+          ⚙️ Gestisci API
+        </button>
+      `;
+    }
+    if (manualWrapper) manualWrapper.classList.add('hidden');
+  } else {
+    if (banner) {
+      banner.style.background = 'rgba(245,158,11,0.08)';
+      banner.style.border = '1px solid rgba(245,158,11,0.25)';
+      banner.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px;">🔑</span>
+          <div>
+            <strong style="color:#f59e0b; font-size:12.5px;">Modalità Setup Key Manuale:</strong>
+            <div style="color:var(--text-muted); font-size:11.5px;">Incolla una Setup Key creata su NetBird, oppure collega l'API per fare tutto con 1 click.</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-info" onclick="openNetBirdAPIModal()" style="font-size:11px; padding:3px 8px;">
+          🌐 Collega NetBird API
+        </button>
+      `;
+    }
+    if (manualWrapper) manualWrapper.classList.remove('hidden');
+  }
+
+  generateVaultArtifacts();
+}
+
+function closeVaultModal() {
+  const modal = document.getElementById('vault-remote-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function switchVaultTab(tab) {
+  currentVaultTab = tab;
+  const btnVps = document.getElementById('btn-tab-vault-vps');
+  const btnAppliance = document.getElementById('btn-tab-vault-appliance');
+  const btnDocker = document.getElementById('btn-tab-vault-docker');
+
+  const paneVps = document.getElementById('pane-vault-vps');
+  const paneAppliance = document.getElementById('pane-vault-appliance');
+  const paneDocker = document.getElementById('pane-vault-docker');
+
+  [btnVps, btnAppliance, btnDocker].forEach(b => {
+    if (b) {
+      b.style.background = 'transparent';
+      b.style.color = 'var(--text-muted)';
+    }
+  });
+
+  if (paneVps) paneVps.classList.add('hidden');
+  if (paneAppliance) paneAppliance.classList.add('hidden');
+  if (paneDocker) paneDocker.classList.add('hidden');
+
+  if (tab === 'vps') {
+    if (btnVps) {
+      btnVps.style.background = 'var(--primary)';
+      btnVps.style.color = '#000';
+    }
+    if (paneVps) paneVps.classList.remove('hidden');
+  } else if (tab === 'appliance') {
+    if (btnAppliance) {
+      btnAppliance.style.background = '#10b981';
+      btnAppliance.style.color = '#000';
+    }
+    if (paneAppliance) paneAppliance.classList.remove('hidden');
+  } else if (tab === 'docker') {
+    if (btnDocker) {
+      btnDocker.style.background = '#f59e0b';
+      btnDocker.style.color = '#000';
+    }
+    if (paneDocker) paneDocker.classList.remove('hidden');
+  }
+}
+
+function debounceGenerateVaultArtifacts() {
+  if (vaultDebounceTimer) clearTimeout(vaultDebounceTimer);
+  vaultDebounceTimer = setTimeout(() => {
+    generateVaultArtifacts();
+  }, 350);
+}
+
+async function generateVaultArtifacts() {
+  const nameInput = document.getElementById('vault-input-name');
+  const quotaSelect = document.getElementById('vault-select-quota');
+  const manualKeyInput = document.getElementById('vault-input-manual-key');
+
+  const name = nameInput ? nameInput.value.trim() : 'Casa-Mamma';
+  const quota = quotaSelect ? parseInt(quotaSelect.value, 10) : 500;
+  const manualKey = manualKeyInput ? manualKeyInput.value.trim() : '';
+
+  const vpsArea = document.getElementById('vault-code-vps');
+  const cloudInitArea = document.getElementById('vault-code-cloudinit');
+  const composeArea = document.getElementById('vault-code-compose');
+
+  if (!currentNetBirdAPIAvailable && manualKey === '') {
+    if (vpsArea) vpsArea.value = '# Inserisci una Setup Key NetBird nel campo in alto per visualizzare il comando.';
+    if (cloudInitArea) cloudInitArea.value = '# Inserisci una Setup Key NetBird nel campo in alto per visualizzare user-data.';
+    if (composeArea) composeArea.value = '# Inserisci una Setup Key NetBird nel campo in alto per visualizzare docker-compose.yml.';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/vault/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        quota_gb: quota,
+        manual_setup_key: manualKey
+      })
+    });
+    const json = await res.json();
+    if (json.status === 'ok' && json.data) {
+      currentVaultArtifacts = json.data;
+      if (vpsArea) vpsArea.value = json.data.script_command || '';
+      if (cloudInitArea) cloudInitArea.value = json.data.cloud_init || '';
+      if (composeArea) composeArea.value = json.data.docker_compose || '';
+    } else {
+      if (vpsArea) vpsArea.value = `# Errore: ${json.message || 'Impossibile generare configurazione'}`;
+      if (cloudInitArea) cloudInitArea.value = `# Errore: ${json.message || 'Impossibile generare configurazione'}`;
+      if (composeArea) composeArea.value = `# Errore: ${json.message || 'Impossibile generare configurazione'}`;
+    }
+  } catch (err) {
+    console.error('Errore chiamata /api/vault/generate:', err);
+  }
+}
+
+function copyVaultScriptCommand() {
+  const area = document.getElementById('vault-code-vps');
+  if (!area || !area.value) return;
+  copyTextToClipboard(area.value, 'Comando VPS copiato negli appunti!');
+}
+
+function copyVaultCloudInit() {
+  const area = document.getElementById('vault-code-cloudinit');
+  if (!area || !area.value) return;
+  copyTextToClipboard(area.value, 'Contenuto Cloud-Init copiato!');
+}
+
+function downloadVaultCloudInit() {
+  if (!currentVaultArtifacts || !currentVaultArtifacts.cloud_init) {
+    showToast('Nessuna configurazione Cloud-Init pronta per il download', 'error');
+    return;
+  }
+  const blob = new Blob([currentVaultArtifacts.cloud_init], { type: 'text/yaml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'user-data';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('File user-data scaricato! Inseriscilo nella partizione di boot.', 'success');
+}
+
+function copyVaultCompose() {
+  const area = document.getElementById('vault-code-compose');
+  if (!area || !area.value) return;
+  copyTextToClipboard(area.value, 'File docker-compose.yml copiato negli appunti!');
+}
+
+function downloadVaultCompose() {
+  if (!currentVaultArtifacts || !currentVaultArtifacts.docker_compose) {
+    showToast('Nessun file docker-compose pronto per il download', 'error');
+    return;
+  }
+  const blob = new Blob([currentVaultArtifacts.docker_compose], { type: 'text/yaml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'docker-compose.yml';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('docker-compose.yml scaricato con successo!', 'success');
+}
+
+function copyTextToClipboard(text, successMsg) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(successMsg, 'success');
+    }).catch(() => {
+      fallbackCopyText(text, successMsg);
+    });
+  } else {
+    fallbackCopyText(text, successMsg);
+  }
+}
+
+function fallbackCopyText(text, successMsg) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast(successMsg, 'success');
+  } catch (err) {
+    showToast('Impossibile copiare automaticamente. Seleziona e copia a mano.', 'error');
+  }
+  document.body.removeChild(ta);
+}
+
+// Window exports
+window.openNetBirdAPIModal = openNetBirdAPIModal;
+window.closeNetBirdAPIModal = closeNetBirdAPIModal;
+window.toggleNetBirdTokenVisibility = toggleNetBirdTokenVisibility;
+window.testNetBirdAPI = testNetBirdAPI;
+window.saveNetBirdAPI = saveNetBirdAPI;
+window.deleteNetBirdAPI = deleteNetBirdAPI;
+
+window.openVaultModal = openVaultModal;
+window.closeVaultModal = closeVaultModal;
+window.switchVaultTab = switchVaultTab;
+window.debounceGenerateVaultArtifacts = debounceGenerateVaultArtifacts;
+window.generateVaultArtifacts = generateVaultArtifacts;
+window.copyVaultScriptCommand = copyVaultScriptCommand;
+window.copyVaultCloudInit = copyVaultCloudInit;
+window.downloadVaultCloudInit = downloadVaultCloudInit;
+window.copyVaultCompose = copyVaultCompose;
+window.downloadVaultCompose = downloadVaultCompose;
