@@ -1570,8 +1570,8 @@ sudo systemctl enable --now allod-helperd</pre>
           <label for="network-mode-select" style="font-size:12px; font-weight:600;" data-i18n="network_modal_mode_label">Modalità Operativa:</label>
           <select id="network-mode-select" class="form-control" onchange="toggleNetworkModeUI()">
             <option value="cloud">🌐 NetBird Cloud (Predefinito - Server UE Francoforte, 100% GDPR, Zero Porte)</option>
-            <option value="selfhosted_remote">☁️ NetBird Self-Hosted Remoto (Server su VPS autonoma del cliente)</option>
-            <option value="selfhosted_managed">🏠 NetBird Server Gestito Locale (Container Allod Sovrano su questo Server)</option>
+            <option value="selfhosted_remote">☁️ NetBird Self-Hosted Remoto (Server su VPS autonoma del cliente) (BETA)</option>
+            <option value="selfhosted_managed">🏠 NetBird Server Gestito Locale (Container Allod Sovrano su questo Server) (BETA)</option>
           </select>
         </div>
 
@@ -1846,7 +1846,10 @@ sudo systemctl enable --now allod-helperd</pre>
             <div id="watch-card-mesh" onclick="setWatchMode('poller')" style="cursor:pointer; border:1px solid var(--card-border); background:rgba(15,23,42,0.4); border-radius:8px; padding:12px; transition:all 0.2s;">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
                 <strong style="font-size:12.5px; color:var(--text-main);">☁️ Pull Mesh (NetBird)</strong>
-                <span style="font-size:10px; background:rgba(255,255,255,0.1); color:var(--text-muted); font-weight:600; padding:2px 6px; border-radius:4px;">OPZIONALE</span>
+                <div style="display:flex; gap:4px; align-items:center;">
+                  <span style="font-size:10px; background:rgba(255,255,255,0.1); color:var(--text-muted); font-weight:600; padding:2px 6px; border-radius:4px;">OPZIONALE</span>
+                  <span style="font-size:10px; background:#f59e0b; color:#0f172a; font-weight:700; padding:2px 6px; border-radius:4px; letter-spacing:0.5px;">BETA</span>
+                </div>
               </div>
               <p style="margin:0; font-size:11px; color:var(--text-muted); line-height:1.4;">
                 La VPS entra nella rete mesh WireGuard NetBird ed effettua polling periodico dell'IP interno di Allod.

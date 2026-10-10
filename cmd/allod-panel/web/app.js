@@ -1214,6 +1214,27 @@ function getModuleTechInfo(modID, currentLevel) {
   };
 }
 
+function isModuleLevelBeta(modID, level) {
+  if (!level || level === 'off') return false;
+  if (modID === 'cloud') {
+    return level === 'standard';
+  }
+  if (modID === 'network') {
+    return level === 'selfhosted' || level === 'selfhosted_managed' || level === 'selfhosted_remote';
+  }
+  if (modID === 'photos') {
+    return level === 'full';
+  }
+  if (modID === 'media') { // Jellyfin
+    return level === 'full';
+  }
+  if (modID === 'odysseus') {
+    return level === 'full';
+  }
+  return false;
+}
+window.isModuleLevelBeta = isModuleLevelBeta;
+
 function createModuleCard(mod) {
   const card = document.createElement('div');
   const isSimple = (currentViewMode === 'simple');
@@ -1231,7 +1252,9 @@ function createModuleCard(mod) {
 
   let levelOptions = Object.keys(levels).map(lvl => {
     const selected = lvl === mod.current_level ? 'selected' : '';
-    return `<option value="${lvl}" ${selected}>${lvl}</option>`;
+    const isLvlBeta = isModuleLevelBeta(mod.id, lvl);
+    const label = isLvlBeta ? `${lvl} (beta)` : lvl;
+    return `<option value="${lvl}" ${selected}>${label}</option>`;
   }).join('');
 
   const currentLevelInfo = levels[mod.current_level] || {};
@@ -1562,7 +1585,7 @@ function createModuleCard(mod) {
   }
 
   const tierLabel = t('tier_' + mod.tier, mod.tier);
-  const isBeta = (mod.id !== 'cloud' && mod.id !== 'shares' && mod.id !== 'storage');
+  const isBeta = isModuleLevelBeta(mod.id, mod.current_level);
   const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
 
   // -----------------------------------------------------------------
