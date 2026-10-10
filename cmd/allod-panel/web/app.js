@@ -1025,9 +1025,9 @@ const moduleTechInfo = {
       linkProtocol: 'http'
     },
     backup: {
-      product: 'rest-server (Restic Engine)',
-      desc: 'End-to-end encrypted backup engine with strict ransomware-proof append-only lock mode.',
-      db: 'Restic Cryptographic Repository',
+      product: 'rest-server (Local Backup Vault)',
+      desc: 'Append-only backup receiver daemon listening on port 8000 to safely store encrypted snapshots from peer nodes and local jobs.',
+      db: 'Restic Cryptographic Repository (/data)',
       dbNote: 'Immutable snapshots protected by client-side AES-256 encryption with zero third-party cloud dependencies.',
       linkPort: null
     },
@@ -1095,10 +1095,10 @@ const moduleTechInfo = {
       linkProtocol: 'http'
     },
     backup: {
-      product: 'rest-server (Restic Backend)',
-      desc: 'Motore di backup cifrato end-to-end con modalità append-only rigorosa a prova di ransomware.',
-      db: 'Repository Crittografico Restic',
-      dbNote: 'Dati immutabili protetti con cifratura client-side AES-256 senza dipendenze da database esterni.',
+      product: 'rest-server (Cassaforte di Backup)',
+      desc: 'Ricevitore locale append-only su porta 8000 per archiviare in sicurezza i backup cifrati dei nodi amici del Ring e di questo server.',
+      db: 'Repository Crittografico Restic (/data)',
+      dbNote: 'Dati immutabili protetti con cifratura client-side AES-256 e modalità append-only rigorosa a prova di ransomware.',
       linkPort: null
     },
     shares: {
@@ -1366,9 +1366,13 @@ function createModuleCard(mod) {
       let odysseusQuickBtn = (mod.id === 'odysseus')
         ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
         : ``;
+      let backupRingBtn = (mod.id === 'backup')
+        ? `<button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="Apri scheda Ring Federation">🤝 Ring</button>`
+        : ``;
       actionButtons = `
         <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>
         ${odysseusQuickBtn}
+        ${backupRingBtn}
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
       `;
       
@@ -1384,15 +1388,23 @@ function createModuleCard(mod) {
       }
     } else if (mod.runtime_status === 'failed') {
       statusBadge = `<span class="badge badge-danger">${t('status_error')}</span>`;
+      let backupRingBtn = (mod.id === 'backup')
+        ? `<button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="Apri scheda Ring Federation">🤝 Ring</button>`
+        : ``;
       actionButtons = `
         <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_restart')}</button>
+        ${backupRingBtn}
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
         <button class="btn btn-sm btn-outline-danger" onclick="openDangerPurgeModal('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🗑️ ${t('btn_reset')}</button>
       `;
     } else {
       statusBadge = `<span class="badge badge-warning">${t('status_stopped')}</span>`;
+      let backupRingBtn = (mod.id === 'backup')
+        ? `<button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="Apri scheda Ring Federation">🤝 Ring</button>`
+        : ``;
       actionButtons = `
         <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_start')}</button>
+        ${backupRingBtn}
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
       `;
     }
@@ -1558,6 +1570,29 @@ function createModuleCard(mod) {
     `;
   }
 
+  let backupBoxHtml = '';
+  if (mod.id === 'backup') {
+    backupBoxHtml = `
+      <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid rgba(56,189,248,0.25); border-radius:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:11.5px; font-weight:600; color:var(--primary);">ℹ️ Cassaforte di Ricezione Backup (Porta 8000)</span>
+            </div>
+            <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px; line-height:1.35;">
+              Questo modulo avvia il server locale <code>rest-server</code> append-only. Puoi avviarlo subito in autonomia: non è necessario aver già configurato la scheda <em>Ring Federation</em>.
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:4px 10px; font-size:11px; font-weight:600;">
+              🤝 Vai a Ring Federation ➔
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   let odysseusBoxHtml = '';
   if (mod.id === 'odysseus') {
     odysseusBoxHtml = `
@@ -1611,6 +1646,11 @@ function createModuleCard(mod) {
         primaryActionBtn = `<a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" class="btn btn-sm btn-primary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none; padding:7px 12px; font-weight:600;">🌐 ${t('btn_open_app', 'Apri')} ↗</a>`;
       } else if (mod.id === 'shares') {
         primaryActionBtn = `<button class="btn btn-sm btn-primary" onclick="openSmbPasswordModal()" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🔑 ${t('btn_smb_password', 'Password SMB')}</button>`;
+      } else if (mod.id === 'backup') {
+        primaryActionBtn = `
+          <button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🤝 Ring Federation ➔</button>
+          <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:7px 12px; font-size:12px; font-weight:600;" title="Diagnostica Cassaforte">🩺</button>
+        `;
       } else if (mod.id === 'watch') {
         primaryActionBtn = `<button class="btn btn-sm btn-primary" onclick="openWatchSentinelModal()" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🤖 ${t('btn_configure_watch_sentinel', 'Configura Sentinella')}</button>`;
       } else if (mod.id === 'network') {
@@ -1623,7 +1663,14 @@ function createModuleCard(mod) {
     } else if (mod.runtime_status === 'failed') {
       primaryActionBtn = `<button class="btn btn-sm btn-danger" onclick="startModule('${mod.id}')" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">▶ ${t('btn_restart', 'Riavvia')}</button>`;
     } else {
-      primaryActionBtn = `<button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">▶ ${t('btn_start', 'Avvia')}</button>`;
+      if (mod.id === 'backup') {
+        primaryActionBtn = `
+          <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">▶ ${t('btn_start', 'Avvia Cassaforte')}</button>
+          <button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:7px 12px; font-size:12px; font-weight:600;" title="Apri scheda Ring Federation">🤝 Ring</button>
+        `;
+      } else {
+        primaryActionBtn = `<button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">▶ ${t('btn_start', 'Avvia')}</button>`;
+      }
     }
 
     let lockPill = '';
@@ -1682,6 +1729,7 @@ function createModuleCard(mod) {
             ${grantsHtml}
             ${photosSharesIntegrationHtml}
             ${sharesSmbBoxHtml}
+            ${backupBoxHtml}
             ${networkBoxHtml}
             ${watchBoxHtml}
             ${odysseusBoxHtml}
@@ -1747,6 +1795,7 @@ function createModuleCard(mod) {
       ${storageBoxHtml}
       ${photosSharesIntegrationHtml}
       ${sharesSmbBoxHtml}
+      ${backupBoxHtml}
       ${networkBoxHtml}
       ${watchBoxHtml}
       ${odysseusBoxHtml}
@@ -2018,6 +2067,68 @@ async function changeModuleLevel(modID, newLevel) {
 
 function renderRing() {
   if (!currentRing) return;
+
+  // Live status of local backup receiver module
+  const backupBanner = document.getElementById('ring-backup-service-banner');
+  if (backupBanner && Array.isArray(currentModules)) {
+    const backupMod = currentModules.find(m => m.id === 'backup');
+    const isRunning = backupMod && (backupMod.runtime_status === 'running' || backupMod.runtime_status === 'active');
+    const isStarting = startingModules.has('backup');
+
+    if (isStarting) {
+      backupBanner.innerHTML = `
+        <div style="background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.3); border-radius:8px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:18px;">⏳</span>
+            <div>
+              <strong style="color:var(--primary); font-size:13px;">Avvio Cassaforte di Backup Locale in corso...</strong>
+              <div style="font-size:12px; color:var(--text-muted);">Inizializzazione del servizio rest-server rootless...</div>
+            </div>
+          </div>
+          <span class="badge badge-info">In avvio...</span>
+        </div>
+      `;
+    } else if (isRunning) {
+      backupBanner.innerHTML = `
+        <div style="background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:18px;">🟢</span>
+            <div>
+              <strong style="color:#22c55e; font-size:13.5px;">Cassaforte di Backup Locale Attiva (Porta 8000)</strong>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Il demone <code>rest-server</code> è attivo in modalità append-only. Questo nodo può ricevere snapshot cifrati da altri nodi del Ring.</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="badge badge-success">rest-server OK</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="switchToTab('modules')" style="font-size:11px; padding:3px 8px;" title="Vedi scheda Moduli">Moduli ➔</button>
+          </div>
+        </div>
+      `;
+    } else {
+      backupBanner.innerHTML = `
+        <div style="background:rgba(234,179,8,0.12); border:1px solid rgba(234,179,8,0.35); border-radius:8px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap:10px; max-width:750px;">
+            <span style="font-size:22px;">💡</span>
+            <div>
+              <strong style="color:#eab308; font-size:13.5px;">Cassaforte di Ricezione Backup: Modulo Locale Fermato</strong>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:2px; line-height:1.4;">
+                Il modulo 'backup' (<code>rest-server</code>) su questo server è attualmente fermo. 
+                Puoi avviarlo adesso per preparare questo nodo a ricevere i backup dei tuoi amici e salvare snapshot di sistema.
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-sm btn-primary" onclick="startModule('backup')" style="padding:6px 14px; font-weight:600; font-size:12px;">
+              ▶ Avvia Cassaforte Locale
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="switchToTab('modules')" style="font-size:11px; padding:6px 10px;">
+              Moduli
+            </button>
+          </div>
+        </div>
+      `;
+    }
+  }
 
   const isStandalone = currentRing.is_standalone || Object.keys(currentRing.members).length <= 1;
 

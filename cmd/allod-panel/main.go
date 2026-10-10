@@ -1939,6 +1939,9 @@ fi
 				_ = os.MkdirAll(md, 0770)
 				_ = os.Chmod(md, 0770)
 			}
+		} else if req.Module == "backup" {
+			_ = os.MkdirAll(filepath.Join(baseDir, "backup", "vault"), 0770)
+			_ = os.Chmod(filepath.Join(baseDir, "backup", "vault"), 0770)
 		} else {
 			_ = os.MkdirAll(filepath.Join(baseDir, req.Module), 0770)
 		}
@@ -1960,6 +1963,21 @@ fi
 			if errMsg == "" {
 				errMsg = err.Error()
 			}
+
+			// Capture actual failure reason from journalctl or podman logs
+			var detailMsg string
+			if jOut, jErr := exec.Command("journalctl", "--user", "-u", req.Module, "-n", "12", "--no-pager").CombinedOutput(); jErr == nil && len(jOut) > 0 {
+				detailMsg = strings.TrimSpace(string(jOut))
+			}
+			if detailMsg == "" {
+				if pOut, pErr := exec.Command("podman", "logs", "--tail", "12", req.Module).CombinedOutput(); pErr == nil && len(pOut) > 0 {
+					detailMsg = strings.TrimSpace(string(pOut))
+				}
+			}
+			if detailMsg != "" {
+				errMsg = fmt.Sprintf("%s\n\n[Diagnostica automatica]:\n%s", errMsg, detailMsg)
+			}
+
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Errore avvio servizio %s: %s", req.Module, errMsg)})
 			return
 		}

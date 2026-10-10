@@ -11,7 +11,7 @@ levels:
     ram_mb: 150
     requires:
       modules: [storage]
-    grants: [Ricezione backup dai nodi amici (append-only), invio dei propri backup]
+    grants: [Ricezione backup cifrati dei nodi amici (rest-server append-only su porta 8000), archiviazione snapshot immutabili]
     lacks: []
 
 ports:
@@ -28,7 +28,7 @@ images:
   - ref: docker.io/restic/rest-server
     tag: 0.12.1
     channel: pinned
-    args: ["--append-only", "--no-auth"] # No auth for PoC simplification, in real life htpasswd is used
+    args: ["/usr/bin/rest-server", "--append-only", "--no-auth", "--path", "/data"]
 
 update:
   requires_release_notes: false

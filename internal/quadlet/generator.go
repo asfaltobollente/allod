@@ -215,6 +215,11 @@ func EnsureStorageDirectories(modID string) {
 		dirs = []string{
 			filepath.Join(baseDir, "backup", "vault"),
 		}
+		for _, d := range dirs {
+			_ = os.MkdirAll(d, 0770)
+			_ = os.Chmod(d, 0770)
+		}
+		return
 	case "shares":
 		dirs = []string{
 			filepath.Join(baseDir, "shares"),
@@ -379,7 +384,24 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		sb.WriteString("Network=allod\n")
 	}
 	if len(img.Args) > 0 {
-		sb.WriteString(fmt.Sprintf("Exec=%s\n", strings.Join(img.Args, " ")))
+		args := make([]string, len(img.Args))
+		copy(args, img.Args)
+		if m.ID == "backup" || strings.Contains(img.Ref, "rest-server") {
+			if len(args) > 0 && strings.HasPrefix(args[0], "-") {
+				args = append([]string{"/usr/bin/rest-server"}, args...)
+			}
+			hasPath := false
+			for _, a := range args {
+				if a == "--path" {
+					hasPath = true
+					break
+				}
+			}
+			if !hasPath {
+				args = append(args, "--path", "/data")
+			}
+		}
+		sb.WriteString(fmt.Sprintf("Exec=%s\n", strings.Join(args, " ")))
 	}
 
 	// Only publish host ports on the primary container of the module.
