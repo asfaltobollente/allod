@@ -1215,6 +1215,10 @@ function getModuleTechInfo(modID, currentLevel) {
 }
 
 function isModuleLevelBeta(modID, level) {
+  if (modID === 'backup') {
+    if (level === 'off') return false;
+    return true;
+  }
   if (!level || level === 'off') return false;
   if (modID === 'cloud') {
     return level === 'standard';
@@ -1585,7 +1589,7 @@ function createModuleCard(mod) {
   }
 
   const tierLabel = t('tier_' + mod.tier, mod.tier);
-  const isBeta = isModuleLevelBeta(mod.id, mod.current_level);
+  const isBeta = (mod.id === 'backup') || isModuleLevelBeta(mod.id, mod.current_level);
   const betaBadge = isBeta ? `<span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px; letter-spacing:0.5px;">BETA</span>` : '';
 
   // -----------------------------------------------------------------
