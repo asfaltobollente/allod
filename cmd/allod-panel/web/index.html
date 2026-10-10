@@ -544,9 +544,19 @@ systemctl --user enable --now allod-panel</pre>
 
       <!-- TAB 3: RING FEDERATION -->
       <section id="tab-ring" class="tab-pane">
-        <div class="tab-header mb-3">
-          <h2 data-i18n="ring_header_title">Multi-Node Ring Topology</h2>
-          <p class="text-muted" data-i18n="ring_header_desc">Each critical dataset is stored across 2 independent remote peer replicas.</p>
+        <div class="tab-header mb-3" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 data-i18n="ring_header_title">Multi-Node Ring Topology</h2>
+            <p class="text-muted" data-i18n="ring_header_desc">Each critical dataset is stored across 2 independent remote peer replicas.</p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-primary" onclick="openVaultModal()">
+              <span class="icon">➕</span> <span>Collega Vault Remoto</span>
+            </button>
+            <button class="btn btn-outline-info" onclick="openNetBirdAPIModal()">
+              <span class="icon">🌐</span> <span>NetBird Cloud API</span>
+            </button>
+          </div>
         </div>
 
         <div class="grid-2col">
@@ -710,6 +720,9 @@ systemctl --user enable --now allod-panel</pre>
                 </button>
                 <button class="btn btn-outline-warning" onclick="openWoLModal()" style="flex:1;">
                   <span class="icon">⚡</span> <span data-i18n="wol_btn_open">Wake-on-LAN</span>
+                </button>
+                <button class="btn btn-outline-info" onclick="openNetBirdAPIModal()" style="flex:1;">
+                  <span class="icon">🌐</span> <span>Integrazione NetBird Cloud API</span>
                 </button>
               </div>
             </div>
@@ -2101,8 +2114,232 @@ sudo systemctl enable --now allod-helperd</pre>
         </div>
       </div>
 
+  <!-- MODAL: NETBIRD CLOUD API INTEGRATION -->
+  <div id="netbird-api-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:620px; max-height:92vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🌐</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:700;">Integrazione NetBird Cloud API</h3>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);">Automatizza la generazione delle Setup Key dei Vault remoti e gestisci la mesh sovrana</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeNetBirdAPIModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto; flex:1; padding:16px;">
+        <div id="nb-api-status-banner" style="background:rgba(15,23,42,0.6); border:1px solid var(--card-border); border-radius:8px; padding:12px 14px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong style="font-size:12.5px;">Stato Integrazione:</strong>
+              <span id="nb-api-status-badge" class="badge badge-secondary" style="margin-left:6px;">Non Configurato</span>
+            </div>
+            <a href="https://app.netbird.io/settings/access-tokens" target="_blank" class="btn btn-sm btn-outline-info" style="padding:3px 10px; font-size:11px; text-decoration:none;">
+              ↗ Apri Access Tokens su NetBird
+            </a>
+          </div>
+          <p id="nb-api-status-desc" style="font-size:11.5px; color:var(--text-muted); margin:8px 0 0 0; line-height:1.4;">
+            Inserendo il tuo Personal Access Token di NetBird, Allod potrà generare in automatico le Setup Key per i nuovi Vault remoti (VPS, Mini-PC o Docker) con zero passaggi manuali.
+          </p>
+        </div>
+
+        <form id="form-netbird-api" onsubmit="event.preventDefault(); saveNetBirdAPI();">
+          <div class="form-group mb-3">
+            <label for="nb-api-token" style="font-size:12px; font-weight:600;">Personal Access Token (NetBird API):</label>
+            <div style="display:flex; gap:6px;">
+              <input type="password" id="nb-api-token" class="form-control" placeholder="es. nbp_live_xxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+              <button type="button" class="btn btn-sm btn-secondary" onclick="toggleNetBirdTokenVisibility()" style="padding:0 10px;" title="Mostra/Nascondi Token">👁️</button>
+            </div>
+            <small style="color:var(--text-muted); font-size:11px; display:block; margin-top:4px;">
+              Generalo su NetBird in: <b>Settings ➔ Access Tokens ➔ Add Token</b>. Il token verrà salvato in modo sicuro nel database locale.
+            </small>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="nb-api-mgmt-url" style="font-size:12px; font-weight:600;">Management URL (Opzionale per istanze Self-Hosted):</label>
+            <input type="url" id="nb-api-mgmt-url" class="form-control" placeholder="https://api.netbird.io" value="https://api.netbird.io" />
+            <small style="color:var(--text-muted); font-size:11px; display:block; margin-top:4px;">
+              Lascia predefinito per il Cloud Europeo NetBird (Francoforte), oppure inserisci il tuo dominio per NetBird self-hosted.
+            </small>
+          </div>
+
+          <div id="nb-api-test-result" class="hidden" style="margin-bottom:14px; padding:10px 12px; border-radius:6px; font-size:12px;"></div>
+
+          <div style="display:flex; gap:8px; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-outline-info" id="btn-test-nb-api" onclick="testNetBirdAPI()">
+                🔍 Verifica Connessione
+              </button>
+              <button type="button" class="btn btn-outline-danger hidden" id="btn-delete-nb-api" onclick="deleteNetBirdAPI()">
+                🗑️ Rimuovi Token
+              </button>
+            </div>
+            <button type="submit" class="btn btn-success" id="btn-save-nb-api">
+              💾 Salva Impostazioni API
+            </button>
+          </div>
+        </form>
+      </div>
+
       <div class="modal-footer" style="display:flex; justify-content:flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="closeWoLModal()" data-i18n="sweeper_close">Chiudi</button>
+        <button type="button" class="btn btn-secondary" onclick="closeNetBirdAPIModal()">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ALLOD STANDALONE VAULT PROVISIONING (TWO-WAY DESIGN) -->
+  <div id="vault-remote-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:760px; max-height:94vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🏛️</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:700;">Collega Nuovo Vault Remoto (Allod Standalone Storage)</h3>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);">Configura un server Linux, Mini-PC o container NAS indipendente come cassaforte per i tuoi backup cifrati</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeVaultModal()">&times;</button>
+      </div>
+
+      <!-- Mode Banner (Two-Way Design: Automatic vs Manual) -->
+      <div id="vault-auth-banner" style="margin:10px 16px 0 16px; padding:10px 14px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <!-- Filled by JS -->
+      </div>
+
+      <!-- General Parameters (Name, Quota, Manual Key if needed) -->
+      <div style="padding:12px 16px; background:rgba(0,0,0,0.2); border-bottom:1px solid var(--card-border);">
+        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:12px;">
+          <div class="form-group mb-0">
+            <label for="vault-input-name" style="font-size:12px; font-weight:600;">Nome Identificativo del Vault:</label>
+            <input type="text" id="vault-input-name" class="form-control" placeholder="es. Casa-Mamma, VPS-Hetzner, NAS-Marco" value="Casa-Mamma" oninput="debounceGenerateVaultArtifacts()" />
+          </div>
+          <div class="form-group mb-0">
+            <label for="vault-select-quota" style="font-size:12px; font-weight:600;">Quota Disco Riservata (GB):</label>
+            <select id="vault-select-quota" class="form-control" onchange="debounceGenerateVaultArtifacts()">
+              <option value="100">100 GB (Base)</option>
+              <option value="250">250 GB</option>
+              <option value="500" selected>500 GB (Consigliato)</option>
+              <option value="1000">1000 GB (1 TB)</option>
+              <option value="2000">2000 GB (2 TB)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="vault-manual-key-wrapper" class="form-group mt-2 mb-0 hidden">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label for="vault-input-manual-key" style="font-size:12px; font-weight:600;">NetBird Setup Key (Manuale):</label>
+            <a href="https://app.netbird.io/setup-keys" target="_blank" class="btn btn-sm btn-outline-info" style="padding:2px 8px; font-size:11px; text-decoration:none;">
+              ↗ Genera Key su NetBird
+            </a>
+          </div>
+          <input type="text" id="vault-input-manual-key" class="form-control mt-1" placeholder="Incolla Setup Key es. 4A8B7C21-D4E5-4F8A-..." oninput="debounceGenerateVaultArtifacts()" />
+        </div>
+      </div>
+
+      <!-- Deployment Tabs Navigation (The 3 Options) -->
+      <div style="display:flex; gap:6px; padding:10px 16px; background:rgba(0,0,0,0.3); border-bottom:1px solid var(--card-border);">
+        <button type="button" class="btn btn-sm" id="btn-tab-vault-vps" onclick="switchVaultTab('vps')" style="padding:6px 14px; font-size:12px; font-weight:700; background:var(--primary); color:#000; border-radius:6px;">
+          ⚡ Opzione 1: Script VPS (One-Liner)
+        </button>
+        <button type="button" class="btn btn-sm" id="btn-tab-vault-appliance" onclick="switchVaultTab('appliance')" style="padding:6px 14px; font-size:12px; font-weight:700; background:transparent; color:var(--text-muted); border-radius:6px;">
+          💾 Opzione 2: Appliance Mini-PC (USB / SD)
+        </button>
+        <button type="button" class="btn btn-sm" id="btn-tab-vault-docker" onclick="switchVaultTab('docker')" style="padding:6px 14px; font-size:12px; font-weight:700; background:transparent; color:var(--text-muted); border-radius:6px;">
+          📦 Opzione 3: Docker Compose (NAS / Synology)
+        </button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto; flex:1; padding:16px;">
+        <!-- TAB 1: SCRIPT VPS -->
+        <div id="pane-vault-vps">
+          <div style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:12px 14px; margin-bottom:12px;">
+            <strong style="color:var(--primary); font-size:12.5px; display:block; margin-bottom:4px;">⚡ Deploy Istantaneo per VPS e Server Linux (1 Singolo Comando)</strong>
+            <p style="margin:0; font-size:11.5px; color:var(--text-muted); line-height:1.5;">
+              Ideale per qualsiasi VPS in cloud (Hetzner, OVH, Oracle Cloud, Contabo) o PC Linux Debian/Ubuntu.<br>
+              Lo script installa NetBird, si unisce alla tua mesh WireGuard, configura <code>rest-server</code> in modalità <b>append-only immutabile</b> e annuncia il vault al tuo Ring!
+            </p>
+          </div>
+
+          <div class="form-group mb-2">
+            <label style="font-size:12px; font-weight:600;">Copia ed esegui sul server remoto (da root):</label>
+            <div style="position:relative;">
+              <textarea id="vault-code-vps" class="form-control" readonly style="font-family:monospace; font-size:12px; height:85px; background:#0b1120; color:#38bdf8; resize:none; padding:10px;"></textarea>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px;">
+            <span style="font-size:11.5px; color:var(--text-muted);">
+              ✅ Zero porte aperte sul router • Traffico WireGuard crittografato P2P
+            </span>
+            <button type="button" class="btn btn-primary" onclick="copyVaultScriptCommand()" id="btn-copy-vault-cmd">
+              📋 Copia Comando
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 2: APPLIANCE MINI-PC (CLOUD-INIT) -->
+        <div id="pane-vault-appliance" class="hidden">
+          <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); border-radius:8px; padding:12px 14px; margin-bottom:12px;">
+            <strong style="color:#10b981; font-size:12.5px; display:block; margin-bottom:4px;">💾 Mini-PC o Raspberry Pi "Plug & Play" (Zero Schermo / Zero Tastiera)</strong>
+            <p style="margin:0; font-size:11.5px; color:var(--text-muted); line-height:1.5;">
+              Ideale da mettere a casa di parenti o amici. Scarica il file <code>user-data</code> e inseriscilo nella partizione di boot della chiavetta USB (o tramite Raspberry Pi Imager).<br>
+              All'avvio, il Mini-PC si collega al modem via cavo di rete (DHCP), avvia NetBird e inizia a ricevere i backup in automatico.
+            </p>
+          </div>
+
+          <div class="form-group mb-2">
+            <label style="font-size:12px; font-weight:600;">Anteprima Configurazione Cloud-Init (<code>user-data</code>):</label>
+            <textarea id="vault-code-cloudinit" class="form-control" readonly style="font-family:monospace; font-size:11px; height:140px; background:#0b1120; color:#a7f3d0; resize:none; padding:10px;"></textarea>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px;">
+            <span style="font-size:11.5px; color:var(--text-muted);">
+              💡 Inserisci questo file come <code>user-data</code> nella chiavetta di boot di Ubuntu Server / Alpine.
+            </span>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-outline-info" onclick="copyVaultCloudInit()" id="btn-copy-vault-cloudinit">
+                📋 Copia Testo
+              </button>
+              <button type="button" class="btn btn-success" onclick="downloadVaultCloudInit()">
+                💾 Scarica File user-data
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: DOCKER COMPOSE -->
+        <div id="pane-vault-docker" class="hidden">
+          <div style="background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:12px 14px; margin-bottom:12px;">
+            <strong style="color:#f59e0b; font-size:12.5px; display:block; margin-bottom:4px;">📦 Container per NAS (Synology, QNAP, Unraid, CasaOS, Portainer)</strong>
+            <p style="margin:0; font-size:11.5px; color:var(--text-muted); line-height:1.5;">
+              Ideale per un amico che possiede già un NAS o un server Docker. I due micro-container (NetBird + rest-server) condividono il network isolato WireGuard e non aprono porte sull'host né confliggono con altri servizi.
+            </p>
+          </div>
+
+          <div class="form-group mb-2">
+            <label style="font-size:12px; font-weight:600;">File <code>docker-compose.yml</code>:</label>
+            <textarea id="vault-code-compose" class="form-control" readonly style="font-family:monospace; font-size:11.5px; height:150px; background:#0b1120; color:#fde68a; resize:none; padding:10px;"></textarea>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px;">
+            <span style="font-size:11.5px; color:var(--text-muted);">
+              Avvio istantaneo con: <code>docker compose up -d</code>
+            </span>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-outline-info" onclick="copyVaultCompose()" id="btn-copy-vault-compose">
+                📋 Copia Testo
+              </button>
+              <button type="button" class="btn btn-warning" onclick="downloadVaultCompose()">
+                💾 Scarica docker-compose.yml
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display:flex; justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeVaultModal()">Chiudi</button>
       </div>
     </div>
   </div>

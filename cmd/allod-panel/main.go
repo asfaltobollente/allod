@@ -4350,11 +4350,485 @@ WantedBy=default.target
 		})
 	})
 
+	// --- NetBird Management API & Vault Provisioning Helpers ---
+	getNetBirdMgmtURL := func(st *state.Store) string {
+		url, _ := st.GetMeta("netbird_mgmt_url")
+		if strings.TrimSpace(url) == "" {
+			return "https://api.netbird.io"
+		}
+		return strings.TrimRight(strings.TrimSpace(url), "/")
+	}
+
+	testNetBirdToken := func(token, mgmtURL string) (map[string]interface{}, error) {
+		client := &http.Client{Timeout: 8 * time.Second}
+		req, err := http.NewRequest("GET", mgmtURL+"/api/users", nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Token "+token)
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return nil, fmt.Errorf("Token NetBird non valido o permessi insufficienti (HTTP %d)", resp.StatusCode)
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("Errore API NetBird (HTTP %d): %s", resp.StatusCode, string(body))
+		}
+
+		var users []map[string]interface{}
+		_ = json.NewDecoder(resp.Body).Decode(&users)
+
+		accountEmail := "Amministratore"
+		if len(users) > 0 {
+			if email, ok := users[0]["email"].(string); ok && email != "" {
+				accountEmail = email
+			} else if name, ok := users[0]["name"].(string); ok && name != "" {
+				accountEmail = name
+			}
+		}
+
+		return map[string]interface{}{
+			"valid":         true,
+			"users_count":   len(users),
+			"primary_email": accountEmail,
+			"mgmt_url":      mgmtURL,
+		}, nil
+	}
+
+	createNetBirdSetupKey := func(token, mgmtURL, keyName string) (string, error) {
+		client := &http.Client{Timeout: 10 * time.Second}
+		payload := map[string]interface{}{
+			"name":        keyName,
+			"type":        "reusable",
+			"expires_in":  31536000, // 365 giorni
+			"usage_limit": 0,        // riutilizzabile per nodi vault
+			"ephemeral":   false,
+		}
+		bodyBytes, _ := json.Marshal(payload)
+
+		req, err := http.NewRequest("POST", mgmtURL+"/api/setup-keys", bytes.NewReader(bodyBytes))
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("Authorization", "Token "+token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			return "", fmt.Errorf("Errore creazione Setup Key su NetBird (HTTP %d): %s", resp.StatusCode, string(body))
+		}
+
+		var resData map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&resData); err != nil {
+			return "", err
+		}
+
+		key, ok := resData["key"].(string)
+		if !ok || key == "" {
+			return "", fmt.Errorf("Chiave non trovata nella risposta NetBird")
+		}
+		return key, nil
+	}
+
+	generateCloudInit := func(vaultName, setupKey, peerIP string, quotaGB int) string {
+		return fmt.Sprintf(`#cloud-config
+hostname: %s
+manage_etc_hosts: true
+
+package_update: true
+packages:
+  - curl
+  - tar
+
+write_files:
+  - path: /etc/systemd/system/allod-vault-bootstrap.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Allod Vault Bootstrap
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/bin/bootstrap-vault.sh
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/bootstrap-vault.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      curl -fsSL https://pkgs.netbird.io/install.sh | sh
+      netbird up --setup-key "%s"
+      sleep 6
+      ARCH=$(uname -m)
+      if [ "$ARCH" = "x86_64" ]; then R_ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then R_ARCH="arm64"; else R_ARCH="amd64"; fi
+      curl -fsSL "https://github.com/restic/rest-server/releases/download/v0.12.1/rest-server_0.12.1_linux_${R_ARCH}.tar.gz" | tar -xz -C /tmp
+      mv /tmp/rest-server_0.12.1_linux_${R_ARCH}/rest-server /usr/local/bin/rest-server
+      chmod +x /usr/local/bin/rest-server
+      mkdir -p /vault/data
+      chmod 750 /vault/data
+
+      cat << 'EOF' > /etc/systemd/system/allod-vault.service
+      [Unit]
+      Description=Allod Standalone Vault (Append-Only Restic Receiver)
+      After=network-online.target netbird.service
+      Wants=network-online.target netbird.service
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/bin/rest-server --append-only --no-auth --listen 0.0.0.0:8000 --path /vault/data
+      Restart=always
+      RestartSec=5
+      LimitNOFILE=65536
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+      systemctl daemon-reload
+      systemctl enable --now allod-vault.service
+
+      NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
+      if [ -n "%s" ] && [ -n "$NETBIRD_IP" ]; then
+        curl -s -X POST "http://%s:8080/api/ring/announce" \
+          -H "Content-Type: application/json" \
+          -d '{"name":"%s","address":"'$NETBIRD_IP'","quota_gb":%d}' || true
+      fi
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now allod-vault-bootstrap.service
+`, vaultName, setupKey, peerIP, peerIP, vaultName, quotaGB)
+	}
+
+	generateDockerCompose := func(setupKey string) string {
+		return fmt.Sprintf(`services:
+  netbird:
+    image: docker.io/netbirdio/netbird:0.79.0
+    container_name: allod-vault-network
+    restart: unless-stopped
+    environment:
+      - NB_SETUP_KEY=%s
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ./netbird-data:/var/lib/netbird
+
+  vault:
+    image: docker.io/restic/rest-server:0.12.1
+    container_name: allod-vault-storage
+    restart: unless-stopped
+    network_mode: "service:netbird"
+    command: ["--append-only", "--no-auth", "--path", "/data"]
+    volumes:
+      - ./vault-data:/data
+    depends_on:
+      - netbird
+`, setupKey)
+	}
+
+	// 11. API Settings NetBird Management API
+	mux.HandleFunc("/api/settings/netbird-api", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore state.db: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		switch r.Method {
+		case http.MethodGet:
+			token, _ := st.GetMeta("netbird_api_token")
+			mgmtURL := getNetBirdMgmtURL(st)
+			token = strings.TrimSpace(token)
+			isConfigured := token != ""
+			masked := ""
+			if isConfigured {
+				if len(token) > 8 {
+					masked = token[:4] + "..." + token[len(token)-4:]
+				} else {
+					masked = "****"
+				}
+			}
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status: "ok",
+				Data: map[string]interface{}{
+					"configured":   isConfigured,
+					"masked_token": masked,
+					"mgmt_url":     mgmtURL,
+				},
+			})
+
+		case http.MethodPost:
+			var req struct {
+				Token   string `json:"token"`
+				MgmtURL string `json:"mgmt_url"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+				return
+			}
+			token := strings.TrimSpace(req.Token)
+			mgmtURL := strings.TrimSpace(req.MgmtURL)
+			if mgmtURL == "" {
+				mgmtURL = "https://api.netbird.io"
+			}
+			if token != "" {
+				_ = st.SetMeta("netbird_api_token", token)
+			}
+			_ = st.SetMeta("netbird_mgmt_url", mgmtURL)
+
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "ok",
+				Message: "Impostazioni NetBird API salvate con successo.",
+			})
+
+		case http.MethodDelete:
+			_ = st.SetMeta("netbird_api_token", "")
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "ok",
+				Message: "Token NetBird API rimosso con successo.",
+			})
+
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+
+	// 12. API Test NetBird Token
+	mux.HandleFunc("/api/settings/netbird-api/test", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Token   string `json:"token"`
+			MgmtURL string `json:"mgmt_url"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore state.db: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		token := strings.TrimSpace(req.Token)
+		if token == "" {
+			token, _ = st.GetMeta("netbird_api_token")
+			token = strings.TrimSpace(token)
+		}
+		if token == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nessun token fornito o salvato da testare"})
+			return
+		}
+
+		mgmtURL := strings.TrimSpace(req.MgmtURL)
+		if mgmtURL == "" {
+			mgmtURL = getNetBirdMgmtURL(st)
+		}
+
+		testRes, err := testNetBirdToken(token, mgmtURL)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Test connessione fallito: " + err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Connessione NetBird API verificata con successo!",
+			Data:    testRes,
+		})
+	})
+
+	// 13. API Vault Artifacts Generator (Two-Way Design)
+	mux.HandleFunc("/api/vault/generate", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Name           string `json:"name"`
+			QuotaGB        int    `json:"quota_gb"`
+			ManualSetupKey string `json:"manual_setup_key"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Richiesta JSON non valida: " + err.Error()})
+			return
+		}
+		req.Name = strings.TrimSpace(req.Name)
+		if req.Name == "" {
+			req.Name = "allod-vault-remote"
+		}
+		if req.QuotaGB <= 0 {
+			req.QuotaGB = 500
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore state.db: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		setupKey := strings.TrimSpace(req.ManualSetupKey)
+		autoGenerated := false
+
+		if setupKey == "" {
+			// Prova via NetBird Management API se configurata
+			apiToken, _ := st.GetMeta("netbird_api_token")
+			apiToken = strings.TrimSpace(apiToken)
+			if apiToken != "" {
+				mgmtURL := getNetBirdMgmtURL(st)
+				genKey, err := createNetBirdSetupKey(apiToken, mgmtURL, "allod-vault-"+req.Name)
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Impossibile generare la Setup Key via API NetBird: " + err.Error()})
+					return
+				}
+				setupKey = genKey
+				autoGenerated = true
+			}
+		}
+
+		if setupKey == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: "Nessuna Setup Key fornita e nessun Token API NetBird configurato. Inserisci manualmente la chiave o configura l'integrazione API.",
+			})
+			return
+		}
+
+		primaryMeshIP := getLocalNetBirdIP()
+		if primaryMeshIP == "" {
+			primaryMeshIP = "100.64.0.1"
+		}
+
+		scriptCommand := fmt.Sprintf("curl -fsSL \"http://%s:8080/api/vault/install.sh\" | sudo bash -s -- --name \"%s\" --key \"%s\" --quota \"%dG\" --peer \"%s\"",
+			primaryMeshIP, req.Name, setupKey, req.QuotaGB, primaryMeshIP)
+
+		cloudInitData := generateCloudInit(req.Name, setupKey, primaryMeshIP, req.QuotaGB)
+		dockerComposeData := generateDockerCompose(setupKey)
+
+		data := map[string]interface{}{
+			"name":            req.Name,
+			"quota_gb":        req.QuotaGB,
+			"setup_key":       setupKey,
+			"auto_generated":  autoGenerated,
+			"primary_mesh_ip": primaryMeshIP,
+			"script_command":  scriptCommand,
+			"cloud_init":      cloudInitData,
+			"docker_compose":  dockerComposeData,
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
+	})
+
+	// 14. API Download Vault Installer Script (GET /api/vault/install.sh)
+	mux.HandleFunc("/api/vault/install.sh", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+		scriptBytes, err := os.ReadFile("scripts/install-vault.sh")
+		if err == nil {
+			w.Write(scriptBytes)
+			return
+		}
+		// Fallback se il file non è reperibile su disco locale
+		fmt.Fprintf(w, "#!/bin/bash\necho 'Script install-vault.sh non reperibile su disco.'\nexit 1\n")
+	})
+
+	// 15. API Ring Announce (POST /api/ring/announce)
+	mux.HandleFunc("/api/ring/announce", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Name    string `json:"name"`
+			Address string `json:"address"`
+			QuotaGB int    `json:"quota_gb"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido: " + err.Error()})
+			return
+		}
+		req.Name = strings.TrimSpace(req.Name)
+		req.Address = strings.TrimSpace(req.Address)
+		if req.Name == "" || req.Address == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome e Indirizzo del vault sono obbligatori"})
+			return
+		}
+		if req.QuotaGB <= 0 {
+			req.QuotaGB = 500
+		}
+
+		targetRing := "ring.yaml"
+		topo, err := ring.LoadTopology(targetRing)
+		if err != nil {
+			topo = ring.NewRingTopology("allod-ring", 2)
+		}
+
+		topo.AddMember(&ring.Member{
+			ID:       req.Name,
+			Address:  req.Address,
+			QuotaGB:  req.QuotaGB,
+			Datasets: []ring.Dataset{},
+		})
+
+		if err := topo.Save(targetRing); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore salvataggio ring.yaml: " + err.Error()})
+			return
+		}
+
+		fmt.Printf("[RING] Nuovo Vault annunciato e registrato: '%s' (IP: %s, Quota: %d GB)\n", req.Name, req.Address, req.QuotaGB)
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Vault '%s' (%s, %d GB) registrato con successo nel Ring!", req.Name, req.Address, req.QuotaGB),
+		})
+	})
+
 	adminProtectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
 		// CSRF defense: enforce Origin/Referer check on mutating API requests
-		if strings.HasPrefix(path, "/api/") && path != "/api/speedtest/upload" {
+		if strings.HasPrefix(path, "/api/") && path != "/api/speedtest/upload" && path != "/api/ring/announce" {
 			if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete || r.Method == http.MethodPatch {
 				if !panel.CheckSameOrigin(r) {
 					w.Header().Set("Content-Type", "application/json")
@@ -4373,6 +4847,8 @@ WantedBy=default.target
 			path == "/api/health" ||
 			path == "/api/watch/install.sh" ||
 			path == "/api/watch/binary" ||
+			path == "/api/vault/install.sh" ||
+			path == "/api/ring/announce" ||
 			strings.HasPrefix(path, "/api/auth/") ||
 			strings.HasPrefix(path, "/api/portal/") ||
 			strings.HasPrefix(path, "/assets/") ||
