@@ -114,6 +114,14 @@ func getModulesDir() string {
 	return "modules"
 }
 
+func getStorageRoot() string {
+	storagePath := "/mnt/allod-storage"
+	if _, err := os.Stat(storagePath); err != nil {
+		storagePath = quadlet.ResolvedStorageBaseDir()
+	}
+	return storagePath
+}
+
 func getRingTopology(cfg *config.Config) (*ring.RingTopology, bool) {
 	if _, err := os.Stat("ring.yaml"); err == nil {
 		topo, err := ring.LoadTopology("ring.yaml")
@@ -4842,6 +4850,305 @@ runcmd:
 		})
 	})
 
+	// 16. API Backup Dataset Granular Selector (GET /api/backup/datasets)
+	mux.HandleFunc("/api/backup/datasets", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
+		defer st.Close()
+
+		selPathsJSON, _ := st.GetMeta("backup_selected_paths")
+		var savedPaths []string
+		selectedMap := make(map[string]bool)
+		hasSavedSelection := false
+		if selPathsJSON != "" {
+			if err := json.Unmarshal([]byte(selPathsJSON), &savedPaths); err == nil && len(savedPaths) > 0 {
+				hasSavedSelection = true
+				for _, p := range savedPaths {
+					selectedMap[p] = true
+				}
+			}
+		}
+
+		quotaStr, _ := st.GetMeta("backup_remote_quota_gb")
+		remoteQuotaGB, _ := strconv.Atoi(quotaStr)
+		if remoteQuotaGB <= 0 {
+			cfg, _ := config.LoadConfig(getConfigPath())
+			topo, _ := getRingTopology(cfg)
+			if topo != nil {
+				for _, m := range topo.Members {
+					if m.QuotaGB > 0 {
+						remoteQuotaGB = m.QuotaGB
+						break
+					}
+				}
+			}
+			if remoteQuotaGB <= 0 {
+				remoteQuotaGB = 500
+			}
+		}
+
+		storageRoot := getStorageRoot()
+		tree := ring.ScanDatasetTree(storageRoot, selectedMap)
+
+		var activePaths []string
+		var collectSelected func(items []*ring.DatasetItem)
+		collectSelected = func(items []*ring.DatasetItem) {
+			for _, it := range items {
+				if it.Selected {
+					activePaths = append(activePaths, it.Path)
+				}
+				if len(it.Children) > 0 {
+					collectSelected(it.Children)
+				}
+			}
+		}
+		collectSelected(tree)
+
+		fc := ring.CalculateForecast(activePaths, remoteQuotaGB)
+
+		sentinelCfg, _ := st.GetSentinelConfig()
+		tgConfigured := sentinelCfg != nil && sentinelCfg.TelegramBotToken != "" && sentinelCfg.TelegramChatID != ""
+		lastYellowStr, _ := st.GetMeta("last_telegram_quota_yellow")
+		lastRedStr, _ := st.GetMeta("last_telegram_quota_red")
+		lastYellow, _ := strconv.ParseInt(lastYellowStr, 10, 64)
+		lastRed, _ := strconv.ParseInt(lastRedStr, 10, 64)
+
+		respData := map[string]interface{}{
+			"storage_root":         storageRoot,
+			"tree":                 tree,
+			"selected_paths":       activePaths,
+			"has_saved_selection":  hasSavedSelection,
+			"remote_quota_gb":      remoteQuotaGB,
+			"forecast":             fc,
+			"telegram_configured":  tgConfigured,
+			"last_telegram_yellow": lastYellow,
+			"last_telegram_red":    lastRed,
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: respData})
+	})
+
+	// 17. API Backup Dataset Save Selection (POST /api/backup/datasets/save)
+	mux.HandleFunc("/api/backup/datasets/save", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Paths         []string `json:"paths"`
+			RemoteQuotaGB int      `json:"remote_quota_gb"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload non valido: " + err.Error()})
+			return
+		}
+
+		if req.RemoteQuotaGB <= 0 {
+			req.RemoteQuotaGB = 500
+		}
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
+		defer st.Close()
+
+		pathsData, _ := json.Marshal(req.Paths)
+		_ = st.SetMeta("backup_selected_paths", string(pathsData))
+		_ = st.SetMeta("backup_remote_quota_gb", fmt.Sprintf("%d", req.RemoteQuotaGB))
+
+		cfg, _ := config.LoadConfig(getConfigPath())
+		nodeName := "allod-node"
+		if cfg != nil && cfg.Node.Name != "" {
+			nodeName = cfg.Node.Name
+		}
+
+		if _, err := os.Stat("ring.yaml"); err == nil {
+			if topo, err := ring.LoadTopology("ring.yaml"); err == nil {
+				member, exists := topo.Members[nodeName]
+				if !exists {
+					for _, m := range topo.Members {
+						member = m
+						break
+					}
+				}
+				if member != nil {
+					member.QuotaGB = req.RemoteQuotaGB
+					var ringDatasets []ring.Dataset
+					for _, p := range req.Paths {
+						base := filepath.Base(p)
+						sizeGB := int((ring.FastDirSize(p) + (1024*1024*1024 - 1)) / (1024 * 1024 * 1024))
+						if sizeGB <= 0 {
+							sizeGB = 1
+						}
+						ringDatasets = append(ringDatasets, ring.Dataset{
+							ID:       base,
+							SizeGB:   sizeGB,
+							Critical: true,
+						})
+					}
+					member.Datasets = ringDatasets
+					_ = topo.Save("ring.yaml")
+				}
+			}
+		}
+
+		fc := ring.CalculateForecast(req.Paths, req.RemoteQuotaGB)
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Selezione dataset e quota di backup salvate con successo!",
+			Data:    fc,
+		})
+	})
+
+	// 18. API Backup Capacity Alert Check / Test (POST /api/backup/forecast/check-alert)
+	mux.HandleFunc("/api/backup/forecast/check-alert", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			ForceTest bool `json:"force_test"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
+		defer st.Close()
+
+		sentinelCfg, err := st.GetSentinelConfig()
+		if err != nil || sentinelCfg == nil || sentinelCfg.TelegramBotToken == "" || sentinelCfg.TelegramChatID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: "Telegram non è configurato. Inserisci Bot Token e Chat ID nella scheda 'Watch Sentinel' prima di attivare le notifiche.",
+			})
+			return
+		}
+
+		selPathsJSON, _ := st.GetMeta("backup_selected_paths")
+		var selectedPaths []string
+		if selPathsJSON != "" {
+			_ = json.Unmarshal([]byte(selPathsJSON), &selectedPaths)
+		}
+		if len(selectedPaths) == 0 {
+			items := ring.ScanDatasetTree(getStorageRoot(), nil)
+			var collect func(its []*ring.DatasetItem)
+			collect = func(its []*ring.DatasetItem) {
+				for _, it := range its {
+					if it.Selected {
+						selectedPaths = append(selectedPaths, it.Path)
+					}
+					if len(it.Children) > 0 {
+						collect(it.Children)
+					}
+				}
+			}
+			collect(items)
+		}
+
+		quotaStr, _ := st.GetMeta("backup_remote_quota_gb")
+		quotaGB, _ := strconv.Atoi(quotaStr)
+		if quotaGB <= 0 {
+			quotaGB = 500
+		}
+
+		lastYellowStr, _ := st.GetMeta("last_telegram_quota_yellow")
+		lastRedStr, _ := st.GetMeta("last_telegram_quota_red")
+		lastYellow, _ := strconv.ParseInt(lastYellowStr, 10, 64)
+		lastRed, _ := strconv.ParseInt(lastRedStr, 10, 64)
+
+		fc := ring.CalculateForecast(selectedPaths, quotaGB)
+
+		if req.ForceTest {
+			testMsg := fmt.Sprintf(`🧪 <b>[Allod Ring] TEST Notifica Quota di Backup</b>
+
+📊 <b>Spazio Selezionato:</b> %s
+📦 <b>Quota Remota:</b> %s (%.1f%% usato)
+⏳ <b>Autonomia Prevista (Runway):</b> %s
+📈 <b>Crescita Annua Stimata:</b> %s
+🔮 <b>Tra 1 Anno:</b> %s | <b>Tra 5 Anni:</b> %s
+🚦 <b>Stato Quota:</b> %s
+
+✅ Il bot Telegram è configurato correttamente. Riceverai avvisi automatici mensili (giallo: >=80%% o &lt;=6 mesi) e settimanali (rosso: >=90%% o &lt;=1 mese).`,
+				fc.CurrentSizeFormatted,
+				fc.RemoteQuotaFormatted,
+				fc.QuotaUsedPercent,
+				fc.RunwayFormatted,
+				fc.AnnualGrowthFormatted,
+				fc.Forecast1YearFormatted,
+				fc.Forecast5YearFormatted,
+				strings.ToUpper(fc.QuotaStatus),
+			)
+
+			if sErr := ring.SendTelegramMessage(sentinelCfg.TelegramBotToken, sentinelCfg.TelegramChatID, testMsg); sErr != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(PanelResponse{
+					Status:  "error",
+					Message: "Errore invio messaggio Telegram: " + sErr.Error(),
+				})
+				return
+			}
+
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "ok",
+				Message: "Messaggio di test inviato con successo sul tuo canale Telegram!",
+				Data:    fc,
+			})
+			return
+		}
+
+		newYellow, newRed, alertSent, sErr := ring.CheckTelegramQuotaAlert(fc, sentinelCfg.TelegramBotToken, sentinelCfg.TelegramChatID, lastYellow, lastRed)
+		if sErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore invio notifica: " + sErr.Error()})
+			return
+		}
+
+		if alertSent != "" {
+			if newYellow != lastYellow {
+				_ = st.SetMeta("last_telegram_quota_yellow", fmt.Sprintf("%d", newYellow))
+			}
+			if newRed != lastRed {
+				_ = st.SetMeta("last_telegram_quota_red", fmt.Sprintf("%d", newRed))
+			}
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "ok",
+				Message: fmt.Sprintf("Allerta quota (%s) inviata a Telegram con successo!", alertSent),
+				Data:    fc,
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Nessun alert inviato: quota normale (%s, %.1f%%) o notifica già recapitata nell'intervallo di sicurezza.", fc.QuotaStatus, fc.QuotaUsedPercent),
+			Data:    fc,
+		})
+	})
+
 	adminProtectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
@@ -4965,6 +5272,9 @@ runcmd:
 
 	// Background Hardware & System Metrics Collector (1m interval, 30d auto-prune)
 	go startMetricsCollector(dbPath)
+
+	// Background Quota Alert Watcher (12h interval, Yellow monthly, Red weekly)
+	go startBackupQuotaWatcher(dbPath)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintf(os.Stderr, "Errore server: %v\n", err)
@@ -5111,3 +5421,82 @@ func startMetricsCollector(dbPath string) {
 		}
 	}
 }
+
+// startBackupQuotaWatcher periodically checks backup capacity runway and triggers
+// Telegram alerts if quota is approaching saturation (Yellow monthly, Red weekly).
+func startBackupQuotaWatcher(dbPath string) {
+	time.Sleep(30 * time.Second) // Let server settle
+	ticker := time.NewTicker(12 * time.Hour)
+	defer ticker.Stop()
+
+	runCheck := func() {
+		st, err := state.Open(dbPath)
+		if err != nil {
+			return
+		}
+		defer st.Close()
+
+		sentinelCfg, err := st.GetSentinelConfig()
+		if err != nil || sentinelCfg == nil || sentinelCfg.TelegramBotToken == "" || sentinelCfg.TelegramChatID == "" {
+			return
+		}
+
+		selPathsJSON, _ := st.GetMeta("backup_selected_paths")
+		var selectedPaths []string
+		if selPathsJSON != "" {
+			_ = json.Unmarshal([]byte(selPathsJSON), &selectedPaths)
+		}
+		if len(selectedPaths) == 0 {
+			items := ring.ScanDatasetTree(getStorageRoot(), nil)
+			var collect func(its []*ring.DatasetItem)
+			collect = func(its []*ring.DatasetItem) {
+				for _, it := range its {
+					if it.Selected {
+						selectedPaths = append(selectedPaths, it.Path)
+					}
+					if len(it.Children) > 0 {
+						collect(it.Children)
+					}
+				}
+			}
+			collect(items)
+		}
+		if len(selectedPaths) == 0 {
+			return
+		}
+
+		quotaStr, _ := st.GetMeta("backup_remote_quota_gb")
+		quotaGB, _ := strconv.Atoi(quotaStr)
+		if quotaGB <= 0 {
+			quotaGB = 500
+		}
+
+		lastYellowStr, _ := st.GetMeta("last_telegram_quota_yellow")
+		lastRedStr, _ := st.GetMeta("last_telegram_quota_red")
+		lastYellow, _ := strconv.ParseInt(lastYellowStr, 10, 64)
+		lastRed, _ := strconv.ParseInt(lastRedStr, 10, 64)
+
+		fc := ring.CalculateForecast(selectedPaths, quotaGB)
+		newYellow, newRed, alertSent, err := ring.CheckTelegramQuotaAlert(fc, sentinelCfg.TelegramBotToken, sentinelCfg.TelegramChatID, lastYellow, lastRed)
+		if err != nil {
+			fmt.Printf("[RING-ALERT] Errore invio notifica quota Telegram: %v\n", err)
+			return
+		}
+		if alertSent != "" {
+			fmt.Printf("[RING-ALERT] Notifica quota inviata con successo (%s): Quota %s / %s (%.1f%%), Runway: %s\n",
+				alertSent, fc.CurrentSizeFormatted, fc.RemoteQuotaFormatted, fc.QuotaUsedPercent, fc.RunwayFormatted)
+			if newYellow != lastYellow {
+				_ = st.SetMeta("last_telegram_quota_yellow", fmt.Sprintf("%d", newYellow))
+			}
+			if newRed != lastRed {
+				_ = st.SetMeta("last_telegram_quota_red", fmt.Sprintf("%d", newRed))
+			}
+		}
+	}
+
+	runCheck()
+	for range ticker.C {
+		runCheck()
+	}
+}
+
