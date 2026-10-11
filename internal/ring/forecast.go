@@ -97,27 +97,74 @@ func FastDirSize(dir string) int64 {
 	return total
 }
 
+// FastUserDirSize computes the size of a user personal share, intentionally skipping
+// any bind-mounted "photos" or "media" subdirectories so Immich photo libraries are not duplicated.
+func FastUserDirSize(dir string) int64 {
+	var total int64
+	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if p != dir {
+				name := strings.ToLower(d.Name())
+				// Skip bind-mounted photo/media libraries and hidden folders
+				if name == "photos" || name == "media" || strings.HasPrefix(name, ".") {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if info, errI := d.Info(); errI == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
 // ScanDatasetTree constructs the hierarchical selector:
-// 1. User shares in <storageRoot>/shares/<user>
+// 1. User shares in <storageRoot>/shares/<user> (matching active validUsers and filtering out deleted or system shares)
 // 2. Public folder in <storageRoot>/shares/public (with 2-level subfolder inspection)
 // 3. Application modules (photos, cloud, odysseus, media/config)
-func ScanDatasetTree(storageRoot string, selectedPaths map[string]bool) []*DatasetItem {
+func ScanDatasetTree(storageRoot string, validUsers []string, selectedPaths map[string]bool) []*DatasetItem {
 	var items []*DatasetItem
 
 	sharesDir := filepath.Join(storageRoot, "shares")
 
-	// 1. User Personal Shares (e.g. shares/davide, shares/mamma)
+	userMap := make(map[string]bool)
+	for _, u := range validUsers {
+		userMap[strings.ToLower(strings.TrimSpace(u))] = true
+	}
+
+	// 1. User Personal Shares (e.g. shares/davide, shares/rita)
 	if entries, err := os.ReadDir(sharesDir); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() {
 				continue
 			}
 			name := e.Name()
-			if name == "public" || name == "photos" || name == "media" || name == "lost+found" || strings.HasPrefix(name, ".") {
+			lower := strings.ToLower(name)
+
+			// Always skip deleted accounts, hidden dirs, system shares
+			if strings.Contains(lower, ".deleted") || strings.HasPrefix(lower, ".") || lower == "public" || lower == "photos" || lower == "media" || lower == "lost+found" {
 				continue
 			}
+
+			// If valid users are provided from state.db, strictly enforce family members!
+			if len(userMap) > 0 && !userMap[lower] {
+				continue
+			}
+
+			// If no valid users list provided (standalone/test), filter out known media/generic shares
+			if len(userMap) == 0 {
+				if lower == "film" || lower == "movies" || lower == "music" || lower == "musica" || lower == "serie" || lower == "tv" || lower == "video" || lower == "torrents" || lower == "download" || lower == "downloads" {
+					continue
+				}
+			}
+
 			uPath := filepath.Join(sharesDir, name)
-			uSize := FastDirSize(uPath)
+			uSize := FastUserDirSize(uPath)
 			selected := selectedPaths[uPath]
 			if len(selectedPaths) == 0 {
 				selected = true // Default select personal user folders
@@ -132,7 +179,7 @@ func ScanDatasetTree(storageRoot string, selectedPaths map[string]bool) []*Datas
 				SizeBytes:     uSize,
 				SizeFormatted: FormatBytes(uSize),
 				Selected:      selected,
-				Description:   fmt.Sprintf("Dati personali e documenti SMB per l'utente %s", name),
+				Description:   fmt.Sprintf("Dati personali e documenti SMB per l'utente %s (esclude bind mount foto/media)", name),
 			})
 		}
 	}
@@ -308,8 +355,20 @@ func CalculateForecast(selectedPaths []string, remoteQuotaGB int) *ForecastRepor
 		if strings.TrimSpace(p) == "" {
 			continue
 		}
+		normP := filepath.ToSlash(p)
+		isUserShare := strings.Contains(normP, "/shares/") && !strings.HasSuffix(normP, "/shares/public") && !strings.Contains(normP, "/shares/public/")
+
 		_ = filepath.WalkDir(p, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() {
+				if isUserShare && path != p {
+					name := strings.ToLower(d.Name())
+					if name == "photos" || name == "media" || strings.HasPrefix(name, ".") {
+						return filepath.SkipDir
+					}
+				}
 				return nil
 			}
 			info, errI := d.Info()
