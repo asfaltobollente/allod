@@ -4949,6 +4949,8 @@ runcmd:
 				activePaths = helperRes.SelectedPaths
 				fc = helperRes.Forecast
 			}
+		} else if errHelper != nil {
+			fmt.Printf("[DATASETS] Helper ScanDatasets fallback: %v\n", errHelper)
 		}
 
 		// 2. Fallback to unprivileged local calculation if helper is unavailable
@@ -4986,6 +4988,7 @@ runcmd:
 			"telegram_configured":  tgConfigured,
 			"last_telegram_yellow": lastYellow,
 			"last_telegram_red":    lastRed,
+			"helper_active":        (errHelper == nil),
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: respData})
