@@ -18,6 +18,7 @@ type CommandRunner interface {
 	RestartService(unit string) error
 	InitStorage(mode string, disks []string, mountPoint, user string) error
 	StorageDiagnostics(mountPoint string) (string, error)
+	ScanDatasets(storageRoot string, validUsers, selectedPaths []string, remoteQuotaGB int) (string, error)
 	SnapshotCreate(subvol, name string) error
 }
 
@@ -186,4 +187,21 @@ func (c *Client) SnapshotCreate(subvol, name string) error {
 		return fmt.Errorf("helper error creating snapshot: %s", res.Error)
 	}
 	return nil
+}
+
+// ScanDatasets traverses datasets as root, auto-heals storage permissions, and computes forecast metrics.
+func (c *Client) ScanDatasets(storageRoot string, validUsers, selectedPaths []string, remoteQuotaGB int) (string, error) {
+	res, err := c.Execute("storage.scan_datasets", map[string]interface{}{
+		"storage_root":    storageRoot,
+		"valid_users":     validUsers,
+		"selected_paths":  selectedPaths,
+		"remote_quota_gb": remoteQuotaGB,
+	}, false)
+	if err != nil {
+		return "", fmt.Errorf("helper connection error: %w", err)
+	}
+	if !res.Ok {
+		return "", fmt.Errorf("helper error scanning datasets: %s", res.Error)
+	}
+	return res.Output, nil
 }

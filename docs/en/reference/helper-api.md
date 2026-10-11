@@ -39,9 +39,9 @@ Security is strictly enforced via kernel-level peer credential checking (`SO_PEE
 
 ---
 
-## Closed Actions Whitelist (24 Actions)
+## Closed Actions Whitelist (25 Actions)
 
-The root helper operates exclusively on a closed whitelist of 24 actions defined in `internal/helper/server.go` (`AllowedActions`) and mirrored in `schemas/helper-api.schema.json`:
+The root helper operates exclusively on a closed whitelist of 25 actions defined in `internal/helper/server.go` (`AllowedActions`) and mirrored in `schemas/helper-api.schema.json`:
 
 | Action | Purpose | Arguments | What Runs as Root |
 | :--- | :--- | :--- | :--- |
@@ -58,6 +58,7 @@ The root helper operates exclusively on a closed whitelist of 24 actions defined
 | `service.restart` | Restart an allowed Allod systemd service | `unit` (regex from `AllowedServiceUnits`) | `systemctl restart <unit>` (no unprivileged binary replacement) |
 | `storage.init` | Format disks and create initial Btrfs pool structure | `disks` (list/string of regex devices), `mode` (`single`\|`raid1`), `mount` (allowed path), `user` (optional regex) | `umount`, `mkfs.btrfs`, `mount`, `mkdir -p`, `chmod`, `chown` |
 | `storage.diagnostics` | Query Btrfs filesystem usage and device error stats | `mount` (allowed path) | `btrfs filesystem usage`, `btrfs device stats`, `df` |
+| `storage.scan_datasets` | Scan datasets and compute forecasting projections as root | `storage_root` (optional), `valid_users` (list), `selected_paths` (list), `remote_quota_gb` (int) | Traverses datasets as root, auto-heals share permissions, calculates exact sizes |
 | `network.netbird_status` | Query NetBird mesh status and connected peers in JSON | *(none)* | `podman exec <container> netbird status --json` |
 | `network.netbird_cli` | Execute controlled NetBird CLI query | `command` (`status`\|`status_detail`) | `podman exec <container> netbird status ...` |
 | `network.netbird_up` | Connect node to NetBird overlay mesh | *(none)* | `podman exec <container> netbird up` |

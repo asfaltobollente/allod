@@ -4929,23 +4929,45 @@ runcmd:
 
 		storageRoot := getStorageRoot()
 		validUsers := getValidFamilyUsernames(st)
-		tree := ring.ScanDatasetTree(storageRoot, validUsers, selectedMap)
 
+		var tree []*ring.DatasetItem
 		var activePaths []string
-		var collectSelected func(items []*ring.DatasetItem)
-		collectSelected = func(items []*ring.DatasetItem) {
-			for _, it := range items {
-				if it.Selected {
-					activePaths = append(activePaths, it.Path)
-				}
-				if len(it.Children) > 0 {
-					collectSelected(it.Children)
-				}
+		var fc *ring.ForecastReport
+
+		// 1. Try privileged helper first for 100% root access, permission healing and bypass of ACL restrictions
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		output, errHelper := client.ScanDatasets(storageRoot, validUsers, savedPaths, remoteQuotaGB)
+		if errHelper == nil && output != "" {
+			var helperRes struct {
+				StorageRoot   string               `json:"storage_root"`
+				Tree          []*ring.DatasetItem  `json:"tree"`
+				SelectedPaths []string             `json:"selected_paths"`
+				Forecast      *ring.ForecastReport `json:"forecast"`
+			}
+			if errU := json.Unmarshal([]byte(output), &helperRes); errU == nil && len(helperRes.Tree) > 0 {
+				tree = helperRes.Tree
+				activePaths = helperRes.SelectedPaths
+				fc = helperRes.Forecast
 			}
 		}
-		collectSelected(tree)
 
-		fc := ring.CalculateForecast(activePaths, remoteQuotaGB)
+		// 2. Fallback to unprivileged local calculation if helper is unavailable
+		if tree == nil {
+			tree = ring.ScanDatasetTree(storageRoot, validUsers, selectedMap)
+			var collectSelected func(items []*ring.DatasetItem)
+			collectSelected = func(items []*ring.DatasetItem) {
+				for _, it := range items {
+					if it.Selected {
+						activePaths = append(activePaths, it.Path)
+					}
+					if len(it.Children) > 0 {
+						collectSelected(it.Children)
+					}
+				}
+			}
+			collectSelected(tree)
+			fc = ring.CalculateForecast(activePaths, remoteQuotaGB)
+		}
 
 		sentinelCfg, _ := st.GetSentinelConfig()
 		tgConfigured := sentinelCfg != nil && sentinelCfg.TelegramBotToken != "" && sentinelCfg.TelegramChatID != ""
@@ -5509,7 +5531,20 @@ func startBackupQuotaWatcher(dbPath string) {
 		lastYellow, _ := strconv.ParseInt(lastYellowStr, 10, 64)
 		lastRed, _ := strconv.ParseInt(lastRedStr, 10, 64)
 
-		fc := ring.CalculateForecast(selectedPaths, quotaGB)
+		var fc *ring.ForecastReport
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		validUsers := getValidFamilyUsernames(st)
+		if output, errH := client.ScanDatasets(getStorageRoot(), validUsers, selectedPaths, quotaGB); errH == nil && output != "" {
+			var helperRes struct {
+				Forecast *ring.ForecastReport `json:"forecast"`
+			}
+			if errU := json.Unmarshal([]byte(output), &helperRes); errU == nil && helperRes.Forecast != nil {
+				fc = helperRes.Forecast
+			}
+		}
+		if fc == nil {
+			fc = ring.CalculateForecast(selectedPaths, quotaGB)
+		}
 		newYellow, newRed, alertSent, err := ring.CheckTelegramQuotaAlert(fc, sentinelCfg.TelegramBotToken, sentinelCfg.TelegramChatID, lastYellow, lastRed)
 		if err != nil {
 			fmt.Printf("[RING-ALERT] Errore invio notifica quota Telegram: %v\n", err)
