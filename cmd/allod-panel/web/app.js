@@ -2232,6 +2232,473 @@ function renderRing() {
       datasetsContainer.appendChild(placementTable);
     }
   }
+
+  // Auto-load backup dataset tree if container exists and not yet initialized
+  if (!window.datasetsTreeLoaded && document.getElementById('ring-datasets-tree')) {
+    loadBackupDatasets(false);
+  }
+}
+
+// ============================================================================
+// RING BACKUP DATASET SELECTOR & STORAGE CAPACITY FORECASTING ENGINE
+// ============================================================================
+
+let currentBackupDatasetTree = [];
+let currentBackupSelectedPaths = new Set();
+let currentBackupRemoteQuotaGB = 500;
+let currentBackupForecast = null;
+let currentBackupTelegramConfigured = false;
+let backupExpandedFolders = new Set(['public-root']);
+
+function formatBytesHelper(bytes) {
+  if (bytes === 0 || !bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function calculateSelectedBytes(items, selectedSet) {
+  let total = 0;
+  function traverse(list) {
+    if (!Array.isArray(list)) return;
+    for (const it of list) {
+      const p = it.Path || it.path;
+      const s = it.SizeBytes || it.size_bytes || 0;
+      const children = it.Children || it.children;
+      if (selectedSet.has(p)) {
+        total += s;
+      } else if (children && children.length > 0) {
+        traverse(children);
+      }
+    }
+  }
+  traverse(items);
+  return total;
+}
+
+async function loadBackupDatasets(forceRefresh = false) {
+  const treeContainer = document.getElementById('ring-datasets-tree');
+  if (!treeContainer) return;
+
+  if (forceRefresh) {
+    treeContainer.innerHTML = `
+      <div style="text-align:center; padding:30px; color:var(--text-muted);">
+        <span class="spinner"></span> Scansione cartelle pool RAID in corso...
+      </div>
+    `;
+  }
+
+  try {
+    const res = await fetch('/api/backup/datasets');
+    const json = await res.json();
+    if (json.status !== 'ok' || !json.data) {
+      treeContainer.innerHTML = `<div class="alert alert-danger" style="margin:10px;">Errore caricamento dataset: ${escapeHtml(json.message || 'Errore sconosciuto')}</div>`;
+      return;
+    }
+
+    const data = json.data;
+    currentBackupDatasetTree = data.tree || [];
+    currentBackupRemoteQuotaGB = data.remote_quota_gb || 500;
+    currentBackupForecast = data.forecast || null;
+    currentBackupTelegramConfigured = !!data.telegram_configured;
+    window.datasetsTreeLoaded = true;
+
+    currentBackupSelectedPaths.clear();
+    if (Array.isArray(data.selected_paths)) {
+      data.selected_paths.forEach(p => currentBackupSelectedPaths.add(p));
+    }
+
+    const quotaInput = document.getElementById('remote-quota-input');
+    if (quotaInput) {
+      quotaInput.value = currentBackupRemoteQuotaGB;
+    }
+
+    backupExpandedFolders.add('public-root');
+
+    renderBackupDatasetTree();
+    renderBackupForecast();
+  } catch (err) {
+    treeContainer.innerHTML = `<div class="alert alert-danger" style="margin:10px;">Impossibile contattare il server: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderBackupDatasetTree() {
+  const container = document.getElementById('ring-datasets-tree');
+  if (!container) return;
+
+  if (!currentBackupDatasetTree || currentBackupDatasetTree.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:24px; color:var(--text-muted); font-size:13px;">
+        Nessun dataset rilevato nel percorso di storage.<br>
+        Assicurati che <code>/mnt/allod-storage</code> o le cartelle dei moduli siano presenti.
+      </div>
+    `;
+    return;
+  }
+
+  const users = currentBackupDatasetTree.filter(it => it.category === 'user');
+  const publics = currentBackupDatasetTree.filter(it => it.category === 'public');
+  const modules = currentBackupDatasetTree.filter(it => it.category === 'module');
+
+  let html = '';
+
+  // 1. User Personal Shares
+  if (users.length > 0) {
+    html += `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--primary); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <span>👤</span> <span>Cartelle Personali SMB (Utenti Famiglia)</span>
+        </div>
+    `;
+    users.forEach(u => {
+      const isChecked = currentBackupSelectedPaths.has(u.path);
+      html += `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:rgba(255,255,255,0.03); border:1px solid var(--card-border); border-radius:6px; margin-bottom:6px;">
+          <label style="display:flex; align-items:center; gap:10px; margin:0; cursor:pointer; flex:1;">
+            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="onDatasetCheckboxChange('${escapeHtml(u.path)}', this.checked)" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+            <span style="font-size:16px;">📁</span>
+            <div>
+              <div style="font-weight:600; font-size:13px; color:var(--foreground);">${escapeHtml(u.name)}</div>
+              <div style="font-size:11px; color:var(--text-muted);">${escapeHtml(u.description || u.path)}</div>
+            </div>
+          </label>
+          <span class="badge badge-info font-mono" style="font-size:11px;">${u.size_formatted}</span>
+        </div>
+      `;
+    });
+    html += `</div>`;
+  }
+
+  // 2. Public Share (2-level hierarchy)
+  if (publics.length > 0) {
+    html += `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:12px; font-weight:700; text-transform:uppercase; color:#38bdf8; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <span>📂</span> <span>Cartella Condivisa Pubblica (Esplorazione Granulare)</span>
+        </div>
+    `;
+
+    publics.forEach(pub => {
+      const isPubExpanded = backupExpandedFolders.has(pub.id);
+      const isPubChecked = currentBackupSelectedPaths.has(pub.path);
+      const hasChildren = pub.children && pub.children.length > 0;
+
+      html += `
+        <div style="border:1px solid var(--card-border); border-radius:6px; background:rgba(255,255,255,0.02); margin-bottom:6px; overflow:hidden;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:rgba(255,255,255,0.03);">
+            <div style="display:flex; align-items:center; gap:8px; flex:1;">
+              ${hasChildren ? `
+                <button type="button" onclick="toggleBackupFolderExpand('${pub.id}')" style="background:none; border:none; color:var(--text-muted); font-size:11px; cursor:pointer; padding:2px 4px; border-radius:4px;" title="${isPubExpanded ? 'Chiudi' : 'Espandi'}">
+                  ${isPubExpanded ? '▼' : '▶'}
+                </button>
+              ` : '<span style="width:16px;"></span>'}
+              <label style="display:flex; align-items:center; gap:8px; margin:0; cursor:pointer; flex:1;">
+                <input type="checkbox" ${isPubChecked ? 'checked' : ''} onchange="onDatasetCheckboxChange('${escapeHtml(pub.path)}', this.checked)" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+                <span style="font-size:16px;">${isPubExpanded ? '📂' : '📁'}</span>
+                <div>
+                  <div style="font-weight:600; font-size:13px; color:var(--foreground);">${escapeHtml(pub.name)}</div>
+                  <div style="font-size:11px; color:var(--text-muted);">${escapeHtml(pub.description || pub.path)}</div>
+                </div>
+              </label>
+            </div>
+            <span class="badge badge-info font-mono" style="font-size:11px;">${pub.size_formatted}</span>
+          </div>
+      `;
+
+      if (hasChildren && isPubExpanded) {
+        html += `<div style="padding:6px 12px 10px 12px; background:rgba(0,0,0,0.15); border-top:1px solid rgba(255,255,255,0.05);">`;
+        pub.children.forEach(l1 => {
+          const isL1Expanded = backupExpandedFolders.has(l1.id);
+          const isL1Checked = currentBackupSelectedPaths.has(l1.path) || isPubChecked;
+          const hasL2 = l1.children && l1.children.length > 0;
+
+          html += `
+            <div style="margin-left:16px; margin-top:4px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:5px;">
+                <div style="display:flex; align-items:center; gap:6px; flex:1;">
+                  ${hasL2 ? `
+                    <button type="button" onclick="toggleBackupFolderExpand('${l1.id}')" style="background:none; border:none; color:var(--text-muted); font-size:10px; cursor:pointer; padding:1px 4px;" title="${isL1Expanded ? 'Chiudi' : 'Espandi'}">
+                      ${isL1Expanded ? '▼' : '▶'}
+                    </button>
+                  ` : '<span style="width:14px;"></span>'}
+                  <label style="display:flex; align-items:center; gap:8px; margin:0; cursor:pointer; flex:1;">
+                    <input type="checkbox" ${isL1Checked ? 'checked' : ''} onchange="onDatasetCheckboxChange('${escapeHtml(l1.path)}', this.checked)" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer;">
+                    <span style="font-size:14px;">${hasL2 && isL1Expanded ? '📂' : '📁'}</span>
+                    <span style="font-size:12.5px; font-weight:500; color:var(--foreground);">${escapeHtml(l1.name)}</span>
+                  </label>
+                </div>
+                <span class="badge badge-secondary font-mono" style="font-size:10.5px;">${l1.size_formatted}</span>
+              </div>
+          `;
+
+          if (hasL2 && isL1Expanded) {
+            html += `<div style="margin-left:26px; padding:4px 0;">`;
+            l1.children.forEach(l2 => {
+              const isL2Checked = currentBackupSelectedPaths.has(l2.path) || isL1Checked;
+              html += `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:5px 8px; background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.06); border-radius:4px; margin-top:3px;">
+                  <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer; flex:1;">
+                    <input type="checkbox" ${isL2Checked ? 'checked' : ''} onchange="onDatasetCheckboxChange('${escapeHtml(l2.path)}', this.checked)" style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
+                    <span style="font-size:13px;">📄</span>
+                    <span style="font-size:12px; color:var(--text-main);">${escapeHtml(l2.name)}</span>
+                  </label>
+                  <span class="badge badge-secondary font-mono" style="font-size:10px; opacity:0.85;">${l2.size_formatted}</span>
+                </div>
+              `;
+            });
+            html += `</div>`;
+          }
+
+          html += `</div>`;
+        });
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+    });
+
+    html += `</div>`;
+  }
+
+  // 3. Application Modules
+  if (modules.length > 0) {
+    html += `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:12px; font-weight:700; text-transform:uppercase; color:#c084fc; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <span>🧩</span> <span>Moduli Applicativi e Database</span>
+        </div>
+    `;
+    modules.forEach(m => {
+      const isChecked = currentBackupSelectedPaths.has(m.path);
+      let icon = '📦';
+      if (m.id.includes('photos')) icon = '📸';
+      else if (m.id.includes('cloud')) icon = '☁️';
+      else if (m.id.includes('odysseus')) icon = '🤖';
+      else if (m.id.includes('media')) icon = '🎬';
+
+      html += `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:rgba(255,255,255,0.03); border:1px solid var(--card-border); border-radius:6px; margin-bottom:6px;">
+          <label style="display:flex; align-items:center; gap:10px; margin:0; cursor:pointer; flex:1;">
+            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="onDatasetCheckboxChange('${escapeHtml(m.path)}', this.checked)" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+            <span style="font-size:16px;">${icon}</span>
+            <div>
+              <div style="font-weight:600; font-size:13px; color:var(--foreground);">${escapeHtml(m.name)}</div>
+              <div style="font-size:11px; color:var(--text-muted);">${escapeHtml(m.description || m.path)}</div>
+            </div>
+          </label>
+          <span class="badge badge-info font-mono" style="font-size:11px;">${m.size_formatted}</span>
+        </div>
+      `;
+    });
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderBackupForecast() {
+  const currentValEl = document.getElementById('fc-val-current');
+  const usedPctEl = document.getElementById('fc-val-used-pct');
+  const y1El = document.getElementById('fc-val-1y');
+  const growthEl = document.getElementById('fc-val-growth');
+  const y5El = document.getElementById('fc-val-5y');
+  const runwayEl = document.getElementById('fc-val-runway');
+  const runwayPill = document.getElementById('forecast-runway-pill');
+  const progressBar = document.getElementById('fc-progress-bar');
+  const progressLabel = document.getElementById('fc-progress-label');
+  const tgBadge = document.getElementById('fc-tg-badge');
+  const totalBadge = document.getElementById('dataset-total-size-badge');
+
+  if (!currentValEl) return;
+
+  const totalBytes = calculateSelectedBytes(currentBackupDatasetTree, currentBackupSelectedPaths);
+  if (totalBadge) totalBadge.textContent = formatBytesHelper(totalBytes);
+
+  const quotaBytes = (currentBackupRemoteQuotaGB || 500) * 1024 * 1024 * 1024;
+  const usedPct = quotaBytes > 0 ? (totalBytes / quotaBytes) * 100 : 0;
+
+  currentValEl.textContent = formatBytesHelper(totalBytes);
+  usedPctEl.textContent = `${usedPct.toFixed(1)}% di ${currentBackupRemoteQuotaGB} GB`;
+
+  let annualGrowth = 0;
+  if (currentBackupForecast && currentBackupForecast.annual_growth_bytes > 0 && currentBackupForecast.current_size_bytes > 0) {
+    const ratio = currentBackupForecast.annual_growth_bytes / currentBackupForecast.current_size_bytes;
+    annualGrowth = Math.round(totalBytes * ratio);
+  } else if (totalBytes > 0) {
+    annualGrowth = Math.round(totalBytes / 4);
+  }
+
+  const fc1Y = totalBytes + annualGrowth;
+  const fc5Y = totalBytes + Math.round(annualGrowth * 5 * 1.1);
+
+  y1El.textContent = formatBytesHelper(fc1Y);
+  growthEl.textContent = `+${formatBytesHelper(annualGrowth)} / anno`;
+
+  y5El.textContent = formatBytesHelper(fc5Y);
+
+  const remainingQuotaBytes = Math.max(0, quotaBytes - totalBytes);
+  let runwayMonths = annualGrowth > 0 ? Math.floor((remainingQuotaBytes / annualGrowth) * 12) : 999;
+  if (runwayMonths > 120) runwayMonths = 120;
+
+  let runwayStr = '';
+  if (runwayMonths >= 12) {
+    const yrs = Math.floor(runwayMonths / 12);
+    const m = runwayMonths % 12;
+    runwayStr = m > 0 ? `~${yrs} anni e ${m} mesi` : `~${yrs} anni`;
+  } else if (runwayMonths > 0) {
+    runwayStr = `~${runwayMonths} mesi`;
+  } else {
+    runwayStr = 'Quota esaurita!';
+  }
+
+  runwayEl.textContent = `Autonomia: ${runwayStr}`;
+
+  const clampPct = Math.min(100, Math.max(0, usedPct));
+  if (progressBar) {
+    progressBar.style.width = `${clampPct.toFixed(1)}%`;
+    if (clampPct >= 90 || (runwayMonths <= 1 && runwayMonths >= 0)) {
+      progressBar.style.background = '#ef4444';
+    } else if (clampPct >= 80 || (runwayMonths <= 6 && runwayMonths >= 0)) {
+      progressBar.style.background = '#eab308';
+    } else {
+      progressBar.style.background = '#22c55e';
+    }
+  }
+  if (progressLabel) {
+    progressLabel.textContent = `${clampPct.toFixed(1)}% (${formatBytesHelper(totalBytes)} / ${currentBackupRemoteQuotaGB} GB)`;
+  }
+
+  if (runwayPill) {
+    if (clampPct >= 90 || (runwayMonths <= 1 && runwayMonths >= 0)) {
+      runwayPill.className = 'badge badge-danger';
+      runwayPill.textContent = `🔴 Allerta Rossa (${runwayStr})`;
+    } else if (clampPct >= 80 || (runwayMonths <= 6 && runwayMonths >= 0)) {
+      runwayPill.className = 'badge badge-warning';
+      runwayPill.textContent = `🟡 Allerta Gialla (${runwayStr})`;
+    } else {
+      runwayPill.className = 'badge badge-success';
+      runwayPill.textContent = `🟢 Quota OK (${runwayStr})`;
+    }
+  }
+
+  if (tgBadge) {
+    if (currentBackupTelegramConfigured) {
+      tgBadge.className = 'badge badge-success';
+      tgBadge.innerHTML = '🟢 Telegram Collegato';
+      tgBadge.title = 'Bot e Chat ID verificati in Watch Sentinel';
+    } else {
+      tgBadge.className = 'badge badge-secondary';
+      tgBadge.innerHTML = '⚪ Configura in Sentinel';
+      tgBadge.title = 'Inserisci Bot Token e Chat ID nella scheda Notifiche per ricevere avvisi automatici';
+    }
+  }
+}
+
+function onDatasetCheckboxChange(path, checked) {
+  if (checked) {
+    currentBackupSelectedPaths.add(path);
+  } else {
+    currentBackupSelectedPaths.delete(path);
+  }
+  renderBackupForecast();
+}
+
+function toggleBackupFolderExpand(folderId) {
+  if (backupExpandedFolders.has(folderId)) {
+    backupExpandedFolders.delete(folderId);
+  } else {
+    backupExpandedFolders.add(folderId);
+  }
+  renderBackupDatasetTree();
+}
+
+function setQuotaPreset(gb) {
+  const quotaInput = document.getElementById('remote-quota-input');
+  if (quotaInput) {
+    quotaInput.value = gb;
+  }
+  currentBackupRemoteQuotaGB = gb;
+  renderBackupForecast();
+}
+
+function onQuotaChange() {
+  const quotaInput = document.getElementById('remote-quota-input');
+  const gb = parseInt(quotaInput ? quotaInput.value : '500', 10) || 500;
+  currentBackupRemoteQuotaGB = gb;
+  renderBackupForecast();
+}
+
+async function saveDatasetSelection() {
+  const saveBtn = document.getElementById('btn-save-datasets');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '⏳ Salvataggio...';
+  }
+
+  const paths = Array.from(currentBackupSelectedPaths);
+  const quotaInput = document.getElementById('remote-quota-input');
+  const quotaGB = parseInt(quotaInput ? quotaInput.value : '500', 10) || 500;
+
+  try {
+    const res = await fetch('/api/backup/datasets/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paths: paths,
+        remote_quota_gb: quotaGB
+      })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      showAlert(json.message || 'Selezione salvata con successo!', 'success');
+      if (json.data) {
+        currentBackupForecast = json.data;
+        renderBackupForecast();
+      }
+    } else {
+      showAlert('Errore salvataggio selezione: ' + json.message, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di comunicazione: ' + err.message, 'danger');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '💾 Salva Selezione';
+    }
+  }
+}
+
+async function triggerTelegramAlertCheck(forceTest) {
+  try {
+    const res = await fetch('/api/backup/forecast/check-alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force_test: forceTest })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      showAlert(json.message || 'Verifica completata con successo!', 'success');
+      if (json.data) {
+        currentBackupForecast = json.data;
+        renderBackupForecast();
+      }
+    } else {
+      showAlert('Errore alert Telegram: ' + json.message, 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di comunicazione: ' + err.message, 'danger');
+  }
+}
+
+function openDisasterRecoveryModal() {
+  const modal = document.getElementById('disaster-recovery-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeDisasterRecoveryModal() {
+  const modal = document.getElementById('disaster-recovery-modal');
+  if (modal) modal.classList.add('hidden');
 }
 
 function renderResilience() {
@@ -6314,3 +6781,17 @@ window.copyVaultCloudInit = copyVaultCloudInit;
 window.downloadVaultCloudInit = downloadVaultCloudInit;
 window.copyVaultCompose = copyVaultCompose;
 window.downloadVaultCompose = downloadVaultCompose;
+
+// Ring Backup Datasets, Forecasting & Disaster Recovery Exports
+window.loadBackupDatasets = loadBackupDatasets;
+window.renderBackupDatasetTree = renderBackupDatasetTree;
+window.renderBackupForecast = renderBackupForecast;
+window.onDatasetCheckboxChange = onDatasetCheckboxChange;
+window.toggleBackupFolderExpand = toggleBackupFolderExpand;
+window.setQuotaPreset = setQuotaPreset;
+window.onQuotaChange = onQuotaChange;
+window.saveDatasetSelection = saveDatasetSelection;
+window.triggerTelegramAlertCheck = triggerTelegramAlertCheck;
+window.openDisasterRecoveryModal = openDisasterRecoveryModal;
+window.closeDisasterRecoveryModal = closeDisasterRecoveryModal;
+

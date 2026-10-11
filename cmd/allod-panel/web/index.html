@@ -550,6 +550,9 @@ systemctl --user enable --now allod-panel</pre>
             <p class="text-muted" data-i18n="ring_header_desc">Each critical dataset is stored across 2 independent remote peer replicas.</p>
           </div>
           <div style="display:flex; gap:8px;">
+            <button class="btn btn-outline-warning" onclick="openDisasterRecoveryModal()">
+              <span class="icon">🆘</span> <span>Disaster Recovery & Restore</span>
+            </button>
             <button class="btn btn-primary" onclick="openVaultModal()">
               <span class="icon">➕</span> <span>Collega Vault Remoto</span>
             </button>
@@ -561,6 +564,135 @@ systemctl --user enable --now allod-panel</pre>
 
         <!-- Live Status & Quick Action for Local Backup Receiver -->
         <div id="ring-backup-service-banner" class="mb-3"></div>
+
+        <!-- Granular Dataset Selector & Storage Capacity Forecast -->
+        <div class="grid-2col mb-4">
+          <!-- Card 1: Dataset Selector -->
+          <div class="card" style="display:flex; flex-direction:column;">
+            <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h3 style="display:flex; align-items:center; gap:8px;">
+                  <span>🗂️</span> <span>Selezione Granulare Dataset (Pool RAID)</span>
+                </h3>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                  Scegli cosa salvare nel backup cifrato remoto su <code>/mnt/allod-storage</code>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-outline-secondary" onclick="loadBackupDatasets(true)" title="Ricarica scansione cartelle">
+                🔄 Riscansiona
+              </button>
+            </div>
+            <div class="card-body" style="flex:1; display:flex; flex-direction:column; padding:16px;">
+              <div id="ring-datasets-tree" style="flex:1; max-height:480px; overflow-y:auto; padding-right:4px;">
+                <!-- Rendered by JS -->
+                <div style="text-align:center; padding:30px; color:var(--text-muted);">
+                  <span class="spinner"></span> Caricamento albero dataset in corso...
+                </div>
+              </div>
+              
+              <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div>
+                  <span style="font-size:12px; color:var(--text-muted);">Spazio Totale Selezionato:</span>
+                  <div style="font-size:16px; font-weight:700; color:var(--primary);" id="dataset-total-size-badge">-- GB</div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn btn-primary" id="btn-save-datasets" onclick="saveDatasetSelection()">
+                    💾 Salva Selezione
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Time Machine & Capacity Forecast -->
+          <div class="card" style="display:flex; flex-direction:column;">
+            <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h3 style="display:flex; align-items:center; gap:8px;">
+                  <span>🔮</span> <span>Macchina del Tempo & Quota Remota</span>
+                </h3>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                  Previsione di crescita retroattiva (+1 e +5 anni) e allarmi quota Telegram
+                </div>
+              </div>
+              <span id="forecast-runway-pill" class="badge badge-success">Calcolo in corso...</span>
+            </div>
+            <div class="card-body" style="flex:1; display:flex; flex-direction:column; padding:16px; gap:16px;">
+              <!-- Remote Quota Input & Selector -->
+              <div style="background:rgba(15,23,42,0.45); border:1px solid var(--card-border); border-radius:8px; padding:12px 14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+                  <label for="remote-quota-input" style="font-size:13px; font-weight:600; margin:0;">
+                    Quota Vault Remoto Assegnata:
+                  </label>
+                  <div style="display:flex; gap:6px;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setQuotaPreset(250)" style="font-size:11px; padding:2px 6px;">250 GB</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setQuotaPreset(500)" style="font-size:11px; padding:2px 6px;">500 GB</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setQuotaPreset(1000)" style="font-size:11px; padding:2px 6px;">1 TB</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setQuotaPreset(2000)" style="font-size:11px; padding:2px 6px;">2 TB</button>
+                  </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <input type="number" id="remote-quota-input" class="form-control" style="max-width:140px; font-weight:bold;" min="10" step="50" value="500" onchange="onQuotaChange()">
+                  <span style="font-size:13px; color:var(--text-muted);">GB concordati con il peer remoto</span>
+                </div>
+              </div>
+
+              <!-- Forecast Timeline Cards -->
+              <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px;">
+                <div style="background:rgba(30,41,59,0.5); border:1px solid var(--card-border); border-radius:8px; padding:12px; text-align:center;">
+                  <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Oggi (Selezionato)</div>
+                  <div id="fc-val-current" style="font-size:17px; font-weight:700; color:var(--foreground); margin:6px 0;">--</div>
+                  <div id="fc-val-used-pct" style="font-size:11.5px; color:var(--text-muted);">--% quota</div>
+                </div>
+
+                <div style="background:rgba(30,41,59,0.5); border:1px solid var(--card-border); border-radius:8px; padding:12px; text-align:center;">
+                  <div style="font-size:11px; text-transform:uppercase; color:#38bdf8; font-weight:600;">Tra 1 Anno (+1Y)</div>
+                  <div id="fc-val-1y" style="font-size:17px; font-weight:700; color:#38bdf8; margin:6px 0;">--</div>
+                  <div id="fc-val-growth" style="font-size:11.5px; color:var(--text-muted);">+-- / anno</div>
+                </div>
+
+                <div style="background:rgba(30,41,59,0.5); border:1px solid var(--card-border); border-radius:8px; padding:12px; text-align:center;">
+                  <div style="font-size:11px; text-transform:uppercase; color:#c084fc; font-weight:600;">Tra 5 Anni (+5Y)</div>
+                  <div id="fc-val-5y" style="font-size:17px; font-weight:700; color:#c084fc; margin:6px 0;">--</div>
+                  <div id="fc-val-runway" style="font-size:11.5px; color:var(--text-muted);">Autonomia: --</div>
+                </div>
+              </div>
+
+              <!-- Quota Saturation Progress Bar -->
+              <div>
+                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                  <span>Saturazione Quota Remota</span>
+                  <span id="fc-progress-label">0%</span>
+                </div>
+                <div style="width:100%; height:8px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden;">
+                  <div id="fc-progress-bar" style="width:0%; height:100%; background:#22c55e; transition: width 0.3s ease, background 0.3s ease;"></div>
+                </div>
+              </div>
+
+              <!-- Telegram Quota Alerts Rules & Test Box -->
+              <div style="background:rgba(15,23,42,0.45); border:1px solid var(--card-border); border-radius:8px; padding:12px 14px; margin-top:auto;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                  <strong style="font-size:12.5px; display:flex; align-items:center; gap:6px;">
+                    <span>📲</span> <span>Notifiche Quota Telegram</span>
+                  </strong>
+                  <span id="fc-tg-badge" class="badge badge-secondary">Verifica...</span>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); line-height:1.4; margin-bottom:10px;">
+                  • 🟡 <b>Allerta Gialla</b> (quota &ge; 80% o &le; 6 mesi): Notifica <b>Mensile</b><br>
+                  • 🔴 <b>Allerta Rossa</b> (quota &ge; 90% o &le; 1 mese): Notifica <b>Settimanale</b>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                  <button type="button" class="btn btn-sm btn-outline-info" onclick="triggerTelegramAlertCheck(true)" style="font-size:11.5px;">
+                    🚀 Invia Test Telegram Ora
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" onclick="triggerTelegramAlertCheck(false)" style="font-size:11.5px;">
+                    🔍 Verifica Soglie
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div class="grid-2col">
           <div class="card">
@@ -2349,6 +2481,92 @@ sudo systemctl enable --now allod-helperd</pre>
 
       <div class="modal-footer" style="display:flex; justify-content:flex-end;">
         <button type="button" class="btn btn-secondary" onclick="closeVaultModal()">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DISASTER RECOVERY & RESTORE GUIDE -->
+  <div id="disaster-recovery-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:760px; max-height:92vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">🆘</span>
+          <div>
+            <h3 style="margin:0; font-size:16px;">Disaster Recovery & Procedura di Ripristino</h3>
+            <div style="font-size:12px; color:var(--text-muted);">Come recuperare i tuoi dati in caso di guasto hardware completo o distruzione del nodo</div>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeDisasterRecoveryModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto; flex:1; padding:18px; line-height:1.5;">
+        <!-- Card Filosofia -->
+        <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:14px; margin-bottom:16px;">
+          <strong style="color:var(--primary); font-size:13.5px; display:flex; align-items:center; gap:6px;">
+            <span>🛡️</span> <span>Principio Allod: Sistema Operativo Sacrificabile, Dati Immutabili</span>
+          </strong>
+          <p style="font-size:12.5px; color:var(--text-muted); margin:6px 0 0 0;">
+            L'SSD del sistema operativo (<code>/</code>) non contiene nulla di insostituibile. Tutti i dati preziosi (foto originali Immich, cartelle personali SMB degli utenti della famiglia, database e memorie IA) risiedono sul pool Btrfs RAID (<code>/mnt/allod-storage</code>) e vengono replicati nei Vault remoti cifrati del Ring.
+          </p>
+        </div>
+
+        <!-- Scenario 1 -->
+        <div style="background:rgba(15,23,42,0.5); border:1px solid var(--card-border); border-radius:8px; padding:14px; margin-bottom:14px;">
+          <strong style="color:#22c55e; font-size:13px; display:flex; align-items:center; gap:6px;">
+            <span>🟢</span> <span>Scenario 1: Guasto di un Singolo Disco RAID</span>
+          </strong>
+          <p style="font-size:12px; color:var(--text-muted); margin:4px 0 8px 0;">
+            Il server Allod continua a funzionare regolarmente in modalità degradata senza alcuna perdita di file o interruzione dei servizi.
+          </p>
+          <div style="font-size:12px; background:#0f172a; padding:10px 12px; border-radius:6px; border-left:3px solid #22c55e;">
+            <b>Azione:</b> Sostituisci il disco fisico rotto con uno nuovo e apri la scheda <b>Dischi & Storage</b> del pannello per avviare la ricostruzione automatica dello specchio Btrfs.
+          </div>
+        </div>
+
+        <!-- Scenario 2: Disaster Recovery -->
+        <div style="background:rgba(15,23,42,0.5); border:1px solid var(--card-border); border-radius:8px; padding:14px; margin-bottom:14px;">
+          <strong style="color:#ef4444; font-size:13px; display:flex; align-items:center; gap:6px;">
+            <span>🔴</span> <span>Scenario 2: Distruzione Completa del Server / Furto / Incendio</span>
+          </strong>
+          <p style="font-size:12px; color:var(--text-muted); margin:4px 0 10px 0;">
+            In caso di perdita totale dell'hardware, ripristini l'intero Allod su un nuovo mini-PC o server in <b>4 semplici passi</b>:
+          </p>
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="background:#0f172a; padding:10px 12px; border-radius:6px;">
+              <strong style="color:var(--foreground); font-size:12px;">Passo 1: Installa Allod sul nuovo server</strong>
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">Installa Ubuntu Server 24.04 pulito e scarica l'orchestratore Allod:</div>
+              <pre style="background:#020617; padding:8px; border-radius:4px; font-size:11px; margin:4px 0 0 0; color:#38bdf8;">curl -sSL https://raw.githubusercontent.com/asfaltobollente/allod/main/scripts/install.sh | sudo bash</pre>
+            </div>
+
+            <div style="background:#0f172a; padding:10px 12px; border-radius:6px;">
+              <strong style="color:var(--foreground); font-size:12px;">Passo 2: Riconnettiti alla rete privata NetBird</strong>
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">Entra nella VPN mesh per vedere subito i nodi amici del Ring:</div>
+              <pre style="background:#020617; padding:8px; border-radius:4px; font-size:11px; margin:4px 0 0 0; color:#38bdf8;">sudo netbird up --setup-key &lt;TUA_SETUP_KEY&gt;</pre>
+            </div>
+
+            <div style="background:#0f172a; padding:10px 12px; border-radius:6px;">
+              <strong style="color:var(--foreground); font-size:12px;">Passo 3: Esegui il Restore dello Snapshot cifrato da Restic</strong>
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">Tira giù lo snapshot più recente dal Vault remoto del tuo amico direttamente su <code>/mnt/allod-storage</code>:</div>
+              <pre style="background:#020617; padding:8px; border-radius:4px; font-size:11px; margin:4px 0 0 0; color:#38bdf8;">export RESTIC_PASSWORD="&lt;password_cifratura&gt;"
+restic -r rest:http://&lt;ip_wireguard_amico&gt;:8000/ restore latest --target /mnt/allod-storage</pre>
+            </div>
+
+            <div style="background:#0f172a; padding:10px 12px; border-radius:6px;">
+              <strong style="color:var(--foreground); font-size:12px;">Passo 4: Riavvia tutti i Moduli</strong>
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">Allod riattiva i container Podman agganciando automaticamente i dati ripristinati:</div>
+              <pre style="background:#020617; padding:8px; border-radius:4px; font-size:11px; margin:4px 0 0 0; color:#38bdf8;">allod apply</pre>
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size:12px; color:var(--text-muted); text-align:center;">
+          💡 <i>Tutti gli snapshot sono crittografati lato client con chiave AES-256: l'amico che ospita il vault non può leggere i tuoi dati.</i>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display:flex; justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeDisasterRecoveryModal()">Chiudi</button>
       </div>
     </div>
   </div>
