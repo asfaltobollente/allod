@@ -915,10 +915,11 @@ func (s *Server) processRequest(req Request) Response {
 			_ = exec.Command(chmodBin, "2775", "/mnt/allod-storage/shares").Run()
 
 			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
-			_ = os.MkdirAll(userSharePath, 0700)
-			_ = exec.Command(chmodBin, "2700", userSharePath).Run()
+			_ = os.MkdirAll(userSharePath, 0750)
+			_ = exec.Command(chmodBin, "2750", userSharePath).Run()
 			chownBin := resolveExecutable("chown", "/bin/chown", "/usr/bin/chown")
-			_ = exec.Command(chownBin, "-R", fmt.Sprintf("%s:%s", username, username), userSharePath).Run()
+			_ = exec.Command(chownBin, "-R", fmt.Sprintf("%s:allod", username), userSharePath).Run()
+			_ = exec.Command(chmodBin, "-R", "g+rX", userSharePath).Run()
 		}
 		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("useradd -M -s /usr/sbin/nologin %s", username)}}
 
