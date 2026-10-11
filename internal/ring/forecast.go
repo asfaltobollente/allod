@@ -248,10 +248,11 @@ func ScanDatasetTree(storageRoot string, selectedPaths map[string]bool) []*Datas
 		})
 	}
 
-	// 3c. Odysseus (AI Workspace) - ChromaDB, logs, and app.db
-	odysseusPath := filepath.Join(storageRoot, "odysseus", "data")
+	// 3c. Odysseus (AI Workspace) - ChromaDB, secrets, logs, and app.db
+	odysseusPath := filepath.Join(storageRoot, "odysseus")
 	if _, err := os.Stat(odysseusPath); err == nil {
 		oSize := FastDirSize(odysseusPath)
+		oSel := selectedPaths[odysseusPath] || selectedPaths[filepath.Join(odysseusPath, "data")]
 		items = append(items, &DatasetItem{
 			ID:            "module-odysseus",
 			Name:          "Odysseus AI Workspace (Memoria & Chat)",
@@ -260,8 +261,8 @@ func ScanDatasetTree(storageRoot string, selectedPaths map[string]bool) []*Datas
 			Level:         0,
 			SizeBytes:     oSize,
 			SizeFormatted: FormatBytes(oSize),
-			Selected:      selectedPaths[odysseusPath],
-			Description:   "Memoria vettoriale ChromaDB, storico conversazioni e database locale",
+			Selected:      oSel,
+			Description:   "Intero workspace: memoria vettoriale ChromaDB, storico conversazioni, database e configurazione",
 		})
 	}
 
