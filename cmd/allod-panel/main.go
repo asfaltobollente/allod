@@ -122,6 +122,24 @@ func getStorageRoot() string {
 	return storagePath
 }
 
+func getValidFamilyUsernames(st *state.Store) []string {
+	if st == nil {
+		return nil
+	}
+	members, err := st.ListFamilyMembers()
+	if err != nil {
+		return nil
+	}
+	var usernames []string
+	for _, m := range members {
+		u := strings.TrimSpace(m.Username)
+		if u != "" && !strings.Contains(u, ".deleted") {
+			usernames = append(usernames, u)
+		}
+	}
+	return usernames
+}
+
 func getRingTopology(cfg *config.Config) (*ring.RingTopology, bool) {
 	if _, err := os.Stat("ring.yaml"); err == nil {
 		topo, err := ring.LoadTopology("ring.yaml")
@@ -4910,7 +4928,8 @@ runcmd:
 		}
 
 		storageRoot := getStorageRoot()
-		tree := ring.ScanDatasetTree(storageRoot, selectedMap)
+		validUsers := getValidFamilyUsernames(st)
+		tree := ring.ScanDatasetTree(storageRoot, validUsers, selectedMap)
 
 		var activePaths []string
 		var collectSelected func(items []*ring.DatasetItem)
@@ -5066,7 +5085,8 @@ runcmd:
 			_ = json.Unmarshal([]byte(selPathsJSON), &selectedPaths)
 		}
 		if len(selectedPaths) == 0 {
-			items := ring.ScanDatasetTree(getStorageRoot(), nil)
+			validUsers := getValidFamilyUsernames(st)
+			items := ring.ScanDatasetTree(getStorageRoot(), validUsers, nil)
 			var collect func(its []*ring.DatasetItem)
 			collect = func(its []*ring.DatasetItem) {
 				for _, it := range its {
@@ -5459,7 +5479,8 @@ func startBackupQuotaWatcher(dbPath string) {
 			_ = json.Unmarshal([]byte(selPathsJSON), &selectedPaths)
 		}
 		if len(selectedPaths) == 0 {
-			items := ring.ScanDatasetTree(getStorageRoot(), nil)
+			validUsers := getValidFamilyUsernames(st)
+			items := ring.ScanDatasetTree(getStorageRoot(), validUsers, nil)
 			var collect func(its []*ring.DatasetItem)
 			collect = func(its []*ring.DatasetItem) {
 				for _, it := range its {

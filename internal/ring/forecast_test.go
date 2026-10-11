@@ -48,7 +48,17 @@ func TestScanDatasetTree(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(tempDir, "media", "config"), 0755)
 	_ = os.WriteFile(filepath.Join(tempDir, "media", "config", "conf.xml"), []byte("xml-config"), 0644)
 
-	items := ScanDatasetTree(tempDir, nil)
+	// Add dummy bind-mounted photos folder inside davide to verify it is NOT counted in personal size
+	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "davide", "photos"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "shares", "davide", "photos", "heavy_photo.raw"), make([]byte, 5*1024*1024), 0644)
+
+	// Add a deleted user and a generic media share inside shares/ to ensure they are excluded
+	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "mario.deleted.20260911171325"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "shares", "mario.deleted.20260911171325", "dump.bin"), []byte("dump"), 0644)
+	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "film"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "shares", "film", "movie.mkv"), []byte("movie"), 0644)
+
+	items := ScanDatasetTree(tempDir, []string{"davide"}, nil)
 	if len(items) == 0 {
 		t.Fatalf("expected scanned dataset items, got empty")
 	}
@@ -61,9 +71,16 @@ func TestScanDatasetTree(t *testing.T) {
 	for _, it := range items {
 		if it.ID == "user-davide" {
 			foundUser = true
-			if it.SizeBytes <= 0 {
-				t.Errorf("expected user-davide to have size > 0")
+			// Size must be exactly len("davide-data") = 11 bytes, NOT 5MB+ because photos was skipped!
+			if it.SizeBytes != int64(len("davide-data")) {
+				t.Errorf("expected user-davide to skip photos bind mount (size=%d, expected=%d)", it.SizeBytes, len("davide-data"))
 			}
+		}
+		if it.ID == "user-mario.deleted.20260911171325" {
+			t.Errorf("deleted user should not be present in dataset items")
+		}
+		if it.ID == "user-film" {
+			t.Errorf("generic share 'film' should not be listed under user personal shares")
 		}
 		if it.ID == "public-root" {
 			foundPublic = true
