@@ -334,6 +334,13 @@ func getStorageInfo(modID string) (string, string, int64, bool, []VolumeMountInf
 			{HostPath: filepath.Join(modPath, "data"), ContainerPath: "/media"},
 			{HostPath: filepath.Join(modPath, "config"), ContainerPath: "/config"},
 		}
+	case "odysseus":
+		mounts = []VolumeMountInfo{
+			{HostPath: filepath.Join(modPath, "data"), ContainerPath: "/app/data"},
+			{HostPath: filepath.Join(modPath, "chroma"), ContainerPath: "/chroma/chroma"},
+			{HostPath: filepath.Join(modPath, "secrets"), ContainerPath: "/secrets"},
+			{HostPath: filepath.Join(modPath, "logs"), ContainerPath: "/app/logs"},
+		}
 	default:
 		mounts = []VolumeMountInfo{
 			{HostPath: modPath, ContainerPath: "/data"},
