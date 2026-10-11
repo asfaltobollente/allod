@@ -2851,6 +2851,48 @@ function showAlert(msg, type) {
   setTimeout(() => banner.classList.add('hidden'), 5000);
 }
 
+function showToast(msg, type = 'info') {
+  if (typeof showAlert === 'function') {
+    showAlert(msg, type);
+  }
+
+  let container = document.getElementById('allod-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'allod-toast-container';
+    container.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:999999; display:flex; flex-direction:column; gap:8px; pointer-events:none;';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  const bgColors = {
+    success: 'rgba(16, 185, 129, 0.95)',
+    error: 'rgba(239, 68, 68, 0.95)',
+    danger: 'rgba(239, 68, 68, 0.95)',
+    warning: 'rgba(245, 158, 11, 0.95)',
+    info: 'rgba(14, 165, 233, 0.95)'
+  };
+  const color = bgColors[type] || bgColors.info;
+  const icon = type === 'success' ? '✓' : (type === 'error' || type === 'danger' ? '✗' : (type === 'warning' ? '⚠' : 'ℹ'));
+
+  toast.style.cssText = `background:${color}; color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:600; box-shadow:0 10px 25px rgba(0,0,0,0.4); display:flex; align-items:center; gap:8px; pointer-events:auto; transition:opacity 0.3s ease, transform 0.3s ease; opacity:0; transform:translateY(10px); backdrop-filter:blur(8px); max-width:380px;`;
+  toast.textContent = `${icon} ${msg}`;
+
+  container.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 300);
+  }, 4000);
+}
+
 function closeDiagModal() {
   const modal = document.getElementById('diagnostics-modal');
   if (modal) modal.classList.add('hidden');
@@ -6473,7 +6515,11 @@ async function testNetBirdAPI() {
       resultDiv.style.border = '1px solid rgba(16,185,129,0.3)';
       resultDiv.style.color = '#34d399';
       resultDiv.textContent = `✓ Connessione riuscita! Account: ${email} (${count} utenti rilevati).`;
-      showToast('Connessione NetBird API verificata con successo!', 'success');
+      try {
+        showToast('Connessione NetBird API verificata con successo!', 'success');
+      } catch (toastErr) {
+        console.warn('Toast error:', toastErr);
+      }
     } else {
       resultDiv.style.background = 'rgba(239,68,68,0.1)';
       resultDiv.style.border = '1px solid rgba(239,68,68,0.3)';
