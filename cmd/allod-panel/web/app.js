@@ -6375,8 +6375,15 @@ let vaultDebounceTimer = null;
 // --- NetBird API Modal Functions ---
 async function openNetBirdAPIModal() {
   const modal = document.getElementById('netbird-api-modal');
-  if (!modal) return;
+  if (!modal) {
+    console.error('Modal netbird-api-modal non trovato nel DOM');
+    if (typeof showAlert === 'function') {
+      showAlert('Modale NetBird API non trovato nel DOM. Prova a ricaricare la pagina con Ctrl+F5.', 'warning');
+    }
+    return;
+  }
   modal.classList.remove('hidden');
+  modal.style.display = 'flex';
 
   const testResult = document.getElementById('nb-api-test-result');
   if (testResult) testResult.classList.add('hidden');
@@ -6424,7 +6431,10 @@ async function openNetBirdAPIModal() {
 
 function closeNetBirdAPIModal() {
   const modal = document.getElementById('netbird-api-modal');
-  if (modal) modal.classList.add('hidden');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+  }
 }
 
 function toggleNetBirdTokenVisibility() {
@@ -6524,8 +6534,15 @@ async function deleteNetBirdAPI() {
 // --- Vault Remote Modal Functions (Two-Way Design) ---
 async function openVaultModal() {
   const modal = document.getElementById('vault-remote-modal');
-  if (!modal) return;
+  if (!modal) {
+    console.error('Modal vault-remote-modal non trovato nel DOM');
+    if (typeof showAlert === 'function') {
+      showAlert('Modale Vault non trovato nel DOM. Prova a ricaricare la pagina con Ctrl+F5.', 'warning');
+    }
+    return;
+  }
   modal.classList.remove('hidden');
+  modal.style.display = 'flex';
 
   switchVaultTab('vps');
 
@@ -6584,7 +6601,10 @@ async function openVaultModal() {
 
 function closeVaultModal() {
   const modal = document.getElementById('vault-remote-modal');
-  if (modal) modal.classList.add('hidden');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+  }
 }
 
 function switchVaultTab(tab) {
