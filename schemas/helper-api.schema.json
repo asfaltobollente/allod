@@ -28,6 +28,7 @@
             "service.restart",
             "storage.init",
             "storage.diagnostics",
+            "storage.scan_datasets",
             "network.netbird_status",
             "network.netbird_cli",
             "network.netbird_up",

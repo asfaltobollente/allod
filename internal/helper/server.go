@@ -23,6 +23,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/asfaltobollente/allod/internal/ring"
 	"github.com/google/uuid"
 )
 
@@ -41,6 +42,7 @@ var AllowedActions = []string{
 	"service.restart",
 	"storage.init",
 	"storage.diagnostics",
+	"storage.scan_datasets",
 	"network.netbird_status",
 	"network.netbird_cli",
 	"network.netbird_up",
@@ -957,12 +959,13 @@ func (s *Server) processRequest(req Request) Response {
 			_ = exec.Command(chmodBin, "2775", "/mnt/allod-storage/shares").Run()
 			addUserToAllodData(username)
 
-			// Ensure user directory /mnt/allod-storage/shares/<username> exists with 2700
+			// Ensure user directory /mnt/allod-storage/shares/<username> exists with 2750 <user>:allod
 			userSharePath := filepath.Join("/mnt/allod-storage/shares", username)
-			_ = os.MkdirAll(userSharePath, 0700)
-			_ = exec.Command(chmodBin, "2700", userSharePath).Run()
+			_ = os.MkdirAll(userSharePath, 0750)
+			_ = exec.Command(chmodBin, "2750", userSharePath).Run()
 			chownBin := resolveExecutable("chown", "/bin/chown", "/usr/bin/chown")
-			_ = exec.Command(chownBin, "-R", fmt.Sprintf("%s:%s", username, username), userSharePath).Run()
+			_ = exec.Command(chownBin, "-R", fmt.Sprintf("%s:allod", username), userSharePath).Run()
+			_ = exec.Command(chmodBin, "-R", "g+rX", userSharePath).Run()
 
 			// Ensure private share configuration in /etc/samba/smb.conf
 			smbConf := "/etc/samba/smb.conf"
@@ -1230,6 +1233,77 @@ func (s *Server) processRequest(req Request) Response {
 			Plan: []string{
 				fmt.Sprintf("btrfs filesystem usage %s", mountPoint),
 				fmt.Sprintf("btrfs device stats %s", mountPoint),
+			},
+		}
+
+	case "storage.scan_datasets":
+		AutoHealStoragePermissions()
+
+		storageRoot := getStorageBaseDir()
+		if sRoot, ok := req.Args["storage_root"].(string); ok && sRoot != "" && isAllowedPath(sRoot) {
+			storageRoot = sRoot
+		}
+
+		var validUsers []string
+		if vu, ok := req.Args["valid_users"].([]interface{}); ok {
+			for _, u := range vu {
+				if s, okS := u.(string); okS {
+					validUsers = append(validUsers, s)
+				}
+			}
+		}
+
+		selectedMap := make(map[string]bool)
+		if sp, ok := req.Args["selected_paths"].([]interface{}); ok {
+			for _, p := range sp {
+				if s, okS := p.(string); okS {
+					selectedMap[s] = true
+				}
+			}
+		}
+
+		remoteQuotaGB := 500
+		if rq, ok := req.Args["remote_quota_gb"].(float64); ok && rq > 0 {
+			remoteQuotaGB = int(rq)
+		} else if rqInt, okI := req.Args["remote_quota_gb"].(int); okI && rqInt > 0 {
+			remoteQuotaGB = rqInt
+		}
+
+		tree := ring.ScanDatasetTree(storageRoot, validUsers, selectedMap)
+
+		var activePaths []string
+		var collectSelected func(items []*ring.DatasetItem)
+		collectSelected = func(items []*ring.DatasetItem) {
+			for _, it := range items {
+				if it.Selected {
+					activePaths = append(activePaths, it.Path)
+				}
+				if len(it.Children) > 0 {
+					collectSelected(it.Children)
+				}
+			}
+		}
+		collectSelected(tree)
+
+		fc := ring.CalculateForecast(activePaths, remoteQuotaGB)
+
+		resMap := map[string]interface{}{
+			"storage_root":   storageRoot,
+			"tree":           tree,
+			"selected_paths": activePaths,
+			"forecast":       fc,
+		}
+		resBytes, errM := json.Marshal(resMap)
+		if errM != nil {
+			return Response{Ok: false, Error: fmt.Sprintf("serialization error: %v", errM)}
+		}
+
+		return Response{
+			Ok:      true,
+			Applied: true,
+			Output:  string(resBytes),
+			Plan: []string{
+				fmt.Sprintf("scan datasets at %s for %d users", storageRoot, len(validUsers)),
 			},
 		}
 
@@ -2305,12 +2379,13 @@ func PatchSambaConfig(content string) string {
 
 // AutoHealStoragePermissions ensures that /mnt/allod-storage and /mnt/allod-storage/shares
 // have traversable permissions (2775 root:allod-data), public shares are accessible to allod-data,
-// and any existing personal user shares in /mnt/allod-storage/shares/<user> have their users
-// in the allod-data group and mode 2700 <user>:<user>.
+// and personal user shares in /mnt/allod-storage/shares/<user> have mode 2750 <user>:allod
+// so that the unprivileged web panel and root services can compute sizes and backup without compromising privacy.
 func AutoHealStoragePermissions() {
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
 		return
 	}
+	_ = exec.Command("groupadd", "-f", "allod").Run()
 	_ = exec.Command("groupadd", "-f", "allod-data").Run()
 
 	storageRoot := getStorageBaseDir()
@@ -2342,8 +2417,10 @@ func AutoHealStoragePermissions() {
 				if validNameRegex.MatchString(uName) {
 					uShareDir := filepath.Join(sharesDir, uName)
 					addUserToAllodData(uName)
-					_ = exec.Command("chown", "-R", fmt.Sprintf("%s:%s", uName, uName), uShareDir).Run()
-					_ = exec.Command("chmod", "2700", uShareDir).Run()
+					_ = exec.Command("chown", fmt.Sprintf("%s:allod", uName), uShareDir).Run()
+					_ = exec.Command("chmod", "2750", uShareDir).Run()
+					_ = exec.Command("chgrp", "-R", "allod", uShareDir).Run()
+					_ = exec.Command("chmod", "-R", "g+rX", uShareDir).Run()
 				}
 			}
 		}

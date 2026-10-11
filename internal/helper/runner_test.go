@@ -38,6 +38,8 @@ func TestCommandRunnerMethods(t *testing.T) {
 				resp := Response{Ok: true, Applied: true}
 				if req.Action == "storage.diagnostics" {
 					resp.Output = "mock diagnostics output"
+				} else if req.Action == "storage.scan_datasets" {
+					resp.Output = "mock datasets output"
 				}
 				_ = json.NewEncoder(conn).Encode(resp)
 			}
@@ -77,6 +79,10 @@ func TestCommandRunnerMethods(t *testing.T) {
 	out, err := client.StorageDiagnostics("/mnt/storage")
 	if err != nil || out != "mock diagnostics output" {
 		t.Errorf("StorageDiagnostics failed: out=%q, err=%v", out, err)
+	}
+	outDs, errDs := client.ScanDatasets("/mnt/storage", []string{"testuser"}, nil, 500)
+	if errDs != nil || outDs != "mock datasets output" {
+		t.Errorf("ScanDatasets failed: out=%q, err=%v", outDs, errDs)
 	}
 	if err := client.SnapshotCreate("photos", "snap1"); err != nil {
 		t.Errorf("SnapshotCreate failed: %v", err)
