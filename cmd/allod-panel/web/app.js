@@ -227,19 +227,11 @@ function setLaunchpadMode(mode) {
   const meshBtn = document.getElementById('launchpad-toggle-mesh');
   if (lanBtn && meshBtn) {
     if (mode === 'lan') {
-      lanBtn.className = 'btn btn-sm btn-primary';
-      lanBtn.style.background = '';
-      lanBtn.style.color = '';
-      meshBtn.className = 'btn btn-sm';
-      meshBtn.style.background = 'transparent';
-      meshBtn.style.color = 'var(--text-muted)';
+      lanBtn.classList.add('active');
+      meshBtn.classList.remove('active');
     } else {
-      meshBtn.className = 'btn btn-sm btn-primary';
-      meshBtn.style.background = '';
-      meshBtn.style.color = '';
-      lanBtn.className = 'btn btn-sm';
-      lanBtn.style.background = 'transparent';
-      lanBtn.style.color = 'var(--text-muted)';
+      meshBtn.classList.add('active');
+      lanBtn.classList.remove('active');
     }
   }
   renderLaunchpad();
@@ -247,11 +239,40 @@ function setLaunchpadMode(mode) {
 
 function renderLaunchpad() {
   const container = document.getElementById('launchpad-grid');
-  if (!container || !currentModules) return;
+  if (!container) return;
 
+  // 1. Loading / Skeleton State (State Completeness)
+  if (!currentModules) {
+    container.innerHTML = Array(6).fill(0).map(() => `
+      <div class="launchpad-card launchpad-card-skeleton">
+        <div class="launchpad-header">
+          <div class="skeleton-shimmer" style="width:44px; height:44px; border-radius:8px;"></div>
+          <div class="skeleton-shimmer" style="width:70px; height:20px; border-radius:12px;"></div>
+        </div>
+        <div class="skeleton-shimmer" style="width:60%; height:20px; margin-bottom:8px;"></div>
+        <div class="skeleton-shimmer" style="width:90%; height:14px; margin-bottom:6px;"></div>
+        <div class="skeleton-shimmer" style="width:75%; height:14px; margin-bottom:18px;"></div>
+        <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-bottom:12px;"></div>
+        <div class="skeleton-shimmer" style="width:100%; height:38px; border-radius:8px;"></div>
+      </div>
+    `).join('');
+    return;
+  }
+
+  // 2. Network Mode & Mesh Warning Detection
   const lanHost = window.location.hostname || '192.168.1.50';
-  const meshHost = (currentMeshIP && currentMeshIP !== '--') ? currentMeshIP : lanHost;
-  const activeHost = (launchpadMode === 'mesh') ? meshHost : lanHost;
+  const hasValidMesh = (typeof currentMeshIP === 'string' && currentMeshIP && currentMeshIP !== '--' && currentMeshIP.trim() !== '');
+  const isMeshMode = (launchpadMode === 'mesh');
+  const activeHost = (isMeshMode && hasValidMesh) ? currentMeshIP : lanHost;
+
+  const meshWarning = document.getElementById('launchpad-mesh-warning');
+  if (meshWarning) {
+    if (isMeshMode && !hasValidMesh) {
+      meshWarning.classList.remove('hidden');
+    } else {
+      meshWarning.classList.add('hidden');
+    }
+  }
 
   const apps = [
     {
@@ -259,7 +280,7 @@ function renderLaunchpad() {
       name: 'Immich Photos',
       icon: '📸',
       color: '#38bdf8',
-      desc: 'Galleria fotografica ad altissime prestazioni con timeline, album e backup automatico continuo da smartphone.',
+      desc: 'Galleria fotografica ad altissime prestazioni con timeline, album e backup continuo da smartphone.',
       port: 2283,
       url: `http://${activeHost}:2283`,
       path: null,
@@ -283,7 +304,7 @@ function renderLaunchpad() {
       name: 'Nextcloud Hub',
       icon: '☁️',
       color: '#0284c7',
-      desc: 'Cloud personale per documenti, contatti, calendario e sincronizzazione desktop/mobile (Dropbox/Drive privato).',
+      desc: 'Cloud personale per documenti, contatti, calendario e sincronizzazione desktop/mobile (privato).',
       port: 8443,
       url: `http://${activeHost}:8443`,
       path: null,
@@ -295,19 +316,19 @@ function renderLaunchpad() {
       name: 'Odysseus AI Workspace',
       icon: '🧠',
       color: '#8b5cf6',
-      desc: 'Workspace AI per chat, agenti e deep research. Collegato via LAN a workstation GPU o tramite API esterne.',
+      desc: 'Workspace AI sovrano per chat, agenti e deep research su GPU locale o tramite API esterne.',
       port: 7000,
       url: `http://${activeHost}:7000`,
       path: null,
       primaryActionText: '🤖 Apri Workspace AI',
-      secondaryActionText: '🔑 Mostra password temporanea'
+      secondaryActionText: '🔑 Password temporanea'
     },
     {
       id: 'shares',
       name: 'Samba File Shares',
       icon: '📁',
       color: '#10b981',
-      desc: 'Condivisioni di rete locali native per Esplora Risorse di Windows, Mac Finder e app di gestione file mobili.',
+      desc: 'Condivisioni di rete locali native per Esplora File di Windows, Mac Finder e app mobili.',
       port: 445,
       url: null,
       path: `\\\\${activeHost}\\shares`,
@@ -319,19 +340,19 @@ function renderLaunchpad() {
       name: 'NetBird Sovereign Mesh',
       icon: '🌐',
       color: '#f59e0b',
-      desc: 'Rete mesh WireGuard sovrana punto-punto per accedere a Immich, Jellyfin, Nextcloud e Samba da remoto con zero porte aperte sul router.',
+      desc: 'Rete mesh WireGuard sovrana punto-punto con crittografia end-to-end e zero porte aperte.',
       port: null,
       url: null,
       path: null,
       primaryActionText: '📱 Connetti Dispositivi',
-      secondaryActionText: '⚙️ Configura NetBird'
+      secondaryActionText: '⚙️ Configura Mesh'
     },
     {
       id: 'storage',
-      name: 'Pannello Allod & Storage RAID 1',
+      name: 'Pannello Allod & Storage',
       icon: '🛡️',
       color: '#ec4899',
-      desc: 'Gestione del sistema operativo, monitoraggio dei dischi fisici Btrfs RAID 1 con checksum e stato dei moduli.',
+      desc: 'Monitoraggio salute dischi Btrfs RAID 1 con scrubbing, RAM, CPU e stato dei demoni.',
       port: 8080,
       url: null,
       path: null,
@@ -346,37 +367,40 @@ function renderLaunchpad() {
     const mod = currentModules.find(m => m.id === app.id);
     const isRunning = mod ? (mod.runtime_status === 'running' || mod.runtime_status === 'active') : (app.id === 'storage');
     const isInstalled = mod ? (mod.current_level && mod.current_level !== 'off') : true;
+    const isStarting = (typeof startingModules !== 'undefined' && startingModules && startingModules.has(app.id));
 
     const card = document.createElement('div');
-    card.className = `launchpad-card ${!isRunning && isInstalled ? 'offline' : ''}`;
+    card.className = `launchpad-card ${!isRunning && isInstalled && !isStarting ? 'offline' : ''}`;
 
     let statusBadge = `<span class="badge badge-success">🟢 Online</span>`;
-    if (!isInstalled) {
-      statusBadge = `<span class="badge" style="background:#334155; color:#94a3b8;">⚪ Non Configurato</span>`;
+    if (isStarting) {
+      statusBadge = `<span class="badge badge-warning">⏳ Avvio...</span>`;
+    } else if (!isInstalled) {
+      statusBadge = `<span class="badge" style="background:var(--secondary); color:var(--muted-foreground); border:1px solid var(--border);">⚪ Non Configurato</span>`;
     } else if (!isRunning) {
-      statusBadge = `<span class="badge" style="background:#ef4444; color:#fff;">⏹ Fermato</span>`;
+      statusBadge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:var(--destructive); border:1px solid rgba(239,68,68,0.3);">⏹ Fermato</span>`;
     }
 
     let endpointDisplay = '';
     if (app.url) {
       endpointDisplay = `
         <div class="launchpad-endpoint">
-          <span>${app.url}</span>
-          <span style="font-size:10px; color:var(--text-muted);">Porta ${app.port}</span>
+          <span class="launchpad-endpoint-url" title="${app.url}">${app.url}</span>
+          <span class="launchpad-endpoint-meta">Porta ${app.port}</span>
         </div>
       `;
     } else if (app.path) {
       endpointDisplay = `
         <div class="launchpad-endpoint">
-          <span>${app.path}</span>
-          <span style="font-size:10px; color:var(--text-muted);">SMB LAN</span>
+          <span class="launchpad-endpoint-url" title="${app.path}">${app.path}</span>
+          <span class="launchpad-endpoint-meta">SMB LAN</span>
         </div>
       `;
     } else if (app.id === 'network') {
       endpointDisplay = `
         <div class="launchpad-endpoint">
-          <span>IP Mesh: ${meshHost}</span>
-          <span style="font-size:10px; color:var(--text-muted);">Zero-Trust</span>
+          <span class="launchpad-endpoint-url">IP Mesh: ${hasValidMesh ? currentMeshIP : 'In attesa'}</span>
+          <span class="launchpad-endpoint-meta">${hasValidMesh ? 'WireGuard P2P' : 'Offline'}</span>
         </div>
       `;
     }
@@ -385,10 +409,10 @@ function renderLaunchpad() {
     if (app.id === 'storage') {
       actionButtons = `
         <div class="launchpad-actions">
-          <button class="launchpad-btn-primary" onclick="switchToTab('overview')">
+          <button type="button" class="launchpad-btn-primary" onclick="switchToTab('overview')">
             ${app.primaryActionText}
           </button>
-          <button class="launchpad-btn-secondary" onclick="switchToTab('modules')">
+          <button type="button" class="launchpad-btn-secondary" onclick="switchToTab('modules')">
             ${app.secondaryActionText}
           </button>
         </div>
@@ -396,10 +420,10 @@ function renderLaunchpad() {
     } else if (app.id === 'shares') {
       actionButtons = `
         <div class="launchpad-actions">
-          <button class="launchpad-btn-primary" onclick="copyTextToClipboard('${app.path}', this)">
+          <button type="button" class="launchpad-btn-primary" onclick="copyLaunchpadText('${app.path}', this)">
             ${app.primaryActionText}
           </button>
-          <button class="launchpad-btn-secondary" onclick="openSmbPasswordModal()">
+          <button type="button" class="launchpad-btn-secondary" onclick="openSmbPasswordModal()">
             ${app.secondaryActionText}
           </button>
         </div>
@@ -407,45 +431,56 @@ function renderLaunchpad() {
     } else if (app.id === 'network') {
       actionButtons = `
         <div class="launchpad-actions">
-          <button class="launchpad-btn-primary" onclick="openNetworkPairingModal()">
+          <button type="button" class="launchpad-btn-primary" onclick="openNetworkPairingModal()">
             ${app.primaryActionText}
           </button>
-          <button class="launchpad-btn-secondary" onclick="openNetworkConfigModal()">
+          <button type="button" class="launchpad-btn-secondary" onclick="openNetworkConfigModal()">
             ${app.secondaryActionText}
+          </button>
+        </div>
+      `;
+    } else if (isStarting) {
+      actionButtons = `
+        <div class="launchpad-actions">
+          <button type="button" class="launchpad-btn-primary" disabled style="opacity:0.85; cursor:wait;">
+            ⏳ Avvio in corso...
+          </button>
+          <button type="button" class="launchpad-btn-secondary" onclick="switchToTab('modules')">
+            ⚙️ Dettagli
           </button>
         </div>
       `;
     } else if (isRunning && app.url) {
       actionButtons = `
         <div class="launchpad-actions">
-          <a href="${app.url}" target="_blank" class="launchpad-btn-primary">
-            ${app.primaryActionText} ➔
+          <a href="${app.url}" target="_blank" rel="noopener noreferrer" class="launchpad-btn-primary">
+            ${app.primaryActionText} ↗
           </a>
           ${app.path ? `
-            <button class="launchpad-btn-secondary" onclick="copyTextToClipboard('${app.path}', this)">
+            <button type="button" class="launchpad-btn-secondary" onclick="copyLaunchpadText('${app.path}', this)">
               ${app.secondaryActionText}
             </button>
           ` : ''}
           ${app.id === 'odysseus' ? `
-            <button class="launchpad-btn-secondary" onclick="fetchOdysseusTempPassword(this)">
+            <button type="button" class="launchpad-btn-secondary" onclick="fetchOdysseusTempPassword(this)">
               ${app.secondaryActionText}
             </button>
           ` : ''}
         </div>
         ${app.id === 'odysseus' && odysseusTempCreds ? `
           <div class="launchpad-endpoint" style="margin-top:8px; flex-direction:column; align-items:flex-start; gap:4px;">
-            <span style="font-size:10px; color:var(--text-muted);">Utente: <strong>${escapeHtml(odysseusTempCreds.username)}</strong> — password temporanea (copiata negli appunti, cambiala dopo il primo accesso):</span>
-            <code style="font-size:13px; word-break:break-all; user-select:all;">${escapeHtml(odysseusTempCreds.password)}</code>
+            <span style="font-size:10px; color:var(--muted-foreground);">Utente: <strong>${escapeHtml(odysseusTempCreds.username)}</strong> — password temporanea:</span>
+            <code style="font-size:12px; word-break:break-all; user-select:all; color:var(--primary);">${escapeHtml(odysseusTempCreds.password)}</code>
           </div>
         ` : ''}
       `;
     } else if (isInstalled && !isRunning) {
       actionButtons = `
         <div class="launchpad-actions">
-          <button class="launchpad-btn-primary" style="background:#3b82f6; color:#fff;" onclick="startModule('${app.id}')">
+          <button type="button" class="launchpad-btn-primary" onclick="startModuleFromLaunchpad('${app.id}')">
             ▶ Avvia Modulo
           </button>
-          <button class="launchpad-btn-secondary" onclick="switchToTab('modules')">
+          <button type="button" class="launchpad-btn-secondary" onclick="switchToTab('modules')">
             ⚙️ Impostazioni
           </button>
         </div>
@@ -453,12 +488,16 @@ function renderLaunchpad() {
     } else {
       actionButtons = `
         <div class="launchpad-actions">
-          <button class="launchpad-btn-primary" style="background:#334155; color:#f8fafc;" onclick="switchToTab('modules')">
+          <button type="button" class="launchpad-btn-secondary" style="flex:1;" onclick="switchToTab('modules')">
             📦 Abilita in Moduli
           </button>
         </div>
       `;
     }
+
+    const titleMarkup = (isRunning && app.url) 
+      ? `<a href="${app.url}" target="_blank" rel="noopener noreferrer">${app.name}</a>` 
+      : app.name;
 
     card.innerHTML = `
       <div class="launchpad-card-glow" style="background:${app.color};"></div>
@@ -467,7 +506,7 @@ function renderLaunchpad() {
           <div class="launchpad-icon">${app.icon}</div>
           <div>${statusBadge}</div>
         </div>
-        <div class="launchpad-title">${app.name}</div>
+        <div class="launchpad-title">${titleMarkup}</div>
         <div class="launchpad-subtitle">${mod && mod.current_level ? `Livello: ${mod.current_level.toUpperCase()}` : ''}</div>
         <div class="launchpad-desc">${app.desc}</div>
         ${endpointDisplay}
@@ -477,6 +516,30 @@ function renderLaunchpad() {
 
     container.appendChild(card);
   });
+}
+
+function startModuleFromLaunchpad(modId) {
+  if (typeof startModule === 'function') {
+    startModule(modId);
+  }
+  renderLaunchpad();
+}
+
+function copyLaunchpadText(text, btn) {
+  if (typeof copyTextToClipboard === 'function') {
+    copyTextToClipboard(text, '✓ Percorso copiato negli appunti!');
+  }
+  if (btn) {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓ Copiato!';
+    btn.style.borderColor = 'var(--success)';
+    btn.style.color = 'var(--success)';
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }, 2000);
+  }
 }
 
 function goToOverviewHealth() {
