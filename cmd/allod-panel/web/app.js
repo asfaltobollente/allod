@@ -65,7 +65,10 @@ function getModuleIcon(modID) {
     'network': '🌐',
     'photos': '📸',
     'cloud': '☁️',
-    'media': '🎬'
+    'media': '🎬',
+    'passwords': '🔑',
+    'search': '🔍',
+    'odysseus': '🧠'
   };
   return icons[modID] || '📦';
 }
@@ -346,6 +349,30 @@ function renderLaunchpad() {
       path: null,
       primaryActionText: '📱 Connetti Dispositivi',
       secondaryActionText: '⚙️ Configura Mesh'
+    },
+    {
+      id: 'passwords',
+      name: 'Vaultwarden Passwords',
+      icon: '🔑',
+      color: '#14b8a6',
+      desc: 'Gestore password cifrato end-to-end compatibile Bitwarden con estensioni browser e app mobile.',
+      port: 8088,
+      url: `http://${activeHost}:8088`,
+      path: null,
+      primaryActionText: '🔑 Apri Vault Password',
+      secondaryActionText: null
+    },
+    {
+      id: 'search',
+      name: 'SearXNG Private Search',
+      icon: '🔍',
+      color: '#06b6d4',
+      desc: 'Motore di meta-ricerca privato senza profilazione o tracciamento, con cache Valkey ad alta velocità.',
+      port: 8888,
+      url: `http://${activeHost}:8888`,
+      path: null,
+      primaryActionText: '🔍 Cerca con SearXNG',
+      secondaryActionText: null
     },
     {
       id: 'storage',
@@ -1138,6 +1165,22 @@ const moduleTechInfo = {
       dbNote: 'Vector database engine for semantic memory and conversation history storage.',
       linkPort: 7000,
       linkProtocol: 'http'
+    },
+    passwords: {
+      product: 'Vaultwarden (Bitwarden Server)',
+      desc: 'End-to-end encrypted password and secrets manager, fully compatible with official Bitwarden apps and browser extensions.',
+      db: 'SQLite (Embedded in /data)',
+      dbNote: 'Zero-knowledge encrypted database containing credentials, notes, 2FA seeds, and card vaults.',
+      linkPort: 8088,
+      linkProtocol: 'http'
+    },
+    search: {
+      product: 'SearXNG + Valkey Cache',
+      desc: 'Privacy-respecting meta-search engine aggregating multiple search providers without user tracking or profiling.',
+      db: 'Valkey In-Memory Cache',
+      dbNote: 'High-speed ephemeral caching of search queries to eliminate duplicate upstream requests.',
+      linkPort: 8888,
+      linkProtocol: 'http'
     }
   },
   it: {
@@ -1207,6 +1250,22 @@ const moduleTechInfo = {
       db: 'ChromaDB + SQLite (Embedded)',
       dbNote: 'Database vettoriale per memoria semantica RAG e archiviazione conversazioni SQLite.',
       linkPort: 7000,
+      linkProtocol: 'http'
+    },
+    passwords: {
+      product: 'Vaultwarden (Bitwarden Server)',
+      desc: 'Gestore password e segreti cifrato end-to-end, compatibile con app Bitwarden ufficiali (desktop, mobile ed estensioni browser).',
+      db: 'SQLite (Integrato in /data)',
+      dbNote: 'Database a conoscenza zero: credenziali, note sicure, codici 2FA e carte protetti con crittografia client-side.',
+      linkPort: 8088,
+      linkProtocol: 'http'
+    },
+    search: {
+      product: 'SearXNG + Valkey Cache',
+      desc: 'Motore di meta-ricerca privato che aggrega decine di motori senza tracciare ricerche o profilare la famiglia.',
+      db: 'Cache In-Memory Valkey',
+      dbNote: 'Cache effimera in RAM per risultati istantanei ed eliminazione delle query duplicate verso i motori a monte.',
+      linkPort: 8888,
       linkProtocol: 'http'
     }
   }
@@ -1341,7 +1400,7 @@ function createModuleCard(mod) {
   let openLinkHtml = ``;
 
   // Critical Data Modules that must be protected once in production:
-  const criticalDataModules = ['storage', 'cloud', 'photos', 'backup', 'shares', 'media'];
+  const criticalDataModules = ['storage', 'cloud', 'photos', 'backup', 'shares', 'media', 'passwords'];
   const isDataCritical = criticalDataModules.includes(mod.id) || (mod.mounts && mod.mounts.length > 0);
   const isRunningOrNAS = (mod.runtime_status === 'running' || (mod.id === 'storage' && mod.is_on_nas_pool));
   const isOrphan = isOff && mod.runtime_status === 'running';

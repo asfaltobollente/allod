@@ -529,3 +529,119 @@ func TestBackupModuleQuadletExec(t *testing.T) {
 	}
 }
 
+func TestPasswordsModuleQuadlet(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+
+	m := &manifest.Manifest{
+		ID:   "passwords",
+		Tier: "recommended",
+		Levels: map[string]manifest.Level{
+			"standard": {RAMMB: 256},
+		},
+		Ports: []manifest.Port{
+			{N: 8088, ContainerPort: 80, Scope: "lan"},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/vaultwarden/server", Tag: "1.33.2-alpine", Channel: "pinned"},
+		},
+	}
+
+	res, err := Generate("passwords", m, "standard")
+	if err != nil {
+		t.Fatalf("unexpected error generating passwords: %v", err)
+	}
+
+	if len(res.Files) != 1 {
+		t.Fatalf("expected 1 container unit, got %d", len(res.Files))
+	}
+
+	content := res.Files["passwords.container"]
+	if !strings.Contains(content, "PublishPort=8088:80") {
+		t.Errorf("expected PublishPort=8088:80, got:\n%s", content)
+	}
+	if !strings.Contains(content, "/passwords/data:/data:Z,U") {
+		t.Errorf("expected /passwords/data volume mount, got:\n%s", content)
+	}
+	if !strings.Contains(content, "EnvironmentFile=") || !strings.Contains(content, "passwords/secrets/vaultwarden.env") {
+		t.Errorf("expected EnvironmentFile for vaultwarden.env, got:\n%s", content)
+	}
+
+	// Verify generated secret file
+	secFile := filepath.Join(tempDir, "passwords", "secrets", "vaultwarden.env")
+	secBytes, err := os.ReadFile(secFile)
+	if err != nil {
+		t.Fatalf("failed to read generated vaultwarden secret: %v", err)
+	}
+	secStr := string(secBytes)
+	if !strings.Contains(secStr, "SIGNUPS_ALLOWED=false") || !strings.Contains(secStr, "ADMIN_TOKEN=") {
+		t.Errorf("expected SIGNUPS_ALLOWED and ADMIN_TOKEN in secret, got:\n%s", secStr)
+	}
+}
+
+func TestSearchModuleQuadlet(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+
+	m := &manifest.Manifest{
+		ID:   "search",
+		Tier: "optional",
+		Levels: map[string]manifest.Level{
+			"standard": {RAMMB: 512},
+		},
+		Ports: []manifest.Port{
+			{N: 8888, ContainerPort: 8080, Scope: "lan"},
+		},
+		Images: []manifest.Image{
+			{Ref: "docker.io/searxng/searxng", Tag: "2026.5.31-7159b8aed", Channel: "pinned"},
+			{Ref: "docker.io/valkey/valkey", Tag: "8-alpine", Channel: "patch"},
+		},
+	}
+
+	res, err := Generate("search", m, "standard")
+	if err != nil {
+		t.Fatalf("unexpected error generating search: %v", err)
+	}
+
+	if len(res.Files) != 2 {
+		t.Fatalf("expected 2 container units, got %d", len(res.Files))
+	}
+
+	mainContent, ok := res.Files["search.container"]
+	if !ok {
+		t.Fatalf("expected search.container not found")
+	}
+	if !strings.Contains(mainContent, "Requires=search-valkey.service") {
+		t.Errorf("expected dependency on search-valkey, got:\n%s", mainContent)
+	}
+	if !strings.Contains(mainContent, "PublishPort=8888:8080") {
+		t.Errorf("expected PublishPort=8888:8080, got:\n%s", mainContent)
+	}
+	if !strings.Contains(mainContent, "/search/config:/etc/searxng:Z,U") {
+		t.Errorf("expected /search/config volume mount, got:\n%s", mainContent)
+	}
+
+	valkeyContent, ok := res.Files["search-valkey.container"]
+	if !ok {
+		t.Fatalf("expected search-valkey.container not found")
+	}
+	if !strings.Contains(valkeyContent, "/search/valkey:/data:Z,U") {
+		t.Errorf("expected /search/valkey volume mount in sidecar, got:\n%s", valkeyContent)
+	}
+	if strings.Contains(valkeyContent, "PublishPort=") {
+		t.Errorf("expected no published port on valkey sidecar, got:\n%s", valkeyContent)
+	}
+
+	// Verify generated settings.yml
+	settingsFile := filepath.Join(tempDir, "search", "config", "settings.yml")
+	settingsBytes, err := os.ReadFile(settingsFile)
+	if err != nil {
+		t.Fatalf("failed to read generated searxng settings.yml: %v", err)
+	}
+	settingsStr := string(settingsBytes)
+	if !strings.Contains(settingsStr, "secret_key:") || !strings.Contains(settingsStr, "redis://search-valkey:6379/0") {
+		t.Errorf("expected secret_key and redis url in settings.yml, got:\n%s", settingsStr)
+	}
+}
+
+

@@ -26,8 +26,12 @@ modules:
         level: cloud
     odysseus:
         level: "off" # optional: AI Workspace (requires external GPU workstation on LAN or Cloud APIs)
+    passwords:
+        level: "off" # recommended: Vaultwarden password manager (Bitwarden compatible)
     photos:
         level: standard
+    search:
+        level: "off" # optional: SearXNG private meta-search engine with Valkey cache
     shares:
         level: basic
     storage:

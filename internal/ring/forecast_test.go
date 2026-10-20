@@ -48,6 +48,12 @@ func TestScanDatasetTree(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(tempDir, "media", "config"), 0755)
 	_ = os.WriteFile(filepath.Join(tempDir, "media", "config", "conf.xml"), []byte("xml-config"), 0644)
 
+	_ = os.MkdirAll(filepath.Join(tempDir, "passwords", "data"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "passwords", "data", "db.sqlite3"), []byte("vault-sqlite"), 0644)
+
+	_ = os.MkdirAll(filepath.Join(tempDir, "search", "config"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "search", "config", "settings.yml"), []byte("searxng-yaml"), 0644)
+
 	// Add dummy bind-mounted photos folder inside davide to verify it is NOT counted in personal size
 	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "davide", "photos"), 0755)
 	_ = os.WriteFile(filepath.Join(tempDir, "shares", "davide", "photos", "heavy_photo.raw"), make([]byte, 5*1024*1024), 0644)
@@ -67,6 +73,8 @@ func TestScanDatasetTree(t *testing.T) {
 	foundPublic := false
 	foundPhotos := false
 	foundMedia := false
+	foundPasswords := false
+	foundSearch := false
 
 	for _, it := range items {
 		if it.ID == "user-davide" {
@@ -96,10 +104,17 @@ func TestScanDatasetTree(t *testing.T) {
 		if it.ID == "module-media-config" {
 			foundMedia = true
 		}
+		if it.ID == "module-passwords" {
+			foundPasswords = true
+		}
+		if it.ID == "module-search" {
+			foundSearch = true
+		}
 	}
 
-	if !foundUser || !foundPublic || !foundPhotos || !foundMedia {
-		t.Errorf("missing expected dataset categories: user=%v, pub=%v, photos=%v, media=%v", foundUser, foundPublic, foundPhotos, foundMedia)
+	if !foundUser || !foundPublic || !foundPhotos || !foundMedia || !foundPasswords || !foundSearch {
+		t.Errorf("missing expected dataset categories: user=%v, pub=%v, photos=%v, media=%v, passwords=%v, search=%v",
+			foundUser, foundPublic, foundPhotos, foundMedia, foundPasswords, foundSearch)
 	}
 }
 

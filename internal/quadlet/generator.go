@@ -180,6 +180,92 @@ FASTEMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
 	return os.WriteFile(secFile, []byte(defaultContent), 0600)
 }
 
+func ensurePasswordsSecret() error {
+	resBaseDir := ResolvedStorageBaseDir()
+	secDir := filepath.Join(resBaseDir, "passwords", "secrets")
+	if err := os.MkdirAll(secDir, 0700); err != nil {
+		return err
+	}
+	secFile := filepath.Join(secDir, "vaultwarden.env")
+	if _, err := os.Stat(secFile); err == nil {
+		return nil
+	}
+
+	adminToken, err := generateRandomPassword(48)
+	if err != nil {
+		adminToken = "allod_admin_vaultwarden_token"
+	}
+
+	defaultContent := fmt.Sprintf(`# Vaultwarden Password Manager Configuration for Allod
+# Compatible with Bitwarden clients (Mobile, Browser extensions, Desktop)
+
+# Note: Bitwarden clients require HTTPS (WebCrypto API) to log in.
+# Access via NetBird Sovereign Mesh, local reverse proxy, or localhost.
+
+SIGNUPS_ALLOWED=false
+INVITATIONS_ALLOWED=true
+WEBSOCKET_ENABLED=true
+ROCKET_PORT=80
+
+# Admin Token for the /admin dashboard:
+ADMIN_TOKEN=%s
+`, adminToken)
+
+	return os.WriteFile(secFile, []byte(defaultContent), 0600)
+}
+
+func ensureSearchConfig() error {
+	resBaseDir := ResolvedStorageBaseDir()
+	cfgDir := filepath.Join(resBaseDir, "search", "config")
+	secDir := filepath.Join(resBaseDir, "search", "secrets")
+	valkeyDir := filepath.Join(resBaseDir, "search", "valkey")
+	if err := os.MkdirAll(cfgDir, 0770); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(secDir, 0700); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(valkeyDir, 0770); err != nil {
+		return err
+	}
+
+	secKeyFile := filepath.Join(secDir, "searxng.env")
+	if _, err := os.Stat(secKeyFile); err != nil {
+		secretKeyBytes := make([]byte, 32)
+		_, _ = rand.Read(secretKeyBytes)
+		secretHex := fmt.Sprintf("%x", secretKeyBytes)
+		content := fmt.Sprintf("SEARXNG_SECRET=%s\n", secretHex)
+		_ = os.WriteFile(secKeyFile, []byte(content), 0600)
+	}
+
+	settingsFile := filepath.Join(cfgDir, "settings.yml")
+	if _, err := os.Stat(settingsFile); err != nil {
+		secretKeyBytes := make([]byte, 32)
+		_, _ = rand.Read(secretKeyBytes)
+		secretHex := fmt.Sprintf("%x", secretKeyBytes)
+		defaultSettings := fmt.Sprintf(`# SearXNG configuration for Allod
+use_default_settings: true
+general:
+  debug: false
+  instance_name: "Allod Search"
+server:
+  secret_key: "%s"
+  limiter: false
+  bind_address: "0.0.0.0"
+  port: 8080
+redis:
+  url: "redis://search-valkey:6379/0"
+search:
+  safe_search: 0
+  autocomplete: "google"
+ui:
+  infinite_scroll: true
+`, secretHex)
+		_ = os.WriteFile(settingsFile, []byte(defaultSettings), 0640)
+	}
+	return nil
+}
+
 // EnsureStorageDirectories creates all host volume mount paths with secure group-accessible permissions.
 func EnsureStorageDirectories(modID string) {
 	baseDir := ResolvedStorageBaseDir()
@@ -288,6 +374,29 @@ func EnsureStorageDirectories(modID string) {
 		}
 		_ = os.MkdirAll(filepath.Join(baseDir, "odysseus", "secrets"), 0700)
 		_ = ensureOdysseusSecret()
+		return
+	case "passwords":
+		dirs = []string{
+			filepath.Join(baseDir, "passwords", "data"),
+		}
+		for _, d := range dirs {
+			_ = os.MkdirAll(d, 0770)
+			_ = os.Chmod(d, 0770)
+		}
+		_ = os.MkdirAll(filepath.Join(baseDir, "passwords", "secrets"), 0700)
+		_ = ensurePasswordsSecret()
+		return
+	case "search":
+		dirs = []string{
+			filepath.Join(baseDir, "search", "config"),
+			filepath.Join(baseDir, "search", "valkey"),
+		}
+		for _, d := range dirs {
+			_ = os.MkdirAll(d, 0770)
+			_ = os.Chmod(d, 0770)
+		}
+		_ = os.MkdirAll(filepath.Join(baseDir, "search", "secrets"), 0700)
+		_ = ensureSearchConfig()
 		return
 	default:
 		dirs = []string{
@@ -473,6 +582,18 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 			sb.WriteString("ShmSize=512m\n")
 		} else if strings.Contains(img.Ref, "chroma") {
 			sb.WriteString(fmt.Sprintf("Volume=%s/odysseus/chroma:/chroma/chroma:Z,U\n", baseDir))
+		}
+	case "passwords":
+		_ = ensurePasswordsSecret()
+		sb.WriteString(fmt.Sprintf("Volume=%s/passwords/data:/data:Z,U\n", baseDir))
+		sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/passwords/secrets/vaultwarden.env\n", baseDir))
+	case "search":
+		_ = ensureSearchConfig()
+		if isPrimary {
+			sb.WriteString(fmt.Sprintf("Volume=%s/search/config:/etc/searxng:Z,U\n", baseDir))
+			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/search/secrets/searxng.env\n", baseDir))
+		} else if strings.Contains(img.Ref, "valkey") {
+			sb.WriteString(fmt.Sprintf("Volume=%s/search/valkey:/data:Z,U\n", baseDir))
 		}
 	default:
 		sb.WriteString(fmt.Sprintf("Volume=%s/%s:/data:Z,U\n", baseDir, m.ID))

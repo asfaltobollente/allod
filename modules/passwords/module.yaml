@@ -1,0 +1,45 @@
+id: passwords
+tier: recommended
+provides: [password-manager, credentials-vault]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  standard:
+    ram_mb: 256
+    disk_gb: 5
+    requires:
+      modules: [storage]
+    grants: [Gestore password Vaultwarden compatibile con client Bitwarden, vault cifrato end-to-end, sincronizzazione browser e mobile, 2FA/TOTP]
+    lacks: []
+
+ports:
+  - n: 8088
+    container_port: 80
+    scope: lan
+    share: member
+
+privileges:
+  userns: rootless
+  devices: []
+  caps: []
+
+images:
+  - ref: docker.io/vaultwarden/server
+    tag: "1.33.2-alpine"
+    channel: pinned
+
+transitions:
+  off -> standard: safe
+  standard -> off: destructive
+
+datasets:
+  - id: passwords
+    includes: [data]
+    excludes: [icon_cache]
+
+help:
+  en: help/passwords.en.md
+  it: help/passwords.it.md

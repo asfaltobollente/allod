@@ -333,6 +333,44 @@ func ScanDatasetTree(storageRoot string, validUsers []string, selectedPaths map[
 			Description:   "Configurazione e metadati della libreria (i video non vengono duplicati)",
 		})
 	}
+	// 3e. Passwords (Vaultwarden) - SQLite DB, RSA keys, and vault attachments
+	passwordsPath := filepath.Join(storageRoot, "passwords", "data")
+	if _, err := os.Stat(passwordsPath); err == nil {
+		pwdSize := FastDirSize(passwordsPath)
+		pwdSel := selectedPaths[passwordsPath]
+		if len(selectedPaths) == 0 {
+			pwdSel = true // Default select passwords as it's critical user credential data
+		}
+		items = append(items, &DatasetItem{
+			ID:            "module-passwords",
+			Name:          "Vaultwarden Passwords (Vault Cifrato & Credenziali)",
+			Path:          passwordsPath,
+			Category:      "module",
+			Level:         0,
+			SizeBytes:     pwdSize,
+			SizeFormatted: FormatBytes(pwdSize),
+			Selected:      pwdSel,
+			Description:   "Database vault cifrato, chiavi e impostazioni degli account Bitwarden",
+		})
+	}
+
+	// 3f. Search (SearXNG) - Configuration and settings
+	searchPath := filepath.Join(storageRoot, "search", "config")
+	if _, err := os.Stat(searchPath); err == nil {
+		sSize := FastDirSize(searchPath)
+		sSel := selectedPaths[searchPath]
+		items = append(items, &DatasetItem{
+			ID:            "module-search",
+			Name:          "SearXNG Search (Configurazione Motore)",
+			Path:          searchPath,
+			Category:      "module",
+			Level:         0,
+			SizeBytes:     sSize,
+			SizeFormatted: FormatBytes(sSize),
+			Selected:      sSel,
+			Description:   "Configurazione motori e impostazioni di istanza SearXNG",
+		})
+	}
 
 	return items
 }
