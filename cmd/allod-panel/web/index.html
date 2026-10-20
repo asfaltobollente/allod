@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=2.7">
+  <link rel="stylesheet" href="style.css?v=3.0">
   <script>
     (function() {
       const saved = localStorage.getItem('allod_theme');
@@ -149,31 +149,72 @@
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="font-size:24px;">🚀</span>
             <div>
-              <div style="font-size:14px; font-weight:700; color:var(--text-main);" data-i18n="launchpad_toolbar_title">Applicazioni & Cloud Personale</div>
-              <div style="font-size:12px; color:var(--text-muted);" data-i18n="launchpad_toolbar_sub">Avvia o accedi direttamente alle tue app in LAN locale o via mesh cifrata</div>
+              <div style="font-size:14px; font-weight:700; color:var(--foreground);" data-i18n="launchpad_toolbar_title">Applicazioni & Cloud Personale</div>
+              <div style="font-size:12px; color:var(--muted-foreground);" data-i18n="launchpad_toolbar_sub">Avvia o accedi direttamente alle tue app in LAN locale o via mesh cifrata</div>
             </div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button class="btn btn-sm btn-outline-warning" onclick="openWoLModal()" id="btn-open-wol-modal" style="padding:4px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-color:#f59e0b; color:#f59e0b;" title="Accendi PC o dispositivi locali tramite Wake-on-LAN">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-sm btn-outline-warning" onclick="openWoLModal()" id="btn-open-wol-modal" style="padding:5px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-color:#f59e0b; color:#f59e0b; border-radius:var(--radius-sm);" title="Accendi PC o dispositivi locali tramite Wake-on-LAN">
               <span>⚡</span> <span data-i18n="wol_btn_open">Wake-on-LAN</span>
             </button>
-            <button class="btn btn-sm btn-outline-primary" onclick="openFamilyModal()" id="btn-open-family-modal" style="padding:4px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-color:var(--primary); color:var(--primary);">
+            <button class="btn btn-sm btn-outline-primary" onclick="openFamilyModal()" id="btn-open-family-modal" style="padding:5px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-radius:var(--radius-sm);">
               <span>👥</span> <span data-i18n="btn_family_hub">Membri Famiglia & Triade</span>
             </button>
-            <span style="font-size:11.5px; color:var(--text-muted); font-weight:600;">Modalità Rete:</span>
-            <div style="display:flex; background:rgba(15,23,42,0.8); border:1px solid var(--card-border); border-radius:6px; padding:2px;">
-              <button class="btn btn-sm btn-primary" id="launchpad-toggle-lan" onclick="setLaunchpadMode('lan')" style="padding:4px 10px; font-size:11px; font-weight:600; border-radius:4px;">
-                🏠 LAN (Casa)
+            <div class="launchpad-segmented-control" role="group" aria-label="Modalità Rete">
+              <button type="button" class="launchpad-segmented-btn active" id="launchpad-toggle-lan" onclick="setLaunchpadMode('lan')">
+                🏠 LAN Locale
               </button>
-              <button class="btn btn-sm" id="launchpad-toggle-mesh" onclick="setLaunchpadMode('mesh')" style="padding:4px 10px; font-size:11px; font-weight:600; border-radius:4px; background:transparent; color:var(--text-muted);">
+              <button type="button" class="launchpad-segmented-btn" id="launchpad-toggle-mesh" onclick="setLaunchpadMode('mesh')">
                 🌍 WireGuard Mesh
               </button>
             </div>
           </div>
         </div>
 
+        <!-- Mesh Offline / Disconnected Warning (State Completeness) -->
+        <div id="launchpad-mesh-warning" class="alert-banner alert-warning hidden" style="margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span>⚠️</span>
+            <span style="font-size:12.5px;"><strong>WireGuard Mesh offline:</strong> Il nodo NetBird non risulta ancora connesso. I link remoti useranno l'IP locale finché la mesh non sarà online.</span>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-warning" onclick="openNetworkPairingModal()" style="padding:2px 10px; font-size:11px; font-weight:600;">Connetti NetBird ↗</button>
+        </div>
+
         <div class="launchpad-grid" id="launchpad-grid">
-          <!-- Rendered dynamically by JS -->
+          <!-- Initial Skeleton Loading State -->
+          <div class="launchpad-card launchpad-card-skeleton">
+            <div class="launchpad-header">
+              <div class="skeleton-shimmer" style="width:44px; height:44px; border-radius:8px;"></div>
+              <div class="skeleton-shimmer" style="width:70px; height:20px; border-radius:12px;"></div>
+            </div>
+            <div class="skeleton-shimmer" style="width:60%; height:20px; margin-bottom:8px;"></div>
+            <div class="skeleton-shimmer" style="width:90%; height:14px; margin-bottom:6px;"></div>
+            <div class="skeleton-shimmer" style="width:75%; height:14px; margin-bottom:18px;"></div>
+            <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-bottom:12px;"></div>
+            <div class="skeleton-shimmer" style="width:100%; height:38px; border-radius:8px;"></div>
+          </div>
+          <div class="launchpad-card launchpad-card-skeleton">
+            <div class="launchpad-header">
+              <div class="skeleton-shimmer" style="width:44px; height:44px; border-radius:8px;"></div>
+              <div class="skeleton-shimmer" style="width:70px; height:20px; border-radius:12px;"></div>
+            </div>
+            <div class="skeleton-shimmer" style="width:60%; height:20px; margin-bottom:8px;"></div>
+            <div class="skeleton-shimmer" style="width:90%; height:14px; margin-bottom:6px;"></div>
+            <div class="skeleton-shimmer" style="width:75%; height:14px; margin-bottom:18px;"></div>
+            <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-bottom:12px;"></div>
+            <div class="skeleton-shimmer" style="width:100%; height:38px; border-radius:8px;"></div>
+          </div>
+          <div class="launchpad-card launchpad-card-skeleton">
+            <div class="launchpad-header">
+              <div class="skeleton-shimmer" style="width:44px; height:44px; border-radius:8px;"></div>
+              <div class="skeleton-shimmer" style="width:70px; height:20px; border-radius:12px;"></div>
+            </div>
+            <div class="skeleton-shimmer" style="width:60%; height:20px; margin-bottom:8px;"></div>
+            <div class="skeleton-shimmer" style="width:90%; height:14px; margin-bottom:6px;"></div>
+            <div class="skeleton-shimmer" style="width:75%; height:14px; margin-bottom:18px;"></div>
+            <div class="skeleton-shimmer" style="width:100%; height:32px; border-radius:6px; margin-bottom:12px;"></div>
+            <div class="skeleton-shimmer" style="width:100%; height:38px; border-radius:8px;"></div>
+          </div>
         </div>
 
         <!-- Quick WoL Bar in Launchpad -->
@@ -2574,9 +2615,9 @@ restic -r rest:http://&lt;ip_wireguard_amico&gt;:8000/ restore latest --target /
   <!-- Floating Telemetry Chart Tooltip -->
   <div id="metrics-chart-tooltip" class="metrics-tooltip hidden"></div>
 
-  <script src="qrcode.js?v=2.9"></script>
-  <script src="i18n.js?v=2.9"></script>
-  <script src="app.js?v=2.9"></script>
-  <script type="module" src="network.js?v=2.9"></script>
+  <script src="qrcode.js?v=3.0"></script>
+  <script src="i18n.js?v=3.0"></script>
+  <script src="app.js?v=3.0"></script>
+  <script type="module" src="network.js?v=3.0"></script>
 </body>
 </html>
