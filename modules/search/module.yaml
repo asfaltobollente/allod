@@ -31,7 +31,7 @@ images:
     tag: "2026.5.31-7159b8aed"
     channel: pinned
   - ref: docker.io/valkey/valkey
-    tag: "8-alpine"
+    tag: "8"
     channel: patch
 
 transitions:

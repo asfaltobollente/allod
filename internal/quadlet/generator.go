@@ -460,7 +460,7 @@ NetworkName=allod
 // EnsureAllodNetwork creates allod.network in the systemd quadlet directory if missing.
 func EnsureAllodNetwork(outDir string) {
 	_ = os.MkdirAll(outDir, 0755)
-	_ = exec.Command("podman", "network", "create", "allod").Run()
+	_ = exec.Command("podman", "network", "create", "--ignore", "allod").Run()
 	netFile := filepath.Join(outDir, "allod.network")
 	if _, err := os.Stat(netFile); err != nil {
 		_ = os.WriteFile(netFile, []byte(GenerateNetwork()), 0644)

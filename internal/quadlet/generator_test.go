@@ -594,7 +594,7 @@ func TestSearchModuleQuadlet(t *testing.T) {
 		},
 		Images: []manifest.Image{
 			{Ref: "docker.io/searxng/searxng", Tag: "2026.5.31-7159b8aed", Channel: "pinned"},
-			{Ref: "docker.io/valkey/valkey", Tag: "8-alpine", Channel: "patch"},
+			{Ref: "docker.io/valkey/valkey", Tag: "8", Channel: "patch"},
 		},
 	}
 
