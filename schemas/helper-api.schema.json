@@ -27,6 +27,7 @@
             "smart.read",
             "service.restart",
             "storage.init",
+            "storage.prepare_module",
             "storage.diagnostics",
             "storage.scan_datasets",
             "network.netbird_status",

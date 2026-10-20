@@ -1876,6 +1876,13 @@ fi
 			}
 		}
 
+		// Ensure module storage directories and permissions are prepared via helper (root)
+		hClient := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		if res, err := hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false); err != nil || !res.Ok {
+			hClient.SocketPath = "allod-helper.sock"
+			_, _ = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false)
+		}
+
 		genRes, err := quadlet.Generate(req.Module, m, level)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -4239,6 +4246,11 @@ WantedBy=default.target
 				}
 				_ = quadlet.StopAndRemoveContainers(req.Module, true)
 			} else {
+				hClient := helper.Client{SocketPath: "/run/allod/helper.sock"}
+				if res, err := hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false); err != nil || !res.Ok {
+					hClient.SocketPath = "allod-helper.sock"
+					_, _ = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false)
+				}
 				quadlet.EnsureAllodNetwork(quadDir)
 				if genRes, err := quadlet.Generate(req.Module, m, req.Level); err == nil {
 					for fname, content := range genRes.Files {
@@ -4298,6 +4310,14 @@ WantedBy=default.target
 		modStorage := filepath.Join(baseDir, modID)
 		_ = exec.Command("podman", "unshare", "rm", "-rf", modStorage).Run()
 		_ = os.RemoveAll(modStorage)
+
+		// Ask root helper to cleanly purge any leftover files and re-initialize group directories and templates
+		hClient := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		if res, err := hClient.Execute("storage.prepare_module", map[string]interface{}{"module": modID, "clean": true}, false); err != nil || !res.Ok {
+			hClient.SocketPath = "allod-helper.sock"
+			_, _ = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": modID, "clean": true}, false)
+		}
+
 		quadlet.EnsureStorageDirectories(modID)
 
 		// 7. Daemon reload

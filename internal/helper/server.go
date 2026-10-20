@@ -41,6 +41,7 @@ var AllowedActions = []string{
 	"smart.read",
 	"service.restart",
 	"storage.init",
+	"storage.prepare_module",
 	"storage.diagnostics",
 	"storage.scan_datasets",
 	"network.netbird_status",
@@ -427,9 +428,10 @@ func GetInterfaceIPv4(ifaceName string) string {
 }
 
 func addUserToAllodData(username string) {
+	_ = exec.Command("groupadd", "-f", "allod").Run()
 	_ = exec.Command("groupadd", "-f", "allod-data").Run()
 	usermodBin := resolveExecutable("usermod", "/usr/sbin/usermod", "/sbin/usermod", "/bin/usermod")
-	_ = exec.Command(usermodBin, "-aG", "allod-data", username).Run()
+	_ = exec.Command(usermodBin, "-aG", "allod-data,allod", username).Run()
 }
 
 func ensureLinuxUser(username string) error {
@@ -1211,6 +1213,18 @@ func (s *Server) processRequest(req Request) Response {
 		}
 
 		return Response{Ok: true, Applied: !req.Plan, Plan: plan}
+
+	case "storage.prepare_module":
+		modID, _ := req.Args["module"].(string)
+		if modID == "" || !validNameRegex.MatchString(modID) {
+			return Response{Ok: false, Error: "Missing or invalid 'module' argument"}
+		}
+		clean, _ := req.Args["clean"].(bool)
+		storageRoot := getStorageBaseDir()
+		if err := PrepareModuleStorage(storageRoot, modID, clean); err != nil {
+			return Response{Ok: false, Error: fmt.Sprintf("Failed to prepare storage for module %s: %v", modID, err)}
+		}
+		return Response{Ok: true, Applied: true, Output: fmt.Sprintf("Storage directories and permissions prepared for module %s", modID)}
 
 	case "storage.diagnostics":
 		mountPoint, _ := req.Args["mount"].(string)
@@ -2386,7 +2400,175 @@ func PatchSambaConfig(content string) string {
 	return strings.Join(output, "\n")
 }
 
-// AutoHealStoragePermissions ensures that /mnt/allod-storage and /mnt/allod-storage/shares
+// PrepareModuleStorage initializes all required storage directories and config templates
+// for a module under the storage root with group permissions (2775 root:allod-data).
+func PrepareModuleStorage(storageRoot, modID string, clean bool) error {
+	if !validNameRegex.MatchString(modID) {
+		return fmt.Errorf("invalid module id: %s", modID)
+	}
+
+	if storageRoot == "" {
+		storageRoot = getStorageBaseDir()
+	}
+
+	_ = exec.Command("groupadd", "-f", "allod").Run()
+	_ = exec.Command("groupadd", "-f", "allod-data").Run()
+
+	_ = os.MkdirAll(storageRoot, 0775)
+	if fi, err := os.Stat(storageRoot); err == nil && fi.IsDir() {
+		_ = exec.Command("chmod", "2775", storageRoot).Run()
+		_ = exec.Command("chown", "root:allod-data", storageRoot).Run()
+	}
+
+	// Ensure users under /home are in allod-data and allod
+	if entries, err := os.ReadDir("/home"); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && validNameRegex.MatchString(e.Name()) {
+				addUserToAllodData(e.Name())
+			}
+		}
+	}
+
+	if clean {
+		modDir := filepath.Join(storageRoot, modID)
+		if fi, err := os.Stat(modDir); err == nil && fi.IsDir() {
+			_ = os.RemoveAll(modDir)
+		}
+	}
+
+	var dirs []string
+	switch modID {
+	case "cloud":
+		dirs = []string{
+			filepath.Join(storageRoot, "cloud"),
+			filepath.Join(storageRoot, "cloud", "html"),
+			filepath.Join(storageRoot, "cloud", "data"),
+			filepath.Join(storageRoot, "cloud", "postgres"),
+			filepath.Join(storageRoot, "cloud", "secrets"),
+		}
+	case "photos":
+		dirs = []string{
+			filepath.Join(storageRoot, "photos"),
+			filepath.Join(storageRoot, "photos", "upload"),
+			filepath.Join(storageRoot, "photos", "postgres"),
+			filepath.Join(storageRoot, "photos", "valkey"),
+			filepath.Join(storageRoot, "photos", "secrets"),
+		}
+	case "backup":
+		dirs = []string{
+			filepath.Join(storageRoot, "backup"),
+			filepath.Join(storageRoot, "backup", "vault"),
+		}
+	case "shares":
+		dirs = []string{
+			filepath.Join(storageRoot, "shares"),
+			filepath.Join(storageRoot, "shares", "public"),
+		}
+	case "media":
+		dirs = []string{
+			filepath.Join(storageRoot, "media"),
+			filepath.Join(storageRoot, "media", "config"),
+			filepath.Join(storageRoot, "media", "cache"),
+		}
+	case "passwords":
+		dirs = []string{
+			filepath.Join(storageRoot, "passwords"),
+			filepath.Join(storageRoot, "passwords", "data"),
+			filepath.Join(storageRoot, "passwords", "secrets"),
+		}
+	case "search":
+		dirs = []string{
+			filepath.Join(storageRoot, "search"),
+			filepath.Join(storageRoot, "search", "config"),
+			filepath.Join(storageRoot, "search", "valkey"),
+			filepath.Join(storageRoot, "search", "secrets"),
+		}
+	case "odysseus":
+		dirs = []string{
+			filepath.Join(storageRoot, "odysseus"),
+			filepath.Join(storageRoot, "odysseus", "data"),
+			filepath.Join(storageRoot, "odysseus", "logs"),
+			filepath.Join(storageRoot, "odysseus", "chroma"),
+			filepath.Join(storageRoot, "odysseus", "secrets"),
+		}
+	default:
+		dirs = []string{
+			filepath.Join(storageRoot, modID),
+		}
+	}
+
+	for _, d := range dirs {
+		_ = os.MkdirAll(d, 0775)
+		_ = exec.Command("chmod", "2775", d).Run()
+		_ = exec.Command("chown", "root:allod-data", d).Run()
+	}
+
+	// Module specific file initializations
+	if modID == "search" {
+		cfgDir := filepath.Join(storageRoot, "search", "config")
+		secDir := filepath.Join(storageRoot, "search", "secrets")
+
+		secKeyFile := filepath.Join(secDir, "searxng.env")
+		if fi, err := os.Stat(secKeyFile); err != nil || fi.Size() == 0 {
+			secretKeyBytes := make([]byte, 32)
+			_, _ = rand.Read(secretKeyBytes)
+			secretHex := fmt.Sprintf("%x", secretKeyBytes)
+			_ = os.WriteFile(secKeyFile, []byte(fmt.Sprintf("SEARXNG_SECRET=%s\n", secretHex)), 0660)
+		}
+		_ = exec.Command("chown", "root:allod-data", secKeyFile).Run()
+		_ = exec.Command("chmod", "0660", secKeyFile).Run()
+
+		settingsFile := filepath.Join(cfgDir, "settings.yml")
+		if fi, err := os.Stat(settingsFile); err != nil || fi.Size() == 0 {
+			secretKeyBytes := make([]byte, 32)
+			_, _ = rand.Read(secretKeyBytes)
+			secretHex := fmt.Sprintf("%x", secretKeyBytes)
+			defaultSettings := fmt.Sprintf(`# SearXNG configuration for Allod
+use_default_settings: true
+general:
+  debug: false
+  instance_name: "Allod Search"
+server:
+  secret_key: "%s"
+  limiter: false
+  bind_address: "0.0.0.0"
+  port: 8080
+redis:
+  url: "redis://search-valkey:6379/0"
+search:
+  safe_search: 0
+  autocomplete: "google"
+ui:
+  infinite_scroll: true
+`, secretHex)
+			_ = os.WriteFile(settingsFile, []byte(defaultSettings), 0664)
+		}
+		_ = exec.Command("chown", "root:allod-data", settingsFile).Run()
+		_ = exec.Command("chmod", "0664", settingsFile).Run()
+	} else if modID == "passwords" {
+		secDir := filepath.Join(storageRoot, "passwords", "secrets")
+		secFile := filepath.Join(secDir, "vaultwarden.env")
+		if fi, err := os.Stat(secFile); err != nil || fi.Size() == 0 {
+			tokenBytes := make([]byte, 24)
+			_, _ = rand.Read(tokenBytes)
+			tokenHex := fmt.Sprintf("%x", tokenBytes)
+			content := fmt.Sprintf(`# Vaultwarden Password Manager Configuration for Allod
+SIGNUPS_ALLOWED=false
+INVITATIONS_ALLOWED=true
+WEBSOCKET_ENABLED=true
+ROCKET_PORT=80
+ADMIN_TOKEN=%s
+`, tokenHex)
+			_ = os.WriteFile(secFile, []byte(content), 0660)
+		}
+		_ = exec.Command("chown", "root:allod-data", secFile).Run()
+		_ = exec.Command("chmod", "0660", secFile).Run()
+	}
+
+	return nil
+}
+
+// AutoHealStoragePermissions ensures that /mnt/allod-storage and module directories
 // have traversable permissions (2775 root:allod-data), public shares are accessible to allod-data,
 // and personal user shares in /mnt/allod-storage/shares/<user> have mode 2750 <user>:allod
 // so that the unprivileged web panel and root services can compute sizes and backup without compromising privacy.
@@ -2402,20 +2584,17 @@ func AutoHealStoragePermissions() {
 		_ = exec.Command("chmod", "2775", storageRoot).Run()
 		_ = exec.Command("chown", "root:allod-data", storageRoot).Run()
 
-		for _, modDir := range []string{"cloud", "photos", "backup", "media", "passwords", "search", "odysseus"} {
-			p := filepath.Join(storageRoot, modDir)
-			_ = os.MkdirAll(p, 0775)
-			_ = exec.Command("chmod", "2775", p).Run()
-			_ = exec.Command("chown", "root:allod-data", p).Run()
+		for _, mod := range []string{"cloud", "photos", "backup", "media", "passwords", "search", "odysseus", "shares"} {
+			_ = PrepareModuleStorage(storageRoot, mod, false)
 		}
-		for _, sub := range []string{
-			filepath.Join(storageRoot, "passwords", "data"),
-			filepath.Join(storageRoot, "search", "config"),
-			filepath.Join(storageRoot, "search", "valkey"),
-		} {
-			_ = os.MkdirAll(sub, 0775)
-			_ = exec.Command("chmod", "2775", sub).Run()
-			_ = exec.Command("chown", "root:allod-data", sub).Run()
+	}
+
+	// Ensure all standard system users under /home are in allod-data and allod
+	if entries, err := os.ReadDir("/home"); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && validNameRegex.MatchString(e.Name()) {
+				addUserToAllodData(e.Name())
+			}
 		}
 	}
 
