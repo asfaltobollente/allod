@@ -1855,12 +1855,27 @@ function createModuleCard(mod) {
             ${networkBoxHtml}
             ${watchBoxHtml}
             ${odysseusBoxHtml}
-            ${(mod.id === 'storage' && isUnlocked) ? `
+            ${(mod.id === 'storage') ? `
               <div style="margin-top:6px; padding:8px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
-                <p style="color:#fca5a5; font-size:10.5px; margin-bottom:6px;">Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici.</p>
-                <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:10.5px; padding:3px 8px;">🗑️ Re-inizializza Pool Storage</button>
+                ${isLocked ? `
+                  <p style="color:#fca5a5; font-size:10.5px; margin-bottom:6px;">🔒 Pool NAS protetto. Sbloccalo per formattare o re-inizializzare.</p>
+                  <button class="btn btn-sm btn-outline-warning" onclick="toggleModuleUnlock('${mod.id}')" style="font-size:10.5px; padding:3px 8px;">🔓 Sblocca Pool</button>
+                ` : `
+                  <p style="color:#fca5a5; font-size:10.5px; margin-bottom:6px;">Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici.</p>
+                  <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:10.5px; padding:3px 8px;">🗑️ Re-inizializza Pool Storage</button>
+                `}
               </div>
-            ` : ''}
+            ` : `
+              <div style="margin-top:6px; padding:8px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
+                ${isLocked ? `
+                  <p style="color:#fca5a5; font-size:10.5px; margin-bottom:6px;">🔒 Dati protetti in produzione. Sblocca il modulo per ripristinare.</p>
+                  <button class="btn btn-sm btn-outline-warning" onclick="toggleModuleUnlock('${mod.id}')" style="font-size:10.5px; padding:3px 8px;">🔓 Sblocca Modulo</button>
+                ` : `
+                  <p style="color:#fca5a5; font-size:10.5px; margin-bottom:6px;">Ripristina il modulo allo stato iniziale azzerando dati e configurazioni.</p>
+                  <button class="btn btn-sm btn-danger" onclick="openDangerPurgeModal('${mod.id}')" style="font-size:10.5px; padding:3px 8px;">🗑️ Cancella Dati & Ripristina Modulo</button>
+                `}
+              </div>
+            `}
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-top:8px; border-top:1px dashed var(--card-border); padding-top:8px;">
               <div style="display:flex; gap:4px; flex-wrap:wrap;">
                 ${actionButtons}
@@ -1926,36 +1941,56 @@ function createModuleCard(mod) {
           <span>🔒 <strong>${t('status_protected_short', 'Dati Protetti')}:</strong> ${t('protected_pool_note', 'Salvati su pool NAS RAID 1. Clicca Sblocca per modifiche.')}</span>
         </div>
       ` : ''}
-      ${(mod.id === 'storage' && isUnlocked) ? `
+      ${(mod.id === 'storage') ? `
         <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
-          <details style="font-size:11px; color:var(--text-muted);" open>
+          <details style="font-size:11px; color:var(--text-muted);" ${isUnlocked ? 'open' : ''}>
             <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Formattazione Dischi</summary>
             <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
-              <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
-                Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici cancellando definitivamente tutti i dati e le foto presenti.
-              </p>
-              <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:11px; padding:4px 10px;">
-                🗑️ Re-inizializza Pool Storage (Distruttivo)
-              </button>
+              ${isLocked ? `
+                <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
+                  🔒 <strong>Pool Storage Protetto:</strong> Il pool NAS RAID 1 è protetto contro la formattazione accidentale. Clicca Sblocca per abilitare le opzioni avanzate.
+                </p>
+                <button class="btn btn-sm btn-outline-warning" onclick="toggleModuleUnlock('${mod.id}')" style="font-size:11px; padding:4px 10px;">
+                  🔓 Sblocca Pool Storage
+                </button>
+              ` : `
+                <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
+                  Attenzione: Re-inizializzare il pool storage formatterà tutti i dischi fisici cancellando definitivamente tutti i dati e le foto presenti.
+                </p>
+                <button class="btn btn-sm btn-danger" onclick="openDangerStorageModal()" style="font-size:11px; padding:4px 10px;">
+                  🗑️ Re-inizializza Pool Storage (Distruttivo)
+                </button>
+              `}
             </div>
           </details>
         </div>
-      ` : ''}
-      ${(mod.id !== 'storage' && !isLocked && mod.storage_bytes > 0) ? `
+      ` : `
         <div style="margin-top:10px; border-top:1px dashed var(--card-border); padding-top:8px;">
-          <details style="font-size:11px; color:var(--text-muted);" ${mod.runtime_status === 'failed' ? 'open' : ''}>
-            <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Ripristino Dati (${mod.storage_size})</summary>
+          <details style="font-size:11px; color:var(--text-muted);" ${(mod.runtime_status === 'failed' || isUnlocked) ? 'open' : ''}>
+            <summary style="cursor:pointer; color:#f87171; font-weight:600;">⚠️ Opzioni Avanzate & Ripristino Dati ${mod.storage_size && mod.storage_size !== '0 B' ? `(${mod.storage_size})` : ''}</summary>
             <div style="margin-top:8px; padding:10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px;">
-              <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
-                Attualmente sono presenti <strong>${mod.storage_size}</strong> di dati su <code>${mod.storage_path}</code>. Puoi azzerarli e ricreare le cartelle pulite da zero.
-              </p>
-              <button class="btn btn-sm btn-danger" onclick="openDangerPurgeModal('${mod.id}')" style="font-size:11px; padding:4px 10px;">
-                🗑️ Cancella Dati & Ripristina Modulo
-              </button>
+              ${isLocked ? `
+                <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
+                  🔒 <strong>Modulo protetto in produzione.</strong> I dati su <code>${mod.storage_path || '/mnt/allod-storage/' + mod.id}</code> sono protetti contro cancellazioni accidentali. Sblocca il modulo per procedere con il ripristino o la cancellazione.
+                </p>
+                <button class="btn btn-sm btn-outline-warning" onclick="toggleModuleUnlock('${mod.id}')" style="font-size:11px; padding:4px 10px;">
+                  🔓 Sblocca Modulo per Abilitare il Ripristino
+                </button>
+              ` : `
+                <p style="color:#fca5a5; font-size:11px; margin-bottom:8px; line-height:1.4;">
+                  ${mod.storage_bytes > 0
+                    ? `Attualmente sono presenti <strong>${mod.storage_size}</strong> di dati su <code>${mod.storage_path || '/mnt/allod-storage/' + mod.id}</code>. Puoi azzerarli e ricreare le cartelle pulite da zero.`
+                    : `Ripristina il modulo allo stato iniziale: arresta eventuali container, rimuove i Quadlet orfani e ricrea le cartelle storage pulite su <code>${mod.storage_path || '/mnt/allod-storage/' + mod.id}</code> con permessi corretti.`
+                  }
+                </p>
+                <button class="btn btn-sm btn-danger" onclick="openDangerPurgeModal('${mod.id}')" style="font-size:11px; padding:4px 10px;">
+                  🗑️ Cancella Dati & Ripristina Modulo
+                </button>
+              `}
             </div>
           </details>
         </div>
-      ` : ''}
+      `}
       ${openLinkHtml}
     </div>
 
