@@ -57,6 +57,7 @@ The root helper operates exclusively on a closed whitelist of 25 actions defined
 | `smart.read` | Query SMART health of physical drive *(planned stub)* | `disk` (regex device / ID) | Validates input; planned: `smartctl -H /dev/disk/by-id/<disk>` |
 | `service.restart` | Restart an allowed Allod systemd service | `unit` (regex from `AllowedServiceUnits`) | `systemctl restart <unit>` (no unprivileged binary replacement) |
 | `storage.init` | Format disks and create initial Btrfs pool structure | `disks` (list/string of regex devices), `mode` (`single`\|`raid1`), `mount` (allowed path), `user` (optional regex) | `umount`, `mkfs.btrfs`, `mount`, `mkdir -p`, `chmod`, `chown` |
+| `storage.prepare_module` | Ensure group permissions (2775 root:allod-data) and config templates for module storage | `module` (regex module ID), `clean` (optional bool) | `mkdir -p`, `chmod 2775`, `chown root:allod-data`, template initializations |
 | `storage.diagnostics` | Query Btrfs filesystem usage and device error stats | `mount` (allowed path) | `btrfs filesystem usage`, `btrfs device stats`, `df` |
 | `storage.scan_datasets` | Scan datasets and compute forecasting projections as root | `storage_root` (optional), `valid_users` (list), `selected_paths` (list), `remote_quota_gb` (int) | Traverses datasets as root, auto-heals share permissions, calculates exact sizes |
 | `network.netbird_status` | Query NetBird mesh status and connected peers in JSON | *(none)* | `podman exec <container> netbird status --json` |

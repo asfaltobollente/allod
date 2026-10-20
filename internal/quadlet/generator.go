@@ -103,11 +103,11 @@ func EnsureModuleSecret(module, key, legacyValue string) error {
 func ensureModuleSecret(module, key, legacyValue string) error {
 	resBaseDir := ResolvedStorageBaseDir()
 	secDir := filepath.Join(resBaseDir, module, "secrets")
-	if err := os.MkdirAll(secDir, 0700); err != nil {
+	if err := os.MkdirAll(secDir, 0770); err != nil {
 		return err
 	}
 	secFile := filepath.Join(secDir, key+".env")
-	if _, err := os.Stat(secFile); err == nil {
+	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
 		return nil
 	}
 
@@ -139,17 +139,17 @@ func ensureModuleSecret(module, key, legacyValue string) error {
 		envContent = fmt.Sprintf("PASSWORD=%s\n", password)
 	}
 
-	return os.WriteFile(secFile, []byte(envContent), 0600)
+	return os.WriteFile(secFile, []byte(envContent), 0660)
 }
 
 func ensureOdysseusSecret() error {
 	resBaseDir := ResolvedStorageBaseDir()
 	secDir := filepath.Join(resBaseDir, "odysseus", "secrets")
-	if err := os.MkdirAll(secDir, 0700); err != nil {
+	if err := os.MkdirAll(secDir, 0770); err != nil {
 		return err
 	}
 	secFile := filepath.Join(secDir, "odysseus.env")
-	if _, err := os.Stat(secFile); err == nil {
+	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
 		return nil
 	}
 
@@ -183,11 +183,11 @@ FASTEMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
 func ensurePasswordsSecret() error {
 	resBaseDir := ResolvedStorageBaseDir()
 	secDir := filepath.Join(resBaseDir, "passwords", "secrets")
-	if err := os.MkdirAll(secDir, 0700); err != nil {
+	if err := os.MkdirAll(secDir, 0770); err != nil {
 		return err
 	}
 	secFile := filepath.Join(secDir, "vaultwarden.env")
-	if _, err := os.Stat(secFile); err == nil {
+	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
 		return nil
 	}
 
@@ -211,7 +211,7 @@ ROCKET_PORT=80
 ADMIN_TOKEN=%s
 `, adminToken)
 
-	return os.WriteFile(secFile, []byte(defaultContent), 0600)
+	return os.WriteFile(secFile, []byte(defaultContent), 0660)
 }
 
 func ensureSearchConfig() error {
@@ -222,7 +222,7 @@ func ensureSearchConfig() error {
 	if err := os.MkdirAll(cfgDir, 0770); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(secDir, 0700); err != nil {
+	if err := os.MkdirAll(secDir, 0770); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(valkeyDir, 0770); err != nil {
@@ -230,16 +230,16 @@ func ensureSearchConfig() error {
 	}
 
 	secKeyFile := filepath.Join(secDir, "searxng.env")
-	if _, err := os.Stat(secKeyFile); err != nil {
+	if fi, err := os.Stat(secKeyFile); err != nil || fi.Size() == 0 {
 		secretKeyBytes := make([]byte, 32)
 		_, _ = rand.Read(secretKeyBytes)
 		secretHex := fmt.Sprintf("%x", secretKeyBytes)
 		content := fmt.Sprintf("SEARXNG_SECRET=%s\n", secretHex)
-		_ = os.WriteFile(secKeyFile, []byte(content), 0600)
+		_ = os.WriteFile(secKeyFile, []byte(content), 0660)
 	}
 
 	settingsFile := filepath.Join(cfgDir, "settings.yml")
-	if _, err := os.Stat(settingsFile); err != nil {
+	if fi, err := os.Stat(settingsFile); err != nil || fi.Size() == 0 {
 		secretKeyBytes := make([]byte, 32)
 		_, _ = rand.Read(secretKeyBytes)
 		secretHex := fmt.Sprintf("%x", secretKeyBytes)
@@ -261,13 +261,20 @@ search:
 ui:
   infinite_scroll: true
 `, secretHex)
-		_ = os.WriteFile(settingsFile, []byte(defaultSettings), 0640)
+		_ = os.WriteFile(settingsFile, []byte(defaultSettings), 0664)
 	}
 	return nil
 }
 
 // EnsureStorageDirectories creates all host volume mount paths with secure group-accessible permissions.
 func EnsureStorageDirectories(modID string) {
+	// Try delegating to allod-helperd (root) if available to guarantee correct 2775 root:allod-data permissions
+	client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+	if res, err := client.Execute("storage.prepare_module", map[string]interface{}{"module": modID}, false); err != nil || !res.Ok {
+		client.SocketPath = "allod-helper.sock"
+		_, _ = client.Execute("storage.prepare_module", map[string]interface{}{"module": modID}, false)
+	}
+
 	baseDir := ResolvedStorageBaseDir()
 	var dirs []string
 	switch modID {
