@@ -1980,6 +1980,14 @@ fi
 		} else if req.Module == "backup" {
 			_ = os.MkdirAll(filepath.Join(baseDir, "backup", "vault"), 0770)
 			_ = os.Chmod(filepath.Join(baseDir, "backup", "vault"), 0770)
+		} else if req.Module == "passwords" {
+			_ = os.MkdirAll(filepath.Join(baseDir, "passwords", "data"), 0770)
+			_ = os.Chmod(filepath.Join(baseDir, "passwords", "data"), 0770)
+		} else if req.Module == "search" {
+			_ = os.MkdirAll(filepath.Join(baseDir, "search", "config"), 0770)
+			_ = os.MkdirAll(filepath.Join(baseDir, "search", "valkey"), 0770)
+			_ = os.Chmod(filepath.Join(baseDir, "search", "config"), 0770)
+			_ = os.Chmod(filepath.Join(baseDir, "search", "valkey"), 0770)
 		} else {
 			_ = os.MkdirAll(filepath.Join(baseDir, req.Module), 0770)
 		}
@@ -4060,6 +4068,23 @@ WantedBy=default.target
 			}
 			if len(logsOut) == 0 || strings.Contains(string(logsOut), "no container") {
 				logsOut, _ = exec.Command("journalctl", "--user", "-u", modName, "-n", "30", "--no-pager").CombinedOutput()
+			}
+
+			// If the module has sidecar or dependency units (e.g. search-valkey, photos-valkey, photos-postgres, allod-network), append their diagnostics
+			sidecars := []string{modName + "-valkey", modName + "-postgres", modName + "-chroma", modName + "-searxng", "allod-network"}
+			for _, sc := range sidecars {
+				scStatus, _ := exec.Command("systemctl", "--user", "status", sc).CombinedOutput()
+				scStatusStr := string(scStatus)
+				if len(scStatus) > 0 && !strings.Contains(scStatusStr, "could not be found") && !strings.Contains(scStatusStr, "not found") {
+					statusOut = append(statusOut, []byte(fmt.Sprintf("\n\n=== ⚙️ Dipendenza / Sidecar Systemd (%s): ===\n", sc))...)
+					statusOut = append(statusOut, scStatus...)
+
+					scLogs, _ := exec.Command("journalctl", "--user", "-u", sc, "-n", "30", "--no-pager").CombinedOutput()
+					if len(scLogs) > 0 && !strings.Contains(string(scLogs), "No entries") {
+						logsOut = append(logsOut, []byte(fmt.Sprintf("\n\n=== 📜 Log Dipendenza / Sidecar (%s): ===\n", sc))...)
+						logsOut = append(logsOut, scLogs...)
+					}
+				}
 			}
 		}
 

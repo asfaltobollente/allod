@@ -2401,6 +2401,22 @@ func AutoHealStoragePermissions() {
 	if fi, err := os.Stat(storageRoot); err == nil && fi.IsDir() {
 		_ = exec.Command("chmod", "2775", storageRoot).Run()
 		_ = exec.Command("chown", "root:allod-data", storageRoot).Run()
+
+		for _, modDir := range []string{"cloud", "photos", "backup", "media", "passwords", "search", "odysseus"} {
+			p := filepath.Join(storageRoot, modDir)
+			_ = os.MkdirAll(p, 0775)
+			_ = exec.Command("chmod", "2775", p).Run()
+			_ = exec.Command("chown", "root:allod-data", p).Run()
+		}
+		for _, sub := range []string{
+			filepath.Join(storageRoot, "passwords", "data"),
+			filepath.Join(storageRoot, "search", "config"),
+			filepath.Join(storageRoot, "search", "valkey"),
+		} {
+			_ = os.MkdirAll(sub, 0775)
+			_ = exec.Command("chmod", "2775", sub).Run()
+			_ = exec.Command("chown", "root:allod-data", sub).Run()
+		}
 	}
 
 	sharesDir := filepath.Join(storageRoot, "shares")
