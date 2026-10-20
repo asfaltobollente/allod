@@ -77,6 +77,14 @@ var AllowedServiceUnits = []string{
 	"media",
 	"backup",
 	"storage",
+	"odysseus",
+	"odysseus-chroma",
+	"odysseus-searxng",
+	"passwords",
+	"passwords-server",
+	"search",
+	"search-searxng",
+	"search-valkey",
 	"nftables",
 }
 

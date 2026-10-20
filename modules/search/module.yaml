@@ -1,0 +1,48 @@
+id: search
+tier: optional
+provides: [private-search, meta-search]
+conflicts: []
+platforms: [amd64, arm64]
+
+levels:
+  off:
+    ram_mb: 0
+  standard:
+    ram_mb: 512
+    disk_gb: 2
+    requires:
+      modules: []
+    grants: [Motore di meta-ricerca privato SearXNG per la famiglia e per agenti LAN, senza tracciamento o profilazione, cache Valkey per risultati veloci]
+    lacks: []
+
+ports:
+  - n: 8888
+    container_port: 8080
+    scope: lan
+    share: member
+
+privileges:
+  userns: rootless
+  devices: []
+  caps: []
+
+images:
+  - ref: docker.io/searxng/searxng
+    tag: "2026.5.31-7159b8aed"
+    channel: pinned
+  - ref: docker.io/valkey/valkey
+    tag: "8-alpine"
+    channel: patch
+
+transitions:
+  off -> standard: safe
+  standard -> off: safe
+
+datasets:
+  - id: search
+    includes: [config]
+    excludes: [valkey]
+
+help:
+  en: help/search.en.md
+  it: help/search.it.md
