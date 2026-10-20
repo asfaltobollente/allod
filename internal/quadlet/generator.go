@@ -219,15 +219,10 @@ func ensureSearchConfig() error {
 	cfgDir := filepath.Join(resBaseDir, "search", "config")
 	secDir := filepath.Join(resBaseDir, "search", "secrets")
 	valkeyDir := filepath.Join(resBaseDir, "search", "valkey")
-	if err := os.MkdirAll(cfgDir, 0770); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(secDir, 0770); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(valkeyDir, 0770); err != nil {
-		return err
-	}
+	createDirWithFallback(filepath.Join(resBaseDir, "search"), 0775)
+	createDirWithFallback(cfgDir, 0775)
+	createDirWithFallback(secDir, 0770)
+	createDirWithFallback(valkeyDir, 0775)
 
 	secKeyFile := filepath.Join(secDir, "searxng.env")
 	if fi, err := os.Stat(secKeyFile); err != nil || fi.Size() == 0 {
@@ -266,13 +261,32 @@ ui:
 	return nil
 }
 
+func createDirWithFallback(path string, perm os.FileMode) {
+	if err := os.MkdirAll(path, perm); err != nil {
+		_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("mkdir -p '%s' && chmod %o '%s'", path, perm, path)).Run()
+		_ = exec.Command("podman", "unshare", "mkdir", "-p", path).Run()
+		_ = exec.Command("podman", "unshare", "chmod", fmt.Sprintf("%o", perm), path).Run()
+	} else {
+		_ = os.Chmod(path, perm)
+	}
+}
+
 // EnsureStorageDirectories creates all host volume mount paths with secure group-accessible permissions.
 func EnsureStorageDirectories(modID string) {
 	// Try delegating to allod-helperd (root) if available to guarantee correct 2775 root:allod-data permissions
 	client := helper.Client{SocketPath: "/run/allod/helper.sock"}
-	if res, err := client.Execute("storage.prepare_module", map[string]interface{}{"module": modID}, false); err != nil || !res.Ok {
+	res, err := client.Execute("storage.prepare_module", map[string]interface{}{"module": modID}, false)
+	if err != nil || !res.Ok {
 		client.SocketPath = "allod-helper.sock"
-		_, _ = client.Execute("storage.prepare_module", map[string]interface{}{"module": modID}, false)
+		res, err = client.Execute("storage.prepare_module", map[string]interface{}{"module": modID}, false)
+	}
+	if err != nil || !res.Ok {
+		// Compatibility fallback for existing running helper daemon: storage.scan_datasets invokes AutoHealStoragePermissions as root!
+		client.SocketPath = "/run/allod/helper.sock"
+		if res, err = client.Execute("storage.scan_datasets", map[string]interface{}{"storage_root": "/mnt/allod-storage"}, false); err != nil || !res.Ok {
+			client.SocketPath = "allod-helper.sock"
+			_, _ = client.Execute("storage.scan_datasets", map[string]interface{}{"storage_root": "/mnt/allod-storage"}, false)
+		}
 	}
 
 	baseDir := ResolvedStorageBaseDir()
@@ -384,25 +398,25 @@ func EnsureStorageDirectories(modID string) {
 		return
 	case "passwords":
 		dirs = []string{
+			filepath.Join(baseDir, "passwords"),
 			filepath.Join(baseDir, "passwords", "data"),
+			filepath.Join(baseDir, "passwords", "secrets"),
 		}
 		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0770)
-			_ = os.Chmod(d, 0770)
+			createDirWithFallback(d, 0775)
 		}
-		_ = os.MkdirAll(filepath.Join(baseDir, "passwords", "secrets"), 0700)
 		_ = ensurePasswordsSecret()
 		return
 	case "search":
 		dirs = []string{
+			filepath.Join(baseDir, "search"),
 			filepath.Join(baseDir, "search", "config"),
 			filepath.Join(baseDir, "search", "valkey"),
+			filepath.Join(baseDir, "search", "secrets"),
 		}
 		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0770)
-			_ = os.Chmod(d, 0770)
+			createDirWithFallback(d, 0775)
 		}
-		_ = os.MkdirAll(filepath.Join(baseDir, "search", "secrets"), 0700)
 		_ = ensureSearchConfig()
 		return
 	default:
@@ -412,7 +426,7 @@ func EnsureStorageDirectories(modID string) {
 	}
 
 	for _, d := range dirs {
-		_ = os.MkdirAll(d, 0770)
+		createDirWithFallback(d, 0775)
 	}
 }
 

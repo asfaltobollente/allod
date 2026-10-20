@@ -1891,7 +1891,13 @@ fi
 		hClient := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		if res, err := hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false); err != nil || !res.Ok {
 			hClient.SocketPath = "allod-helper.sock"
-			_, _ = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false)
+			if res, err = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false); err != nil || !res.Ok {
+				hClient.SocketPath = "/run/allod/helper.sock"
+				if res, err = hClient.Execute("storage.scan_datasets", map[string]interface{}{"storage_root": "/mnt/allod-storage"}, false); err != nil || !res.Ok {
+					hClient.SocketPath = "allod-helper.sock"
+					_, _ = hClient.Execute("storage.scan_datasets", map[string]interface{}{"storage_root": "/mnt/allod-storage"}, false)
+				}
+			}
 		}
 
 		genRes, err := quadlet.Generate(req.Module, m, level)
@@ -4260,7 +4266,13 @@ WantedBy=default.target
 				hClient := helper.Client{SocketPath: "/run/allod/helper.sock"}
 				if res, err := hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false); err != nil || !res.Ok {
 					hClient.SocketPath = "allod-helper.sock"
-					_, _ = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false)
+					if res, err = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": req.Module}, false); err != nil || !res.Ok {
+						hClient.SocketPath = "/run/allod/helper.sock"
+						if res, err = hClient.Execute("storage.scan_datasets", map[string]interface{}{"storage_root": "/mnt/allod-storage"}, false); err != nil || !res.Ok {
+							hClient.SocketPath = "allod-helper.sock"
+							_, _ = hClient.Execute("storage.scan_datasets", map[string]interface{}{"storage_root": "/mnt/allod-storage"}, false)
+						}
+					}
 				}
 				quadlet.EnsureAllodNetwork(quadDir)
 				if genRes, err := quadlet.Generate(req.Module, m, req.Level); err == nil {
@@ -4326,7 +4338,13 @@ WantedBy=default.target
 		hClient := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		if res, err := hClient.Execute("storage.prepare_module", map[string]interface{}{"module": modID, "clean": true}, false); err != nil || !res.Ok {
 			hClient.SocketPath = "allod-helper.sock"
-			_, _ = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": modID, "clean": true}, false)
+			if res, err = hClient.Execute("storage.prepare_module", map[string]interface{}{"module": modID, "clean": true}, false); err != nil || !res.Ok {
+				hClient.SocketPath = "/run/allod/helper.sock"
+				if res, err = hClient.Execute("storage.scan_datasets", map[string]interface{}{"storage_root": "/mnt/allod-storage"}, false); err != nil || !res.Ok {
+					hClient.SocketPath = "allod-helper.sock"
+					_, _ = hClient.Execute("storage.scan_datasets", map[string]interface{}{"storage_root": "/mnt/allod-storage"}, false)
+				}
+			}
 		}
 
 		quadlet.EnsureStorageDirectories(modID)
