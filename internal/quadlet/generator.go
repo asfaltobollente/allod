@@ -1,6 +1,7 @@
 package quadlet
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
 	"log"
@@ -102,10 +103,9 @@ func EnsureModuleSecret(module, key, legacyValue string) error {
 
 func ensureModuleSecret(module, key, legacyValue string) error {
 	resBaseDir := ResolvedStorageBaseDir()
+	createDirWithFallback(filepath.Join(resBaseDir, module), 0775)
 	secDir := filepath.Join(resBaseDir, module, "secrets")
-	if err := os.MkdirAll(secDir, 0770); err != nil {
-		return err
-	}
+	createDirWithFallback(secDir, 0775)
 	secFile := filepath.Join(secDir, key+".env")
 	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
 		return nil
@@ -139,15 +139,14 @@ func ensureModuleSecret(module, key, legacyValue string) error {
 		envContent = fmt.Sprintf("PASSWORD=%s\n", password)
 	}
 
-	return os.WriteFile(secFile, []byte(envContent), 0660)
+	return writeFileWithFallback(secFile, []byte(envContent), 0660)
 }
 
 func ensureOdysseusSecret() error {
 	resBaseDir := ResolvedStorageBaseDir()
+	createDirWithFallback(filepath.Join(resBaseDir, "odysseus"), 0775)
 	secDir := filepath.Join(resBaseDir, "odysseus", "secrets")
-	if err := os.MkdirAll(secDir, 0770); err != nil {
-		return err
-	}
+	createDirWithFallback(secDir, 0775)
 	secFile := filepath.Join(secDir, "odysseus.env")
 	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
 		return nil
@@ -177,15 +176,15 @@ ODYSSEUS_ADMIN_USER=admin
 # Lightweight Local Embeddings (ONNX CPU, low footprint)
 FASTEMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
 `
-	return os.WriteFile(secFile, []byte(defaultContent), 0600)
+	return writeFileWithFallback(secFile, []byte(defaultContent), 0600)
 }
 
 func ensurePasswordsSecret() error {
 	resBaseDir := ResolvedStorageBaseDir()
+	createDirWithFallback(filepath.Join(resBaseDir, "passwords"), 0775)
+	createDirWithFallback(filepath.Join(resBaseDir, "passwords", "data"), 0775)
 	secDir := filepath.Join(resBaseDir, "passwords", "secrets")
-	if err := os.MkdirAll(secDir, 0770); err != nil {
-		return err
-	}
+	createDirWithFallback(secDir, 0775)
 	secFile := filepath.Join(secDir, "vaultwarden.env")
 	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
 		return nil
@@ -211,7 +210,7 @@ ROCKET_PORT=80
 ADMIN_TOKEN=%s
 `, adminToken)
 
-	return os.WriteFile(secFile, []byte(defaultContent), 0660)
+	return writeFileWithFallback(secFile, []byte(defaultContent), 0660)
 }
 
 func ensureSearchConfig() error {
@@ -221,7 +220,7 @@ func ensureSearchConfig() error {
 	valkeyDir := filepath.Join(resBaseDir, "search", "valkey")
 	createDirWithFallback(filepath.Join(resBaseDir, "search"), 0775)
 	createDirWithFallback(cfgDir, 0775)
-	createDirWithFallback(secDir, 0770)
+	createDirWithFallback(secDir, 0775)
 	createDirWithFallback(valkeyDir, 0775)
 
 	secKeyFile := filepath.Join(secDir, "searxng.env")
@@ -230,7 +229,7 @@ func ensureSearchConfig() error {
 		_, _ = rand.Read(secretKeyBytes)
 		secretHex := fmt.Sprintf("%x", secretKeyBytes)
 		content := fmt.Sprintf("SEARXNG_SECRET=%s\n", secretHex)
-		_ = os.WriteFile(secKeyFile, []byte(content), 0660)
+		_ = writeFileWithFallback(secKeyFile, []byte(content), 0660)
 	}
 
 	settingsFile := filepath.Join(cfgDir, "settings.yml")
@@ -256,19 +255,46 @@ search:
 ui:
   infinite_scroll: true
 `, secretHex)
-		_ = os.WriteFile(settingsFile, []byte(defaultSettings), 0664)
+		_ = writeFileWithFallback(settingsFile, []byte(defaultSettings), 0664)
 	}
 	return nil
 }
 
 func createDirWithFallback(path string, perm os.FileMode) {
 	if err := os.MkdirAll(path, perm); err != nil {
-		_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("mkdir -p '%s' && chmod %o '%s'", path, perm, path)).Run()
+		_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("mkdir -p '%s' && chmod 2775 '%s'", path, path)).Run()
 		_ = exec.Command("podman", "unshare", "mkdir", "-p", path).Run()
 		_ = exec.Command("podman", "unshare", "chmod", fmt.Sprintf("%o", perm), path).Run()
 	} else {
-		_ = os.Chmod(path, perm)
+		if err := os.Chmod(path, perm); err != nil {
+			_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("chmod %o '%s'", perm, path)).Run()
+			_ = exec.Command("podman", "unshare", "chmod", fmt.Sprintf("%o", perm), path).Run()
+		}
 	}
+}
+
+func writeFileWithFallback(path string, content []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	createDirWithFallback(dir, 0775)
+	if err := os.WriteFile(path, content, perm); err != nil {
+		// Fallback 1: write via sg allod-data
+		cmd := exec.Command("sg", "allod-data", "-c", fmt.Sprintf("cat > '%s' && chmod %o '%s'", path, perm, path))
+		cmd.Stdin = bytes.NewReader(content)
+		if errSG := cmd.Run(); errSG != nil {
+			// Fallback 2: write via podman unshare
+			cmd2 := exec.Command("podman", "unshare", "sh", "-c", fmt.Sprintf("cat > '%s' && chmod %o '%s'", path, perm, path))
+			cmd2.Stdin = bytes.NewReader(content)
+			if errPodman := cmd2.Run(); errPodman != nil {
+				return fmt.Errorf("failed to write %s: %v (sg: %v, podman: %v)", path, err, errSG, errPodman)
+			}
+		}
+	} else {
+		if err := os.Chmod(path, perm); err != nil {
+			_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("chmod %o '%s'", perm, path)).Run()
+			_ = exec.Command("podman", "unshare", "chmod", fmt.Sprintf("%o", perm), path).Run()
+		}
+	}
+	return nil
 }
 
 // EnsureStorageDirectories creates all host volume mount paths with secure group-accessible permissions.
@@ -294,39 +320,25 @@ func EnsureStorageDirectories(modID string) {
 	switch modID {
 	case "cloud":
 		dirs = []string{
+			filepath.Join(baseDir, "cloud"),
 			filepath.Join(baseDir, "cloud", "html"),
 			filepath.Join(baseDir, "cloud", "data"),
 			filepath.Join(baseDir, "cloud", "postgres"),
+			filepath.Join(baseDir, "cloud", "secrets"),
 		}
-		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0770)
-			_ = os.Chmod(d, 0770)
-		}
-		_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "secrets"), 0700)
-		_ = ensureModuleSecret("cloud", "postgres", legacyCloudPostgresPassword)
-		return
 	case "photos":
 		dirs = []string{
+			filepath.Join(baseDir, "photos"),
 			filepath.Join(baseDir, "photos", "upload"),
 			filepath.Join(baseDir, "photos", "postgres"),
 			filepath.Join(baseDir, "photos", "valkey"),
+			filepath.Join(baseDir, "photos", "secrets"),
 		}
-		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0770)
-			_ = os.Chmod(d, 0770)
-		}
-		_ = os.MkdirAll(filepath.Join(baseDir, "photos", "secrets"), 0700)
-		_ = ensureModuleSecret("photos", "postgres", legacyPhotosPostgresPassword)
-		return
 	case "backup":
 		dirs = []string{
+			filepath.Join(baseDir, "backup"),
 			filepath.Join(baseDir, "backup", "vault"),
 		}
-		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0770)
-			_ = os.Chmod(d, 0770)
-		}
-		return
 	case "shares":
 		dirs = []string{
 			filepath.Join(baseDir, "shares"),
@@ -338,14 +350,12 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "shares", "public", "tv"),
 			filepath.Join(baseDir, "shares", "public", "music"),
 		}
-		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0770)
-			_ = os.Chmod(d, 0770)
-		}
 	case "media":
 		dirs = []string{
+			filepath.Join(baseDir, "media"),
 			filepath.Join(baseDir, "media", "data"),
 			filepath.Join(baseDir, "media", "cache"),
+			filepath.Join(baseDir, "media", "config"),
 			filepath.Join(baseDir, "shares"),
 			filepath.Join(baseDir, "shares", "public"),
 			filepath.Join(baseDir, "shares", "public", "film"),
@@ -362,51 +372,27 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "shares", "music"),
 			filepath.Join(baseDir, "shares", "film"),
 			filepath.Join(baseDir, "shares", "musica"),
-			filepath.Join(baseDir, "media", "config"),
-		}
-		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0770)
-			_ = os.Chmod(d, 0770)
 		}
 	case "network":
-		nbCfgDir := filepath.Join(baseDir, "network", "netbird")
-		netSecretsDir := filepath.Join(baseDir, "network", "secrets")
 		dirs = []string{
-			nbCfgDir,
-		}
-		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0750)
-		}
-		_ = os.MkdirAll(netSecretsDir, 0700)
-		netbirdEnv := filepath.Join(netSecretsDir, "netbird.env")
-		if _, err := os.Stat(netbirdEnv); err != nil {
-			defaultNetBirdEnv := "# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=\nNB_MANAGEMENT_URL=\n"
-			_ = os.WriteFile(netbirdEnv, []byte(defaultNetBirdEnv), 0600)
+			filepath.Join(baseDir, "network"),
+			filepath.Join(baseDir, "network", "netbird"),
+			filepath.Join(baseDir, "network", "secrets"),
 		}
 	case "odysseus":
 		dirs = []string{
+			filepath.Join(baseDir, "odysseus"),
 			filepath.Join(baseDir, "odysseus", "data"),
 			filepath.Join(baseDir, "odysseus", "logs"),
 			filepath.Join(baseDir, "odysseus", "chroma"),
+			filepath.Join(baseDir, "odysseus", "secrets"),
 		}
-		for _, d := range dirs {
-			_ = os.MkdirAll(d, 0770)
-			_ = os.Chmod(d, 0770)
-		}
-		_ = os.MkdirAll(filepath.Join(baseDir, "odysseus", "secrets"), 0700)
-		_ = ensureOdysseusSecret()
-		return
 	case "passwords":
 		dirs = []string{
 			filepath.Join(baseDir, "passwords"),
 			filepath.Join(baseDir, "passwords", "data"),
 			filepath.Join(baseDir, "passwords", "secrets"),
 		}
-		for _, d := range dirs {
-			createDirWithFallback(d, 0775)
-		}
-		_ = ensurePasswordsSecret()
-		return
 	case "search":
 		dirs = []string{
 			filepath.Join(baseDir, "search"),
@@ -414,11 +400,6 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "search", "valkey"),
 			filepath.Join(baseDir, "search", "secrets"),
 		}
-		for _, d := range dirs {
-			createDirWithFallback(d, 0775)
-		}
-		_ = ensureSearchConfig()
-		return
 	default:
 		dirs = []string{
 			filepath.Join(baseDir, modID),
@@ -427,6 +408,26 @@ func EnsureStorageDirectories(modID string) {
 
 	for _, d := range dirs {
 		createDirWithFallback(d, 0775)
+	}
+
+	switch modID {
+	case "cloud":
+		_ = ensureModuleSecret("cloud", "postgres", legacyCloudPostgresPassword)
+	case "photos":
+		_ = ensureModuleSecret("photos", "postgres", legacyPhotosPostgresPassword)
+	case "network":
+		netSecretsDir := filepath.Join(baseDir, "network", "secrets")
+		netbirdEnv := filepath.Join(netSecretsDir, "netbird.env")
+		if _, err := os.Stat(netbirdEnv); err != nil {
+			defaultNetBirdEnv := "# NetBird Sovereign Mesh Configuration\nNB_SETUP_KEY=\nNB_MANAGEMENT_URL=\n"
+			_ = writeFileWithFallback(netbirdEnv, []byte(defaultNetBirdEnv), 0600)
+		}
+	case "odysseus":
+		_ = ensureOdysseusSecret()
+	case "passwords":
+		_ = ensurePasswordsSecret()
+	case "search":
+		_ = ensureSearchConfig()
 	}
 }
 
