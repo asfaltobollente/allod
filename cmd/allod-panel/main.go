@@ -1976,45 +1976,7 @@ fi
 			return
 		}
 
-		baseDir := quadlet.ResolvedStorageBaseDir()
-		if req.Module == "photos" {
-			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "upload"), 0770)
-			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "postgres"), 0770)
-			_ = os.MkdirAll(filepath.Join(baseDir, "photos", "valkey"), 0770)
-		} else if req.Module == "cloud" {
-			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "html"), 0770)
-			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "data"), 0770)
-			_ = os.MkdirAll(filepath.Join(baseDir, "cloud", "postgres"), 0770)
-		} else if req.Module == "media" {
-			mediaDirs := []string{
-				filepath.Join(baseDir, "media", "config"),
-				filepath.Join(baseDir, "shares", "media", "movies"),
-				filepath.Join(baseDir, "shares", "media", "tv"),
-				filepath.Join(baseDir, "shares", "media", "music"),
-				filepath.Join(baseDir, "shares", "movies"),
-				filepath.Join(baseDir, "shares", "tv"),
-				filepath.Join(baseDir, "shares", "music"),
-				filepath.Join(baseDir, "shares", "film"),
-				filepath.Join(baseDir, "shares", "musica"),
-			}
-			for _, md := range mediaDirs {
-				_ = os.MkdirAll(md, 0770)
-				_ = os.Chmod(md, 0770)
-			}
-		} else if req.Module == "backup" {
-			_ = os.MkdirAll(filepath.Join(baseDir, "backup", "vault"), 0770)
-			_ = os.Chmod(filepath.Join(baseDir, "backup", "vault"), 0770)
-		} else if req.Module == "passwords" {
-			_ = os.MkdirAll(filepath.Join(baseDir, "passwords", "data"), 0770)
-			_ = os.Chmod(filepath.Join(baseDir, "passwords", "data"), 0770)
-		} else if req.Module == "search" {
-			_ = os.MkdirAll(filepath.Join(baseDir, "search", "config"), 0770)
-			_ = os.MkdirAll(filepath.Join(baseDir, "search", "valkey"), 0770)
-			_ = os.Chmod(filepath.Join(baseDir, "search", "config"), 0770)
-			_ = os.Chmod(filepath.Join(baseDir, "search", "valkey"), 0770)
-		} else {
-			_ = os.MkdirAll(filepath.Join(baseDir, req.Module), 0770)
-		}
+		quadlet.EnsureStorageDirectories(req.Module)
 
 		reloadOut, _ := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput()
 		_ = exec.Command("systemctl", "--user", "reset-failed").Run()
