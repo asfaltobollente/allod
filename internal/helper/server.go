@@ -2512,6 +2512,11 @@ func PrepareModuleStorage(storageRoot, modID string, clean bool) error {
 		_ = exec.Command("chown", owner, d).Run()
 	}
 
+	// Recursively ensure ownership and group permissions on the entire module directory
+	modDir := filepath.Join(storageRoot, modID)
+	_ = exec.Command("chown", "-R", owner, modDir).Run()
+	_ = exec.Command("chmod", "-R", "g+rwX", modDir).Run()
+
 	// Module specific file initializations
 	if modID == "search" {
 		cfgDir := filepath.Join(storageRoot, "search", "config")
