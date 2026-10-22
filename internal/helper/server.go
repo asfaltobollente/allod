@@ -2567,7 +2567,7 @@ ui:
 			_, _ = rand.Read(tokenBytes)
 			tokenHex := fmt.Sprintf("%x", tokenBytes)
 			content := fmt.Sprintf(`# Vaultwarden Password Manager Configuration for Allod
-SIGNUPS_ALLOWED=false
+SIGNUPS_ALLOWED=true
 INVITATIONS_ALLOWED=true
 WEBSOCKET_ENABLED=true
 ROCKET_PORT=80

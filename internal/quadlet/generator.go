@@ -210,7 +210,7 @@ func ensurePasswordsSecret() error {
 # Note: Bitwarden clients require HTTPS (WebCrypto API) to log in.
 # Access via NetBird Sovereign Mesh, local reverse proxy, or localhost.
 
-SIGNUPS_ALLOWED=false
+SIGNUPS_ALLOWED=true
 INVITATIONS_ALLOWED=true
 WEBSOCKET_ENABLED=true
 ROCKET_PORT=80
