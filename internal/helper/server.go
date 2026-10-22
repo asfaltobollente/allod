@@ -2421,12 +2421,21 @@ func PrepareModuleStorage(storageRoot, modID string, clean bool) error {
 	}
 
 	// Ensure users under /home are in allod-data and allod
+	adminUser := "root"
 	if entries, err := os.ReadDir("/home"); err == nil {
 		for _, e := range entries {
-			if e.IsDir() && validNameRegex.MatchString(e.Name()) {
+			if e.IsDir() && validNameRegex.MatchString(e.Name()) && e.Name() != "lost+found" {
 				addUserToAllodData(e.Name())
+				if adminUser == "root" {
+					adminUser = e.Name()
+				}
 			}
 		}
+	}
+
+	owner := "root:allod-data"
+	if adminUser != "root" {
+		owner = fmt.Sprintf("%s:allod-data", adminUser)
 	}
 
 	if clean {
@@ -2500,7 +2509,7 @@ func PrepareModuleStorage(storageRoot, modID string, clean bool) error {
 	for _, d := range dirs {
 		_ = os.MkdirAll(d, 0775)
 		_ = exec.Command("chmod", "2775", d).Run()
-		_ = exec.Command("chown", "root:allod-data", d).Run()
+		_ = exec.Command("chown", owner, d).Run()
 	}
 
 	// Module specific file initializations
@@ -2513,10 +2522,10 @@ func PrepareModuleStorage(storageRoot, modID string, clean bool) error {
 			secretKeyBytes := make([]byte, 32)
 			_, _ = rand.Read(secretKeyBytes)
 			secretHex := fmt.Sprintf("%x", secretKeyBytes)
-			_ = os.WriteFile(secKeyFile, []byte(fmt.Sprintf("SEARXNG_SECRET=%s\n", secretHex)), 0660)
+			_ = os.WriteFile(secKeyFile, []byte(fmt.Sprintf("SEARXNG_SECRET=%s\n", secretHex)), 0664)
 		}
-		_ = exec.Command("chown", "root:allod-data", secKeyFile).Run()
-		_ = exec.Command("chmod", "0660", secKeyFile).Run()
+		_ = exec.Command("chown", owner, secKeyFile).Run()
+		_ = exec.Command("chmod", "0664", secKeyFile).Run()
 
 		settingsFile := filepath.Join(cfgDir, "settings.yml")
 		if fi, err := os.Stat(settingsFile); err != nil || fi.Size() == 0 {
@@ -2543,7 +2552,7 @@ ui:
 `, secretHex)
 			_ = os.WriteFile(settingsFile, []byte(defaultSettings), 0664)
 		}
-		_ = exec.Command("chown", "root:allod-data", settingsFile).Run()
+		_ = exec.Command("chown", owner, settingsFile).Run()
 		_ = exec.Command("chmod", "0664", settingsFile).Run()
 	} else if modID == "passwords" {
 		secDir := filepath.Join(storageRoot, "passwords", "secrets")
@@ -2559,10 +2568,10 @@ WEBSOCKET_ENABLED=true
 ROCKET_PORT=80
 ADMIN_TOKEN=%s
 `, tokenHex)
-			_ = os.WriteFile(secFile, []byte(content), 0660)
+			_ = os.WriteFile(secFile, []byte(content), 0664)
 		}
-		_ = exec.Command("chown", "root:allod-data", secFile).Run()
-		_ = exec.Command("chmod", "0660", secFile).Run()
+		_ = exec.Command("chown", owner, secFile).Run()
+		_ = exec.Command("chmod", "0664", secFile).Run()
 	}
 
 	return nil

@@ -108,6 +108,9 @@ func ensureModuleSecret(module, key, legacyValue string) error {
 	createDirWithFallback(secDir, 0775)
 	secFile := filepath.Join(secDir, key+".env")
 	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
+		_ = os.Chmod(secFile, 0664)
+		_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("chmod 0664 '%s'", secFile)).Run()
+		_ = exec.Command("podman", "unshare", "chmod", "0664", secFile).Run()
 		return nil
 	}
 
@@ -139,7 +142,7 @@ func ensureModuleSecret(module, key, legacyValue string) error {
 		envContent = fmt.Sprintf("PASSWORD=%s\n", password)
 	}
 
-	return writeFileWithFallback(secFile, []byte(envContent), 0660)
+	return writeFileWithFallback(secFile, []byte(envContent), 0664)
 }
 
 func ensureOdysseusSecret() error {
@@ -149,6 +152,9 @@ func ensureOdysseusSecret() error {
 	createDirWithFallback(secDir, 0775)
 	secFile := filepath.Join(secDir, "odysseus.env")
 	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
+		_ = os.Chmod(secFile, 0664)
+		_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("chmod 0664 '%s'", secFile)).Run()
+		_ = exec.Command("podman", "unshare", "chmod", "0664", secFile).Run()
 		return nil
 	}
 
@@ -176,7 +182,7 @@ ODYSSEUS_ADMIN_USER=admin
 # Lightweight Local Embeddings (ONNX CPU, low footprint)
 FASTEMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
 `
-	return writeFileWithFallback(secFile, []byte(defaultContent), 0600)
+	return writeFileWithFallback(secFile, []byte(defaultContent), 0664)
 }
 
 func ensurePasswordsSecret() error {
@@ -187,6 +193,9 @@ func ensurePasswordsSecret() error {
 	createDirWithFallback(secDir, 0775)
 	secFile := filepath.Join(secDir, "vaultwarden.env")
 	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
+		_ = os.Chmod(secFile, 0664)
+		_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("chmod 0664 '%s'", secFile)).Run()
+		_ = exec.Command("podman", "unshare", "chmod", "0664", secFile).Run()
 		return nil
 	}
 
@@ -210,7 +219,7 @@ ROCKET_PORT=80
 ADMIN_TOKEN=%s
 `, adminToken)
 
-	return writeFileWithFallback(secFile, []byte(defaultContent), 0660)
+	return writeFileWithFallback(secFile, []byte(defaultContent), 0664)
 }
 
 func ensureSearchConfig() error {
@@ -224,16 +233,24 @@ func ensureSearchConfig() error {
 	createDirWithFallback(valkeyDir, 0775)
 
 	secKeyFile := filepath.Join(secDir, "searxng.env")
-	if fi, err := os.Stat(secKeyFile); err != nil || fi.Size() == 0 {
+	if fi, err := os.Stat(secKeyFile); err == nil && fi.Size() > 0 {
+		_ = os.Chmod(secKeyFile, 0664)
+		_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("chmod 0664 '%s'", secKeyFile)).Run()
+		_ = exec.Command("podman", "unshare", "chmod", "0664", secKeyFile).Run()
+	} else {
 		secretKeyBytes := make([]byte, 32)
 		_, _ = rand.Read(secretKeyBytes)
 		secretHex := fmt.Sprintf("%x", secretKeyBytes)
 		content := fmt.Sprintf("SEARXNG_SECRET=%s\n", secretHex)
-		_ = writeFileWithFallback(secKeyFile, []byte(content), 0660)
+		_ = writeFileWithFallback(secKeyFile, []byte(content), 0664)
 	}
 
 	settingsFile := filepath.Join(cfgDir, "settings.yml")
-	if fi, err := os.Stat(settingsFile); err != nil || fi.Size() == 0 {
+	if fi, err := os.Stat(settingsFile); err == nil && fi.Size() > 0 {
+		_ = os.Chmod(settingsFile, 0664)
+		_ = exec.Command("sg", "allod-data", "-c", fmt.Sprintf("chmod 0664 '%s'", settingsFile)).Run()
+		_ = exec.Command("podman", "unshare", "chmod", "0664", settingsFile).Run()
+	} else {
 		secretKeyBytes := make([]byte, 32)
 		_, _ = rand.Read(secretKeyBytes)
 		secretHex := fmt.Sprintf("%x", secretKeyBytes)
