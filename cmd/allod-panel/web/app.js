@@ -285,7 +285,7 @@ function renderLaunchpad() {
       color: '#38bdf8',
       desc: 'Galleria fotografica ad altissime prestazioni con timeline, album e backup continuo da smartphone.',
       port: 2283,
-      url: `http://${activeHost}:2283`,
+      url: `https://${activeHost}:2283`,
       path: null,
       primaryActionText: '🌐 Apri Galleria Foto',
       secondaryActionText: null
@@ -297,7 +297,7 @@ function renderLaunchpad() {
       color: '#a855f7',
       desc: 'Cinema personale per film in 4K, serie TV e libreria musicale in streaming diretto senza pubblicità.',
       port: 8096,
-      url: `http://${activeHost}:8096`,
+      url: `https://${activeHost}:8096`,
       path: `\\\\${activeHost}\\shares\\media`,
       primaryActionText: '🎬 Apri Streaming Video',
       secondaryActionText: '📁 Cartella Media'
@@ -309,7 +309,7 @@ function renderLaunchpad() {
       color: '#0284c7',
       desc: 'Cloud personale per documenti, contatti, calendario e sincronizzazione desktop/mobile (privato).',
       port: 8443,
-      url: `http://${activeHost}:8443`,
+      url: `https://${activeHost}:8443`,
       path: null,
       primaryActionText: '📂 Apri Cloud Drive',
       secondaryActionText: null
@@ -321,7 +321,7 @@ function renderLaunchpad() {
       color: '#8b5cf6',
       desc: 'Workspace AI sovrano per chat, agenti e deep research su GPU locale o tramite API esterne.',
       port: 7000,
-      url: `http://${activeHost}:7000`,
+      url: `https://${activeHost}:7000`,
       path: null,
       primaryActionText: '🤖 Apri Workspace AI',
       secondaryActionText: '🔑 Password temporanea'
@@ -357,7 +357,7 @@ function renderLaunchpad() {
       color: '#14b8a6',
       desc: 'Gestore password cifrato end-to-end compatibile Bitwarden con estensioni browser e app mobile.',
       port: 8088,
-      url: `http://${activeHost}:8088`,
+      url: `https://${activeHost}:8088`,
       path: null,
       primaryActionText: '🔑 Apri Vault Password',
       secondaryActionText: null
@@ -369,7 +369,7 @@ function renderLaunchpad() {
       color: '#06b6d4',
       desc: 'Motore di meta-ricerca privato senza profilazione o tracciamento, con cache Valkey ad alta velocità.',
       port: 8888,
-      url: `http://${activeHost}:8888`,
+      url: `https://${activeHost}:8888`,
       path: null,
       primaryActionText: '🔍 Cerca con SearXNG',
       secondaryActionText: null
@@ -1104,7 +1104,7 @@ const moduleTechInfo = {
       db: 'SQLite / PostgreSQL Dedicated',
       dbNote: 'Optimal for multi-user collaboration, office suite, and seamless file sync across all client devices.',
       linkPort: 8443,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     photos: {
       product: 'Immich + PostgreSQL + Valkey',
@@ -1112,7 +1112,7 @@ const moduleTechInfo = {
       db: 'PostgreSQL 14 + Vectorchord + Valkey',
       dbNote: 'Vector database engine for ultra-fast semantic photo search, face recognition, and mobile camera roll backup.',
       linkPort: 2283,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     backup: {
       product: 'rest-server (Local Backup Vault)',
@@ -1141,7 +1141,7 @@ const moduleTechInfo = {
       db: 'SQLite (Embedded)',
       dbNote: 'Fast embedded database for media metadata, transcoding queues, and playback resume points.',
       linkPort: 8096,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     network: {
       product: 'NetBird (WireGuard + WebRTC Mesh)',
@@ -1164,7 +1164,7 @@ const moduleTechInfo = {
       db: 'ChromaDB + SQLite (Embedded)',
       dbNote: 'Vector database engine for semantic memory and conversation history storage.',
       linkPort: 7000,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     passwords: {
       product: 'Vaultwarden (Bitwarden Server)',
@@ -1172,7 +1172,7 @@ const moduleTechInfo = {
       db: 'SQLite (Embedded in /data)',
       dbNote: 'Zero-knowledge encrypted database containing credentials, notes, 2FA seeds, and card vaults.',
       linkPort: 8088,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     search: {
       product: 'SearXNG + Valkey Cache',
@@ -1180,7 +1180,7 @@ const moduleTechInfo = {
       db: 'Valkey In-Memory Cache',
       dbNote: 'High-speed ephemeral caching of search queries to eliminate duplicate upstream requests.',
       linkPort: 8888,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     }
   },
   it: {
@@ -1190,7 +1190,7 @@ const moduleTechInfo = {
       db: 'SQLite / PostgreSQL Dedicato',
       dbNote: 'Ottimale per collaborazione multi-utente, suite office e sync continuo tra tutti i tuoi dispositivi.',
       linkPort: 8443,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     photos: {
       product: 'Immich + PostgreSQL + Valkey',
@@ -1198,7 +1198,7 @@ const moduleTechInfo = {
       db: 'PostgreSQL 14 + Vectorchord + Valkey',
       dbNote: 'Database relazionale scalabile e motore vettoriale per indicizzazione IA e ricerca semantica ultra-veloce.',
       linkPort: 2283,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     backup: {
       product: 'rest-server (Cassaforte di Backup)',
@@ -1227,7 +1227,7 @@ const moduleTechInfo = {
       db: 'SQLite (Embedded)',
       dbNote: 'Database locale leggero e veloce per librerie musicali e metadati cinematografici.',
       linkPort: 8096,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     network: {
       product: 'NetBird (WireGuard + WebRTC Mesh)',
@@ -1250,7 +1250,7 @@ const moduleTechInfo = {
       db: 'ChromaDB + SQLite (Embedded)',
       dbNote: 'Database vettoriale per memoria semantica RAG e archiviazione conversazioni SQLite.',
       linkPort: 7000,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     passwords: {
       product: 'Vaultwarden (Bitwarden Server)',
@@ -1258,7 +1258,7 @@ const moduleTechInfo = {
       db: 'SQLite (Integrato in /data)',
       dbNote: 'Database a conoscenza zero: credenziali, note sicure, codici 2FA e carte protetti con crittografia client-side.',
       linkPort: 8088,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     },
     search: {
       product: 'SearXNG + Valkey Cache',
@@ -1266,7 +1266,7 @@ const moduleTechInfo = {
       db: 'Cache In-Memory Valkey',
       dbNote: 'Cache effimera in RAM per risultati istantanei ed eliminazione delle query duplicate verso i motori a monte.',
       linkPort: 8888,
-      linkProtocol: 'http'
+      linkProtocol: 'https'
     }
   }
 };
@@ -7017,4 +7017,112 @@ window.saveDatasetSelection = saveDatasetSelection;
 window.triggerTelegramAlertCheck = triggerTelegramAlertCheck;
 window.openDisasterRecoveryModal = openDisasterRecoveryModal;
 window.closeDisasterRecoveryModal = closeDisasterRecoveryModal;
+
+// =========================================================================
+// Sovereign Family PKI & HTTPS Security Modal
+// =========================================================================
+
+let pkiCurrentQrTarget = 'ios';
+let pkiCachedStatus = null;
+
+async function openPkiModal() {
+  const modal = document.getElementById('pki-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/pki/status');
+    const json = await res.json();
+    if (json.status === 'ok' && json.data) {
+      pkiCachedStatus = json.data;
+      const caNameEl = document.getElementById('pki-ca-name');
+      const fpEl = document.getElementById('pki-ca-fingerprint');
+      const daysEl = document.getElementById('pki-days-remaining');
+
+      if (caNameEl && json.data.ca_common_name) {
+        caNameEl.textContent = json.data.ca_common_name;
+      }
+      if (fpEl && json.data.ca_fingerprint) {
+        fpEl.textContent = json.data.ca_fingerprint;
+      }
+      if (daysEl && typeof json.data.days_remaining === 'number') {
+        daysEl.textContent = json.data.days_remaining;
+      }
+    }
+  } catch (err) {
+    console.error('Errore caricamento stato PKI:', err);
+  }
+
+  renderPkiQrCode();
+}
+
+function closePkiModal() {
+  const modal = document.getElementById('pki-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function copyPkiFingerprint() {
+  const fpEl = document.getElementById('pki-ca-fingerprint');
+  if (!fpEl) return;
+  const fp = fpEl.textContent.trim();
+  if (!fp || fp === 'Calcolo in corso...') return;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(fp).then(() => {
+      showToast('Impronta SHA-256 copiata negli appunti!', 'success');
+    }).catch(() => {
+      fallbackCopyText(fp, 'Impronta SHA-256 copiata!');
+    });
+  } else {
+    fallbackCopyText(fp, 'Impronta SHA-256 copiata!');
+  }
+}
+
+function togglePkiQrTarget(target) {
+  pkiCurrentQrTarget = target;
+  const btnIos = document.getElementById('btn-qr-target-ios');
+  const btnCa = document.getElementById('btn-qr-target-ca');
+
+  if (target === 'ios') {
+    if (btnIos) {
+      btnIos.style.borderColor = 'var(--primary)';
+      btnIos.style.color = 'var(--primary)';
+    }
+    if (btnCa) {
+      btnCa.style.borderColor = 'var(--card-border)';
+      btnCa.style.color = 'var(--text-muted)';
+    }
+  } else {
+    if (btnIos) {
+      btnIos.style.borderColor = 'var(--card-border)';
+      btnIos.style.color = 'var(--text-muted)';
+    }
+    if (btnCa) {
+      btnCa.style.borderColor = 'var(--primary)';
+      btnCa.style.color = 'var(--primary)';
+    }
+  }
+
+  renderPkiQrCode();
+}
+
+function renderPkiQrCode() {
+  const qrContainer = document.getElementById('pki-qr-container');
+  if (!qrContainer) return;
+
+  const origin = window.location.origin;
+  const endpoint = pkiCurrentQrTarget === 'ios' ? '/api/pki/ios-profile' : '/api/pki/root.crt';
+  const targetUrl = origin + endpoint;
+
+  if (typeof QRCode !== 'undefined' && QRCode.generateSVG) {
+    qrContainer.innerHTML = QRCode.generateSVG(targetUrl, 120);
+  } else {
+    qrContainer.innerHTML = `<a href="${targetUrl}" download style="font-size:11px; text-align:center; color:#0284c7;">Scarica Certificato</a>`;
+  }
+}
+
+window.openPkiModal = openPkiModal;
+window.closePkiModal = closePkiModal;
+window.copyPkiFingerprint = copyPkiFingerprint;
+window.togglePkiQrTarget = togglePkiQrTarget;
 

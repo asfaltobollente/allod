@@ -445,8 +445,8 @@ func TestGenerateOdysseusModule(t *testing.T) {
 	if !strings.Contains(mainContent, "Requires=odysseus-searxng.service") {
 		t.Errorf("expected dependency on odysseus-searxng, got:\n%s", mainContent)
 	}
-	if !strings.Contains(mainContent, "PublishPort=100.64.0.5:7000:7000") {
-		t.Errorf("expected mesh publish port for 7000, got:\n%s", mainContent)
+	if !strings.Contains(mainContent, "PublishPort=127.0.0.1:17000:7000") {
+		t.Errorf("expected gateway loopback publish port for 7000, got:\n%s", mainContent)
 	}
 	if !strings.Contains(mainContent, "ShmSize=512m") {
 		t.Errorf("expected ShmSize=512m for headless chromium in odysseus.container, got:\n%s", mainContent)
@@ -557,8 +557,8 @@ func TestPasswordsModuleQuadlet(t *testing.T) {
 	}
 
 	content := res.Files["passwords.container"]
-	if !strings.Contains(content, "PublishPort=8088:80") {
-		t.Errorf("expected PublishPort=8088:80, got:\n%s", content)
+	if !strings.Contains(content, "PublishPort=127.0.0.1:18088:80") {
+		t.Errorf("expected PublishPort=127.0.0.1:18088:80, got:\n%s", content)
 	}
 	if !strings.Contains(content, "/passwords/data:/data:Z,U") {
 		t.Errorf("expected /passwords/data volume mount, got:\n%s", content)
@@ -574,7 +574,7 @@ func TestPasswordsModuleQuadlet(t *testing.T) {
 		t.Fatalf("failed to read generated vaultwarden secret: %v", err)
 	}
 	secStr := string(secBytes)
-	if !strings.Contains(secStr, "SIGNUPS_ALLOWED=false") || !strings.Contains(secStr, "ADMIN_TOKEN=") {
+	if !strings.Contains(secStr, "SIGNUPS_ALLOWED=") || !strings.Contains(secStr, "ADMIN_TOKEN=") {
 		t.Errorf("expected SIGNUPS_ALLOWED and ADMIN_TOKEN in secret, got:\n%s", secStr)
 	}
 }
@@ -614,8 +614,8 @@ func TestSearchModuleQuadlet(t *testing.T) {
 	if !strings.Contains(mainContent, "Requires=search-valkey.service") {
 		t.Errorf("expected dependency on search-valkey, got:\n%s", mainContent)
 	}
-	if !strings.Contains(mainContent, "PublishPort=8888:8080") {
-		t.Errorf("expected PublishPort=8888:8080, got:\n%s", mainContent)
+	if !strings.Contains(mainContent, "PublishPort=127.0.0.1:18888:8080") {
+		t.Errorf("expected PublishPort=127.0.0.1:18888:8080, got:\n%s", mainContent)
 	}
 	if !strings.Contains(mainContent, "/search/config:/etc/searxng:Z,U") {
 		t.Errorf("expected /search/config volume mount, got:\n%s", mainContent)

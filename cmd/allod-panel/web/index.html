@@ -160,6 +160,9 @@
             <button class="btn btn-sm btn-outline-primary" onclick="openFamilyModal()" id="btn-open-family-modal" style="padding:5px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-radius:var(--radius-sm);">
               <span>👥</span> <span data-i18n="btn_family_hub">Membri Famiglia & Triade</span>
             </button>
+            <button class="btn btn-sm btn-outline-success" onclick="openPkiModal()" id="btn-open-pki-modal" style="padding:5px 12px; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:6px; border-radius:var(--radius-sm); border-color:#10b981; color:#10b981;" title="Certificato di Sicurezza Sovrano Famiglia (HTTPS)">
+              <span>🛡️</span> <span data-i18n="btn_pki_hub">Certificato Famiglia (HTTPS)</span>
+            </button>
             <div class="launchpad-segmented-control" role="group" aria-label="Modalità Rete">
               <button type="button" class="launchpad-segmented-btn active" id="launchpad-toggle-lan" onclick="setLaunchpadMode('lan')">
                 🏠 LAN Locale
@@ -2608,6 +2611,134 @@ restic -r rest:http://&lt;ip_wireguard_amico&gt;:8000/ restore latest --target /
 
       <div class="modal-footer" style="display:flex; justify-content:flex-end;">
         <button type="button" class="btn btn-secondary" onclick="closeDisasterRecoveryModal()">Chiudi</button>
+      </div>
+    </div>
+  <!-- MODAL: SOVEREIGN FAMILY PKI & HTTPS SECURITY -->
+  <div id="pki-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:760px; max-height:92vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:26px;">🛡️</span>
+          <div>
+            <h3 style="margin:0; font-size:16px; font-weight:700;">Certificato di Sicurezza Sovrano Famiglia</h3>
+            <div style="font-size:12px; color:var(--text-muted);">Crittografia end-to-end TLS 1.3 per password, foto e dati personali in LAN e WireGuard Mesh</div>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closePkiModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto; flex:1; padding:20px; line-height:1.5;">
+        <!-- Status Card -->
+        <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:12px; padding:16px; margin-bottom:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge badge-success" style="padding:4px 10px; font-size:11.5px; font-weight:600;">● TLS 1.3 Attivo</span>
+              <span style="font-size:13px; font-weight:600; color:var(--foreground);" id="pki-ca-name">Allod Sovereign Family Root CA</span>
+            </div>
+            <div style="font-size:12px; color:#10b981; font-weight:600; display:flex; align-items:center; gap:5px;">
+              <span>🔄</span> <span id="pki-auto-renew-info">Rinnovo automatico ogni 3 mesi (foglia valida <span id="pki-days-remaining">89</span> giorni)</span>
+            </div>
+          </div>
+          <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+            Installa l'Autorità di Certificazione di Famiglia <b>una sola volta</b> sui dispositivi di casa (iPhone, Android, PC). I certificati server si rinnoveranno automaticamente in background ogni 90 giorni senza richiedere alcuna azione manuale.
+          </div>
+          <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:8px 12px; font-family:monospace; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-right:8px;">
+              Impronta Digitale SHA-256: <b style="color:#38bdf8;" id="pki-ca-fingerprint">Calcolo in corso...</b>
+            </span>
+            <button class="btn btn-sm btn-ghost" onclick="copyPkiFingerprint()" style="font-size:11px; padding:2px 8px;" title="Copia impronta SHA-256">Copia</button>
+          </div>
+        </div>
+
+        <!-- Onboarding Method Cards -->
+        <h4 style="font-size:13.5px; font-weight:700; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+          <span>📲</span> <span>Scegli il tuo dispositivo per l'installazione in 1 click</span>
+        </h4>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:14px; margin-bottom:20px;">
+          <!-- Card 1: Apple iOS / iPadOS / macOS -->
+          <div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span style="font-size:20px;">🍎</span>
+                <strong style="font-size:13px; color:var(--foreground);">iPhone, iPad & Mac</strong>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+                Profilo di configurazione Apple nativo (<code>.mobileconfig</code>). Si installa in Impostazioni in 1 click.
+              </p>
+            </div>
+            <a href="/api/pki/ios-profile" download class="btn btn-primary" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:8px 12px; font-size:12px; font-weight:600; text-decoration:none;">
+              <span>⬇️</span> <span>Scarica Profilo Apple</span>
+            </a>
+          </div>
+
+          <!-- Card 2: Android -->
+          <div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span style="font-size:20px;">🤖</span>
+                <strong style="font-size:13px; color:var(--foreground);">Android & Tablet</strong>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+                Certificato CA X.509 standard (<code>.crt</code>). Da installare in <i>Sicurezza &gt; Certificato CA</i>.
+              </p>
+            </div>
+            <a href="/api/pki/root.crt" download="Allod-Family-Root-CA.crt" class="btn btn-outline-primary" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:8px 12px; font-size:12px; font-weight:600; text-decoration:none;">
+              <span>⬇️</span> <span>Scarica Certificato CA</span>
+            </a>
+          </div>
+
+          <!-- Card 3: Windows & Linux PC -->
+          <div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span style="font-size:20px;">💻</span>
+                <strong style="font-size:13px; color:var(--foreground);">PC Windows & Linux</strong>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+                Doppio clic sul certificato e importa in <i>Autorità di certificazione radice attendibili</i>.
+              </p>
+            </div>
+            <a href="/api/pki/root.crt" download="Allod-Family-Root-CA.crt" class="btn btn-outline-secondary" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:8px 12px; font-size:12px; font-weight:600; text-decoration:none;">
+              <span>⬇️</span> <span>Scarica per Windows/PC</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- In-Screen QR Code for instant phone camera scanning -->
+        <div style="background:rgba(15,23,42,0.6); border:1px solid var(--card-border); border-radius:10px; padding:16px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:18px;">
+          <div id="pki-qr-container" style="background:#ffffff; padding:10px; border-radius:8px; width:140px; height:140px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <!-- Rendered by QRCode.generateSVG in app.js -->
+          </div>
+          <div style="flex:1; min-width:200px;">
+            <div style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--foreground); margin-bottom:4px;">
+              <span>📷</span> <span>Inquadra con la Fotocamera del Telefono</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+              Punta la fotocamera del tuo iPhone o Android su questo codice QR per scaricare e installare istantaneamente il certificato sul telefono.
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-sm btn-ghost" onclick="togglePkiQrTarget('ios')" id="btn-qr-target-ios" style="font-size:11px; padding:4px 8px; border:1px solid var(--primary); color:var(--primary);">Target: iPhone/iPad</button>
+              <button class="btn btn-sm btn-ghost" onclick="togglePkiQrTarget('ca')" id="btn-qr-target-ca" style="font-size:11px; padding:4px 8px; border:1px solid var(--card-border); color:var(--text-muted);">Target: Android (.crt)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Walkthrough Guide for iOS & Android -->
+        <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:14px; font-size:12px; color:var(--text-muted);">
+          <strong style="color:var(--foreground); font-size:12.5px; display:block; margin-bottom:6px;">📖 Guida Rapida Attivazione Apple iOS:</strong>
+          <ol style="margin-left:18px; line-height:1.6;">
+            <li>Tocca <b>Scarica Profilo Apple</b> e seleziona <i>Consenti</i>.</li>
+            <li>Apri <i>Impostazioni &gt; Profilo scaricato</i> e tocca <b>Installa</b> in alto a destra.</li>
+            <li>Vai su <i>Impostazioni &gt; Generali &gt; Info &gt; Attendibilità certificati</i> (in fondo alla pagina).</li>
+            <li>Attiva lo switch verde su <b>Allod Sovereign Family Root CA</b> e conferma <i>Continua</i>.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-top:1px solid var(--card-border);">
+        <span style="font-size:11.5px; color:var(--text-muted);">🔒 Zero connessioni o certificati verso cloud terzi</span>
+        <button type="button" class="btn btn-secondary" onclick="closePkiModal()">Chiudi</button>
       </div>
     </div>
   </div>

@@ -94,6 +94,24 @@ func generateRandomPassword(length int) (string, error) {
 	return string(bytes), nil
 }
 
+// IsGatewayModule returns true if the module's HTTP traffic is handled and terminated by the Allod TLS Gateway.
+func IsGatewayModule(modID string) bool {
+	switch modID {
+	case "passwords", "photos", "cloud", "media", "search", "odysseus":
+		return true
+	default:
+		return false
+	}
+}
+
+// GetInternalPort returns the loopback internal port where the module container listens behind the TLS Gateway.
+func GetInternalPort(externalPort int) int {
+	if externalPort < 10000 {
+		return externalPort + 10000
+	}
+	return externalPort + 20000
+}
+
 // EnsureModuleSecret ensures that <storage>/<module>/secrets/<key>.env exists with mode 0600 (dir 0700).
 // If it does not exist, but existing DB data exists, it migrates using legacy credentials.
 // Otherwise it generates a 32-character random alphanumeric secret.
@@ -560,7 +578,11 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 			if p.ContainerPort > 0 {
 				cPort = p.ContainerPort
 			}
-			if p.Scope == "localhost" || p.Scope == "loopback" {
+			if IsGatewayModule(m.ID) {
+				// Web module: publish to loopback on internal port, TLS Gateway terminates external port
+				internalPort := GetInternalPort(p.N)
+				sb.WriteString(fmt.Sprintf("PublishPort=127.0.0.1:%d:%d\n", internalPort, cPort))
+			} else if p.Scope == "localhost" || p.Scope == "loopback" {
 				sb.WriteString(fmt.Sprintf("PublishPort=127.0.0.1:%d:%d\n", p.N, cPort))
 			} else if p.Scope == "mesh" {
 				meshIP := getMeshIP()

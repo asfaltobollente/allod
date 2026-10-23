@@ -59,10 +59,10 @@ func TestBuildZeroConfigModes(t *testing.T) {
 	if mdns.MacPath != "smb://allod.local/mario" {
 		t.Errorf("unexpected mdns MacPath: %s", mdns.MacPath)
 	}
-	if mdns.ImmichURL != "http://allod.local:2283" {
+	if mdns.ImmichURL != "https://allod.local:2283" {
 		t.Errorf("unexpected mdns ImmichURL: %s", mdns.ImmichURL)
 	}
-	if mdns.JellyfinURL != "http://allod.local:8096" {
+	if mdns.JellyfinURL != "https://allod.local:8096" {
 		t.Errorf("unexpected mdns JellyfinURL: %s", mdns.JellyfinURL)
 	}
 	if !mdns.Recommended {

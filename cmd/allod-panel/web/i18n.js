@@ -214,6 +214,7 @@ const i18n = {
 
     // Family Hub & Triad Orchestration
     btn_family_hub: "Family Members & Triad",
+    btn_pki_hub: "Family Certificate (HTTPS)",
     family_modal_title: "Family Members & Sovereign Triad",
     family_modal_sub: "Manage personal accounts, private SMB shares, Immich photo libraries, and autonomous onboarding",
     tab_family_members: "Family Members",
@@ -692,6 +693,7 @@ const i18n = {
 
     // Family Hub & Triad Orchestration
     btn_family_hub: "Membri Famiglia & Triade",
+    btn_pki_hub: "Certificato Famiglia (HTTPS)",
     family_modal_title: "Membri della Famiglia & Triade Sovereign",
     family_modal_sub: "Gestisci account personali, cartelle private SMB, librerie Immich e onboarding trasparente",
     tab_family_members: "Membri Famiglia",
