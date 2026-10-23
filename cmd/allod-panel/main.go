@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -21,9 +22,11 @@ import (
 	"time"
 
 	"github.com/asfaltobollente/allod/internal/config"
+	"github.com/asfaltobollente/allod/internal/gateway"
 	"github.com/asfaltobollente/allod/internal/helper"
 	"github.com/asfaltobollente/allod/internal/manifest"
 	"github.com/asfaltobollente/allod/internal/panel"
+	"github.com/asfaltobollente/allod/internal/pki"
 	"github.com/asfaltobollente/allod/internal/preflight"
 	"github.com/asfaltobollente/allod/internal/quadlet"
 	"github.com/asfaltobollente/allod/internal/ring"
@@ -684,7 +687,61 @@ func main() {
 	cfgPath := getConfigPath()
 	fmt.Printf("Avvio allod-panel (Web Dashboard Integrata) su porta %d (config: %s) ...\n", port, cfgPath)
 
+	// Sovereign Family PKI & TLS Gateway initialization
+	pkiStorageDir := filepath.Join(getStorageRoot(), "security", "pki")
+	pkiMgr := pki.NewManager(pkiStorageDir)
+	if err := pkiMgr.EnsureRootCA(); err != nil {
+		fmt.Printf("[PKI] Avviso generazione Sovereign Family Root CA: %v\n", err)
+	}
+	if err := pkiMgr.EnsureServerCert(); err != nil {
+		fmt.Printf("[PKI] Avviso generazione certificato server TLS: %v\n", err)
+	}
+	pkiMgr.StartAutoRenewal()
+
+	// Avvio Sovereign TLS Gateway per la terminazione crittografica dei moduli web
+	gw := gateway.New(pkiMgr)
+	if err := gw.Start(); err != nil {
+		fmt.Printf("[GATEWAY] Avviso avvio TLS Gateway: %v\n", err)
+	}
+	defer gw.Stop()
+
 	mux := http.NewServeMux()
+
+	// 0. PKI Sovereign Family CA & Apple Profiles (Public access for family device onboarding)
+	mux.HandleFunc("/api/pki/root.crt", func(w http.ResponseWriter, r *http.Request) {
+		pemBytes, err := pkiMgr.GetRootCACertPEM()
+		if err != nil {
+			http.Error(w, "Errore caricamento certificato radice: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"Allod-Family-Root-CA.crt\"")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pemBytes)
+	})
+
+	mux.HandleFunc("/api/pki/ios-profile", func(w http.ResponseWriter, r *http.Request) {
+		profileBytes, err := pkiMgr.GenerateAppleMobileConfig()
+		if err != nil {
+			http.Error(w, "Errore generazione profilo Apple: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-apple-aspen-config")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"allod-family-security.mobileconfig\"")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(profileBytes)
+	})
+
+	mux.HandleFunc("/api/pki/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		status := pkiMgr.GetStatus()
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data:   status,
+		})
+	})
 
 	// 1. Static Web Assets from embed.FS
 	subFS, err := fs.Sub(webFS, "web")
@@ -5267,6 +5324,7 @@ runcmd:
 			path == "/api/watch/binary" ||
 			path == "/api/vault/install.sh" ||
 			path == "/api/ring/announce" ||
+			strings.HasPrefix(path, "/api/pki/") ||
 			strings.HasPrefix(path, "/api/auth/") ||
 			strings.HasPrefix(path, "/api/portal/") ||
 			strings.HasPrefix(path, "/assets/") ||
@@ -5369,10 +5427,75 @@ runcmd:
 	// Background Quota Alert Watcher (12h interval, Yellow monthly, Red weekly)
 	go startBackupQuotaWatcher(dbPath)
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	rawListener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Errore listener porta %d: %v\n", port, err)
+		os.Exit(1)
+	}
+	defer rawListener.Close()
+
+	panelListener := &panelDemuxListener{
+		underlying: rawListener,
+		tlsConfig:  pkiMgr.GetTLSConfig(),
+	}
+
+	fmt.Printf("[SERVER] Dashboard pronta su http://127.0.0.1:%d e https://127.0.0.1:%d (TLS 1.3 Sovrano)\n", port, port)
+	if err := server.Serve(panelListener); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintf(os.Stderr, "Errore server: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+type panelDemuxListener struct {
+	underlying net.Listener
+	tlsConfig  *tls.Config
+}
+
+func (l *panelDemuxListener) Accept() (net.Conn, error) {
+	for {
+		conn, err := l.underlying.Accept()
+		if err != nil {
+			return nil, err
+		}
+
+		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		var firstByte [1]byte
+		n, err := conn.Read(firstByte[:])
+		_ = conn.SetReadDeadline(time.Time{})
+
+		if err != nil || n == 0 {
+			_ = conn.Close()
+			continue
+		}
+
+		replay := &panelPrefixConn{
+			Conn:   conn,
+			prefix: firstByte[:],
+		}
+
+		if firstByte[0] == 0x16 {
+			return tls.Server(replay, l.tlsConfig), nil
+		}
+
+		return replay, nil
+	}
+}
+
+func (l *panelDemuxListener) Close() error   { return l.underlying.Close() }
+func (l *panelDemuxListener) Addr() net.Addr { return l.underlying.Addr() }
+
+type panelPrefixConn struct {
+	net.Conn
+	prefix []byte
+}
+
+func (c *panelPrefixConn) Read(b []byte) (int, error) {
+	if len(c.prefix) > 0 {
+		n := copy(b, c.prefix)
+		c.prefix = c.prefix[n:]
+		return n, nil
+	}
+	return c.Conn.Read(b)
 }
 
 func checkHelperConnectivity() (connected bool, permissionDenied bool) {
