@@ -299,7 +299,15 @@ func (m *Manager) EnsureServerCert() error {
 // GetTLSConfig returns a *tls.Config ready for http.Server or listeners, dynamically serving
 // the latest rotated certificate.
 func (m *Manager) GetTLSConfig() *tls.Config {
+	m.mu.RLock()
+	var certs []tls.Certificate
+	if m.tlsCert != nil {
+		certs = []tls.Certificate{*m.tlsCert}
+	}
+	m.mu.RUnlock()
+
 	return &tls.Config{
+		Certificates: certs,
 		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			m.mu.RLock()
 			cert := m.tlsCert
@@ -318,6 +326,7 @@ func (m *Manager) GetTLSConfig() *tls.Config {
 			return &c, nil
 		},
 		MinVersion: tls.VersionTLS12,
+		NextProtos: []string{"h2", "http/1.1"},
 	}
 }
 

@@ -4,11 +4,13 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/asfaltobollente/allod/internal/pki"
 )
@@ -135,3 +137,138 @@ func TestGatewaySniffRedirect(t *testing.T) {
 		t.Fatalf("Expected offline page body, got: %s", string(bodyBytes))
 	}
 }
+
+func TestGatewayProxyToLiveBackend(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "allod-gw-live-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	pkiMgr := pki.NewManager(tmpDir)
+	_ = pkiMgr.EnsureRootCA()
+	_ = pkiMgr.EnsureServerCert()
+
+	extPort := 29888
+	internalPort := 29889
+
+	backendListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", internalPort))
+	if err != nil {
+		t.Fatalf("failed to listen on backend internalPort: %v", err)
+	}
+	defer backendListener.Close()
+
+	backendServer := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Echo-Proto", r.Header.Get("X-Forwarded-Proto"))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("live-backend-payload"))
+		}),
+	}
+	go backendServer.Serve(backendListener)
+	defer backendServer.Close()
+
+	gw := New(pkiMgr)
+	gw.routes = []Route{
+		{
+			ModuleID:     "passwords",
+			ExternalPort: extPort,
+			InternalPort: internalPort,
+			Title:        "Allod Passwords",
+		},
+	}
+
+	if err := gw.Start(); err != nil {
+		t.Fatalf("failed to start gateway: %v", err)
+	}
+	defer gw.Stop()
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	httpsClient := &http.Client{Transport: tr}
+
+	resp, err := httpsClient.Get(fmt.Sprintf("https://127.0.0.1:%d/vault", extPort))
+	if err != nil {
+		t.Fatalf("HTTPS request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got: %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "live-backend-payload" {
+		t.Fatalf("Unexpected body: %s", string(body))
+	}
+	if resp.Header.Get("X-Echo-Proto") != "https" {
+		t.Fatalf("Expected X-Echo-Proto to be https, got: %s", resp.Header.Get("X-Echo-Proto"))
+	}
+}
+
+func TestGatewaySupervisorRetriesBusyPort(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "allod-gw-retry-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	pkiMgr := pki.NewManager(tmpDir)
+	_ = pkiMgr.EnsureRootCA()
+	_ = pkiMgr.EnsureServerCert()
+
+	extPort := 29895
+	internalPort := 29896
+
+	// 1. Pre-occupy external port with dummy listener
+	dummyListener, err := net.Listen("tcp", fmt.Sprintf(":%d", extPort))
+	if err != nil {
+		t.Fatalf("failed to pre-occupy external port: %v", err)
+	}
+
+	gw := New(pkiMgr)
+	gw.routes = []Route{
+		{
+			ModuleID:     "search",
+			ExternalPort: extPort,
+			InternalPort: internalPort,
+			Title:        "Allod Search",
+		},
+	}
+
+	if err := gw.Start(); err != nil {
+		t.Fatalf("failed to start gateway: %v", err)
+	}
+	defer gw.Stop()
+
+	// External port should NOT be acquired by gateway yet
+	gw.mu.Lock()
+	_, acquiredEarly := gw.listeners[extPort]
+	gw.mu.Unlock()
+	if acquiredEarly {
+		t.Fatalf("Gateway should not have acquired port %d while occupied", extPort)
+	}
+
+	// 2. Free external port
+	_ = dummyListener.Close()
+
+	// 3. Wait up to 5s for supervisor to acquire port
+	deadline := time.Now().Add(5 * time.Second)
+	acquired := false
+	for time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		gw.mu.Lock()
+		_, ok := gw.listeners[extPort]
+		gw.mu.Unlock()
+		if ok {
+			acquired = true
+			break
+		}
+	}
+
+	if !acquired {
+		t.Fatalf("Supervisor failed to acquire freed port %d within timeout", extPort)
+	}
+}
+
+

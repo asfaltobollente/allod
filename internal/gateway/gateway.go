@@ -94,7 +94,8 @@ func New(pkiMgr *pki.Manager) *Gateway {
 	}
 }
 
-// Start launches TLS reverse proxies for all defined routes.
+// Start launches TLS reverse proxies for all defined routes and starts a background supervisor
+// to continuously retry any port that was busy during initial boot.
 func (g *Gateway) Start() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -102,48 +103,88 @@ func (g *Gateway) Start() error {
 	tlsConfig := g.pkiMgr.GetTLSConfig()
 
 	for _, route := range g.routes {
-		r := route // copy for closure
-		addr := fmt.Sprintf(":%d", r.ExternalPort)
-
-		rawListener, err := net.Listen("tcp", addr)
-		if err != nil {
-			log.Printf("[GATEWAY] ⚠️ Impossibile ascoltare su porta %d: %v (porta già occupata?)", r.ExternalPort, err)
-			continue
-		}
-
-		smartListener := &sniffListener{
-			underlying: rawListener,
-			tlsConfig:  tlsConfig,
-			extPort:    r.ExternalPort,
-		}
-
-		proxy := g.buildProxy(r)
-		server := &http.Server{
-			Handler:      proxy,
-			TLSConfig:    tlsConfig,
-			ReadTimeout:  120 * time.Second,
-			WriteTimeout: 120 * time.Second,
-			IdleTimeout:  120 * time.Second,
-		}
-
-		g.listeners[r.ExternalPort] = smartListener
-		g.servers[r.ExternalPort] = server
-
-		go func(p int, srv *http.Server, l net.Listener, mod string) {
-			log.Printf("[GATEWAY] 🛡️ TLS Gateway attivo su porta %d -> 127.0.0.1:%d (Modulo: %s)", p, r.InternalPort, mod)
-			if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
-				log.Printf("[GATEWAY] Listener porta %d terminato: %v", p, err)
-			}
-		}(r.ExternalPort, server, smartListener, r.ModuleID)
+		_ = g.bindRouteLocked(route, tlsConfig)
 	}
 
+	go g.supervisor()
+
 	return nil
+}
+
+func (g *Gateway) bindRouteLocked(r Route, tlsConfig *tls.Config) bool {
+	if _, exists := g.listeners[r.ExternalPort]; exists {
+		return true
+	}
+
+	addr := fmt.Sprintf(":%d", r.ExternalPort)
+	rawListener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Printf("[GATEWAY] ⚠️ Porta %d non disponibile: %v (verrà riprovata automaticamente)", r.ExternalPort, err)
+		return false
+	}
+
+	smartListener := &sniffListener{
+		underlying: rawListener,
+		tlsConfig:  tlsConfig,
+		extPort:    r.ExternalPort,
+	}
+
+	proxy := g.buildProxy(r)
+	server := &http.Server{
+		Handler:      proxy,
+		TLSConfig:    tlsConfig,
+		ReadTimeout:  120 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	g.listeners[r.ExternalPort] = smartListener
+	g.servers[r.ExternalPort] = server
+
+	go func(p int, srv *http.Server, l net.Listener, mod string) {
+		log.Printf("[GATEWAY] 🛡️ TLS Gateway attivo su porta %d -> 127.0.0.1:%d (Modulo: %s)", p, r.InternalPort, mod)
+		if err := srv.Serve(l); err != nil && err != http.ErrServerClosed {
+			log.Printf("[GATEWAY] Listener porta %d terminato: %v", p, err)
+		}
+	}(r.ExternalPort, server, smartListener, r.ModuleID)
+
+	return true
+}
+
+func (g *Gateway) supervisor() {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-g.stopCh:
+			return
+		case <-ticker.C:
+			g.mu.Lock()
+			tlsConfig := g.pkiMgr.GetTLSConfig()
+			for _, r := range g.routes {
+				if _, ok := g.listeners[r.ExternalPort]; !ok {
+					if g.bindRouteLocked(r, tlsConfig) {
+						log.Printf("[GATEWAY] 🛡️ TLS Gateway agganciato con successo su porta %d -> 127.0.0.1:%d (Modulo: %s)", r.ExternalPort, r.InternalPort, r.ModuleID)
+					}
+				}
+			}
+			g.mu.Unlock()
+		}
+	}
 }
 
 // Stop gracefully stops all TLS Gateway listeners and connections.
 func (g *Gateway) Stop() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
+	select {
+	case <-g.stopCh:
+		// already closed
+	default:
+		close(g.stopCh)
+	}
 
 	for port, srv := range g.servers {
 		_ = srv.Close()
