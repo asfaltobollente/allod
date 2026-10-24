@@ -665,7 +665,8 @@ func regenerateActiveQuadlets(report *strings.Builder, restartRunning bool) {
 
 		if restartRunning && modName != "storage" && modName != "shares" && modName != "network" {
 			out, _ := exec.Command("systemctl", "--user", "is-active", modName).Output()
-			if strings.TrimSpace(string(out)) == "active" {
+			st := strings.TrimSpace(string(out))
+			if st == "active" || st == "activating" || st == "reloading" {
 				toRestart = append(toRestart, modName)
 			}
 		}
@@ -674,10 +675,95 @@ func regenerateActiveQuadlets(report *strings.Builder, restartRunning bool) {
 	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
 	if restartRunning {
 		for _, modName := range toRestart {
+			if quadlet.IsGatewayModule(modName) {
+				_ = exec.Command("podman", "rm", "-f", modName).Run()
+			}
 			_ = exec.Command("systemctl", "--user", "restart", modName).Run()
 			if report != nil {
 				report.WriteString(fmt.Sprintf("✓ Modulo '%s' riavviato (porte aggiornate: LAN + Mesh)\n", modName))
 			}
+		}
+	}
+}
+
+// autoMigrateLegacyQuadlets ensures all active and existing Quadlet containers are migrated
+// to use internal loopback ports behind the Sovereign TLS Gateway. If legacy host ports
+// (8088, 8888, 2283, 8443, 8096, 7000) are found in Quadlet container files, they are updated,
+// systemd daemon is reloaded, and any conflicting containers are restarted cleanly.
+func autoMigrateLegacyQuadlets() {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return
+	}
+
+	quadDir := filepath.Join(home, ".config", "containers", "systemd")
+	if _, err := os.Stat(quadDir); os.IsNotExist(err) {
+		return
+	}
+
+	legacyPortMap := map[string]struct {
+		legacyPort   string
+		internalPort string
+	}{
+		"passwords": {legacyPort: "8088:80", internalPort: "127.0.0.1:18088:80"},
+		"search":    {legacyPort: "8888:8080", internalPort: "127.0.0.1:18888:8080"},
+		"photos":    {legacyPort: "2283:2283", internalPort: "127.0.0.1:12283:2283"},
+		"cloud":     {legacyPort: "8443:80", internalPort: "127.0.0.1:18443:80"},
+		"media":     {legacyPort: "8096:8096", internalPort: "127.0.0.1:18096:8096"},
+		"odysseus":  {legacyPort: "7000:7000", internalPort: "127.0.0.1:17000:7000"},
+	}
+
+	needsReload := false
+	var modulesToRestart []string
+
+	entries, err := os.ReadDir(quadDir)
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".container") {
+				continue
+			}
+			fPath := filepath.Join(quadDir, e.Name())
+			data, errR := os.ReadFile(fPath)
+			if errR != nil {
+				continue
+			}
+			content := string(data)
+			modBase := strings.TrimSuffix(e.Name(), ".container")
+			if idx := strings.Index(modBase, "-"); idx != -1 {
+				modBase = modBase[:idx]
+			}
+
+			mapping, isGatewayMod := legacyPortMap[modBase]
+			if !isGatewayMod {
+				continue
+			}
+
+			legacyPattern := fmt.Sprintf("PublishPort=%s", mapping.legacyPort)
+			legacyZeroPattern := fmt.Sprintf("PublishPort=0.0.0.0:%s", mapping.legacyPort)
+			targetInternal := fmt.Sprintf("PublishPort=%s", mapping.internalPort)
+
+			if (strings.Contains(content, legacyPattern) || strings.Contains(content, legacyZeroPattern)) && !strings.Contains(content, targetInternal) {
+				newContent := strings.ReplaceAll(content, legacyZeroPattern, targetInternal)
+				newContent = strings.ReplaceAll(newContent, legacyPattern, targetInternal)
+				if errW := os.WriteFile(fPath, []byte(newContent), 0644); errW == nil {
+					fmt.Printf("[MIGRATION] ✓ Aggiornato Quadlet '%s': porta reindirizzata su %s\n", e.Name(), mapping.internalPort)
+					needsReload = true
+					modulesToRestart = append(modulesToRestart, modBase)
+				}
+			}
+		}
+	}
+
+	// Always regenerate active modules using quadlet.Generate to ensure full consistency
+	regenerateActiveQuadlets(nil, false)
+
+	if needsReload || len(modulesToRestart) > 0 {
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		for _, m := range modulesToRestart {
+			_ = exec.Command("systemctl", "--user", "stop", m).Run()
+			_ = exec.Command("podman", "rm", "-f", m).Run()
+			_ = exec.Command("systemctl", "--user", "start", m).Run()
+			fmt.Printf("[MIGRATION] ✓ Modulo '%s' riavviato su porta interna loopback\n", m)
 		}
 	}
 }
@@ -697,6 +783,9 @@ func main() {
 		fmt.Printf("[PKI] Avviso generazione certificato server TLS: %v\n", err)
 	}
 	pkiMgr.StartAutoRenewal()
+
+	// Migrazione automatica Quadlet legacy verso porte loopback TLS Gateway
+	autoMigrateLegacyQuadlets()
 
 	// Avvio Sovereign TLS Gateway per la terminazione crittografica dei moduli web
 	gw := gateway.New(pkiMgr)
