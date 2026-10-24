@@ -7121,8 +7121,40 @@ function renderPkiQrCode() {
   }
 }
 
+function copyWindowsPowerShellCommand() {
+  const origin = window.location.origin;
+  const cmd = `Invoke-WebRequest -Uri "${origin}/api/pki/root.crt" -OutFile "$env:TEMP\\Allod-Family-Root-CA.crt"; Import-Certificate -FilePath "$env:TEMP\\Allod-Family-Root-CA.crt" -CertStoreLocation Cert:\\CurrentUser\\Root`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd).then(() => {
+      showToast('Comando PowerShell copiato! Incollalo nel terminale PowerShell per installare.', 'success');
+    }).catch(() => {
+      fallbackCopyText(cmd, 'Comando PowerShell copiato!');
+    });
+  } else {
+    fallbackCopyText(cmd, 'Comando PowerShell copiato!');
+  }
+}
+
+async function copyPkiPemText() {
+  try {
+    const res = await fetch('/api/pki/root.crt');
+    const pem = await res.text();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(pem);
+      showToast('Certificato PEM copiato negli appunti!', 'success');
+    } else {
+      fallbackCopyText(pem, 'Certificato PEM copiato!');
+    }
+  } catch (err) {
+    showToast('Errore lettura certificato: ' + err, 'error');
+  }
+}
+
 window.openPkiModal = openPkiModal;
 window.closePkiModal = closePkiModal;
 window.copyPkiFingerprint = copyPkiFingerprint;
 window.togglePkiQrTarget = togglePkiQrTarget;
+window.copyWindowsPowerShellCommand = copyWindowsPowerShellCommand;
+window.copyPkiPemText = copyPkiPemText;
+
 

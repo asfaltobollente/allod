@@ -797,18 +797,34 @@ func main() {
 	mux := http.NewServeMux()
 
 	// 0. PKI Sovereign Family CA & Apple Profiles (Public access for family device onboarding)
-	mux.HandleFunc("/api/pki/root.crt", func(w http.ResponseWriter, r *http.Request) {
+	serveRootCA := func(w http.ResponseWriter, r *http.Request) {
 		pemBytes, err := pkiMgr.GetRootCACertPEM()
 		if err != nil {
 			http.Error(w, "Errore caricamento certificato radice: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
-		w.Header().Set("Content-Disposition", "attachment; filename=\"Allod-Family-Root-CA.crt\"")
+		filename := "Allod-Family-Root-CA.crt"
+		contentType := "application/x-x509-ca-cert"
+		if r.URL.Query().Get("format") == "cer" || strings.HasSuffix(r.URL.Path, ".cer") {
+			filename = "Allod-Family-Root-CA.cer"
+			contentType = "application/pkix-cert"
+		} else if r.URL.Query().Get("format") == "pem" || strings.HasSuffix(r.URL.Path, ".pem") {
+			filename = "Allod-Family-Root-CA.pem"
+			contentType = "application/x-pem-file"
+		} else if r.URL.Query().Get("format") == "txt" {
+			filename = "Allod-Family-Root-CA.txt"
+			contentType = "text/plain; charset=utf-8"
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		w.Header().Set("Content-Length", strconv.Itoa(len(pemBytes)))
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pemBytes)
-	})
+	}
+	mux.HandleFunc("/api/pki/root.crt", serveRootCA)
+	mux.HandleFunc("/api/pki/root.cer", serveRootCA)
+	mux.HandleFunc("/api/pki/root.pem", serveRootCA)
 
 	mux.HandleFunc("/api/pki/ios-profile", func(w http.ResponseWriter, r *http.Request) {
 		profileBytes, err := pkiMgr.GenerateAppleMobileConfig()
@@ -818,6 +834,7 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config")
 		w.Header().Set("Content-Disposition", "attachment; filename=\"allod-family-security.mobileconfig\"")
+		w.Header().Set("Content-Length", strconv.Itoa(len(profileBytes)))
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(profileBytes)
