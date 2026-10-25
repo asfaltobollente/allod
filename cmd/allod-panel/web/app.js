@@ -5810,7 +5810,7 @@ function renderWoLDevices() {
   if (tbody) {
     if (!wolDevicesList || wolDevicesList.length === 0) {
       tbody.innerHTML = `
-        <tr>
+        <tr class="wol-empty-row">
           <td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">
             ${t('wol_no_devices', 'Nessun dispositivo Wake-on-LAN salvato. Aggiungi il tuo PC qui sotto!')}
           </td>
@@ -5823,28 +5823,28 @@ function renderWoLDevices() {
           lastWake = dt.toLocaleString();
         }
         return `
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:10px 12px; font-weight:600; color:var(--text-main);">
-              🖥️ ${escapeHtml(d.name)}
+          <tr class="wol-device-row" style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            <td class="wol-cell-name" data-label="${t('wol_th_name', 'Nome Computer')}" style="padding:10px 12px; font-weight:600; color:var(--text-main);">
+              <span class="wol-device-icon">🖥️</span> <span class="wol-device-title">${escapeHtml(d.name)}</span>
             </td>
-            <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace; color:#38bdf8;">
+            <td class="wol-cell-mac" data-label="${t('wol_th_mac', 'Indirizzo MAC')}" style="padding:10px 12px; font-family:'JetBrains Mono',monospace; color:#38bdf8;">
               ${escapeHtml(d.mac_address)}
             </td>
-            <td style="padding:10px 12px; color:var(--text-muted); font-size:11.5px;">
+            <td class="wol-cell-bcast" data-label="${t('wol_th_broadcast', 'Broadcast')}" style="padding:10px 12px; color:var(--text-muted); font-size:11.5px;">
               ${escapeHtml(d.broadcast_ip || '255.255.255.255')}:${d.port || 9}
             </td>
-            <td style="padding:10px 12px; color:var(--text-muted); font-size:11.5px;">
+            <td class="wol-cell-lastwake" data-label="${t('wol_th_last_wake', 'Ultima Accensione')}" style="padding:10px 12px; color:var(--text-muted); font-size:11.5px;">
               ${lastWake}
             </td>
-            <td style="padding:10px 12px; text-align:right;">
-              <div style="display:flex; justify-content:flex-end; gap:6px;">
+            <td class="wol-cell-actions" data-label="${t('wol_th_actions', 'Azioni')}" style="padding:10px 12px; text-align:right;">
+              <div class="wol-actions-group" style="display:flex; justify-content:flex-end; gap:6px;">
                 <button class="btn btn-sm btn-warning" id="btn-wol-wake-${d.id}" onclick="wakeDevice(${d.id}, '${escapeHtml(d.mac_address)}', '${escapeHtml(d.name)}')" style="font-weight:700; padding:4px 10px; font-size:11.5px;">
                   ⚡ ${t('wol_btn_wake_now', 'Accendi')}
                 </button>
-                <button class="btn btn-sm btn-outline-info" onclick="editWoLDevice(${d.id})" title="Modifica" style="padding:4px 8px; font-size:11px;">
+                <button class="btn btn-sm btn-outline-info" onclick="editWoLDevice(${d.id})" title="${t('btn_edit', 'Modifica')}" style="padding:4px 8px; font-size:11px;">
                   ✏️
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteWoLDevice(${d.id})" title="Elimina" style="padding:4px 8px; font-size:11px;">
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteWoLDevice(${d.id})" title="${t('btn_delete', 'Elimina')}" style="padding:4px 8px; font-size:11px;">
                   🗑️
                 </button>
               </div>
@@ -5872,7 +5872,7 @@ function renderWoLDevices() {
           lastWakeStr = `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">(ultimo: ${dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})</span>`;
         }
         return `
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:rgba(15,23,42,0.8); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:8px 12px; min-width:240px; flex:1;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:rgba(15,23,42,0.8); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:8px 12px; min-width:200px; flex:1;">
             <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
               <span style="font-size:18px;">🖥️</span>
               <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">

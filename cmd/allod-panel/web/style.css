@@ -3061,3 +3061,165 @@ body {
   border-color: #00ff66;
   box-shadow: 0 0 12px rgba(0, 255, 102, 0.3);
 }
+
+/* ==========================================================================
+   Wake-on-LAN (WoL) Modal & Responsive Card/Table System
+   ========================================================================== */
+.wol-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-main, #0f172a);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.wol-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.wol-table th,
+.wol-table td {
+  padding: 10px 12px;
+}
+
+/* Mobile & Narrow Viewports (<= 680px): Transform table into touch-friendly cards */
+@media (max-width: 680px) {
+  .wol-table-container {
+    background: transparent !important;
+    border: none !important;
+    overflow-x: visible !important;
+  }
+
+  .wol-table {
+    min-width: 0 !important;
+  }
+
+  .wol-table thead {
+    display: none !important;
+  }
+
+  .wol-table,
+  .wol-table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  .wol-table tr.wol-device-row {
+    display: flex !important;
+    flex-direction: column !important;
+    background: var(--bg-main, #0f172a) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius-md, 8px) !important;
+    padding: 14px !important;
+    gap: 8px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+
+  .wol-table tr.wol-empty-row {
+    display: block !important;
+    background: var(--bg-main, #0f172a) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius-md, 8px) !important;
+    padding: 20px !important;
+  }
+
+  .wol-table tr.wol-empty-row td {
+    display: block !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  .wol-table tr.wol-empty-row td::before {
+    display: none !important;
+  }
+
+  .wol-table tr.wol-device-row td {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 6px 0 !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    font-size: 12px !important;
+  }
+
+  .wol-table tr.wol-device-row td.wol-cell-name {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    color: var(--foreground, #fff) !important;
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .wol-table tr.wol-device-row td.wol-cell-name::before {
+    display: none !important;
+  }
+
+  .wol-table tr.wol-device-row td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+    margin-right: 12px;
+  }
+
+  .wol-table tr.wol-device-row td.wol-cell-actions {
+    border-bottom: none !important;
+    padding-top: 10px !important;
+    margin-top: 4px !important;
+    justify-content: flex-end !important;
+  }
+
+  .wol-table tr.wol-device-row td.wol-cell-actions::before {
+    display: none !important;
+  }
+
+  .wol-table tr.wol-device-row .wol-actions-group {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+  }
+
+  .wol-table tr.wol-device-row .wol-actions-group .btn-warning {
+    flex: 1 !important;
+    text-align: center !important;
+    justify-content: center !important;
+    min-height: 38px !important;
+  }
+
+  .wol-table tr.wol-device-row .wol-actions-group .btn-outline-info,
+  .wol-table tr.wol-device-row .wol-actions-group .btn-outline-danger {
+    min-height: 38px !important;
+    min-width: 38px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 500px) {
+  .wol-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .wol-adhoc-container {
+    flex-direction: column !important;
+  }
+
+  .wol-adhoc-container .btn {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 38px !important;
+  }
+}
