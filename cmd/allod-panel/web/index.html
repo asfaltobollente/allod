@@ -840,17 +840,14 @@ systemctl --user enable --now allod-panel</pre>
               Fetch latest source code from GitHub, recompile Go binaries, or perform a zero-downtime background self-update.
             </p>
 
-            <div style="display:flex; flex-direction:column; gap:10px;">
-              <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button class="btn btn-outline-primary" id="btn-git-pull" onclick="runGitPull()" style="flex:1;">
-                  <span class="icon">⬇️</span> <span data-i18n="btn_git_pull">Git Pull</span>
-                </button>
-                <button class="btn btn-outline-info" id="btn-go-build" onclick="runGoBuild()" style="flex:1;">
-                  <span class="icon">🔨</span> <span data-i18n="btn_go_build">Go Build</span>
-                </button>
-              </div>
-
-              <button class="btn btn-success" id="btn-self-update" onclick="runSelfUpdate()" style="width:100%; padding:10px; font-weight:700;">
+            <div class="maintenance-btn-grid">
+              <button class="btn btn-outline-primary" id="btn-git-pull" onclick="runGitPull()">
+                <span class="icon">⬇️</span> <span data-i18n="btn_git_pull">Git Pull</span>
+              </button>
+              <button class="btn btn-outline-info" id="btn-go-build" onclick="runGoBuild()">
+                <span class="icon">🔨</span> <span data-i18n="btn_go_build">Go Build</span>
+              </button>
+              <button class="btn btn-success btn-full-width" id="btn-self-update" onclick="runSelfUpdate()">
                 <span class="icon">🚀</span> <span data-i18n="btn_self_update">One-Click Update & Restart</span>
               </button>
             </div>
@@ -865,45 +862,38 @@ systemctl --user enable --now allod-panel</pre>
               Execute administrative system actions directly from the GUI without SSH access.
             </p>
 
-            <div style="display:flex; flex-direction:column; gap:10px;">
-              <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button class="btn btn-outline-warning btn-systemd-reload" id="btn-systemd-reload" onclick="executeSystemdReload()" style="flex:1;">
-                  <span class="icon">⚙️</span> <span data-i18n="btn_systemd_reload">Systemd Reload</span>
-                </button>
-                <button class="btn btn-outline-secondary" onclick="runResetFailed()" style="flex:1;">
-                  <span class="icon">🔄</span> <span data-i18n="btn_reset_failed">Reset-Failed State</span>
-                </button>
-              </div>
+            <div class="maintenance-btn-grid">
+              <button class="btn btn-outline-warning" id="btn-systemd-reload" onclick="executeSystemdReload()">
+                <span class="icon">⚙️</span> <span data-i18n="btn_systemd_reload">Systemd Reload</span>
+              </button>
+              <button class="btn btn-outline-secondary" onclick="runResetFailed()">
+                <span class="icon">🔄</span> <span data-i18n="btn_reset_failed">Reset-Failed State</span>
+              </button>
 
-              <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button class="btn btn-outline-success" id="btn-start-active-mods" onclick="runModulesControl('start')" style="flex:1;" title="Starts only modules configured with an active level (modules with level 'off' remain off)">
-                  <span class="icon">▶️</span> <span data-i18n="btn_start_active">Start Configured Modules</span>
-                </button>
-                <button class="btn btn-outline-danger" id="btn-stop-all-mods" onclick="runModulesControl('stop')" style="flex:1;">
-                  <span class="icon">⏹</span> <span data-i18n="btn_stop_all">Stop All Modules</span>
-                </button>
-              </div>
+              <button class="btn btn-outline-success" id="btn-start-active-mods" onclick="runModulesControl('start')" title="Starts only modules configured with an active level (modules with level 'off' remain off)">
+                <span class="icon">▶️</span> <span data-i18n="btn_start_active">Start Configured Modules</span>
+              </button>
+              <button class="btn btn-outline-danger" id="btn-stop-all-mods" onclick="runModulesControl('stop')">
+                <span class="icon">⏹</span> <span data-i18n="btn_stop_all">Stop All Modules</span>
+              </button>
 
-              <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button class="btn btn-outline-info" onclick="openSweeperModal()" style="flex:1;">
-                  <span class="icon">🧹</span> <span data-i18n="btn_sweeper">Podman Sweeper</span>
-                </button>
-                <button class="btn btn-outline-warning" id="btn-enable-autostart" onclick="runEnableAutostart()" style="flex:1;" title="Enable systemd user linger and register allod-panel as a permanent boot service">
-                  <span class="icon">📌</span> <span data-i18n="btn_enable_autostart">Enable Boot Autostart</span>
-                </button>
-              </div>
+              <button class="btn btn-outline-info" onclick="openSweeperModal()">
+                <span class="icon">🧹</span> <span data-i18n="btn_sweeper">Podman Sweeper</span>
+              </button>
+              <button class="btn btn-outline-warning" id="btn-enable-autostart" onclick="runEnableAutostart()" title="Enable systemd user linger and register allod-panel as a permanent boot service">
+                <span class="icon">📌</span> <span data-i18n="btn_enable_autostart">Enable Boot Autostart</span>
+              </button>
 
-              <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button class="btn btn-outline-primary" onclick="openWatchSentinelModal()" style="flex:1;">
-                  <span class="icon">🛡️</span> <span data-i18n="btn_configure_watch_sentinel">Configura Sentinella & Bot</span>
-                </button>
-                <button class="btn btn-outline-warning" onclick="openWoLModal()" style="flex:1;">
-                  <span class="icon">⚡</span> <span data-i18n="wol_btn_open">Wake-on-LAN</span>
-                </button>
-                <button class="btn btn-outline-info" onclick="openNetBirdAPIModal()" style="flex:1;">
-                  <span class="icon">🌐</span> <span>Integrazione NetBird Cloud API</span>
-                </button>
-              </div>
+              <button class="btn btn-outline-primary" onclick="openWatchSentinelModal()">
+                <span class="icon">🛡️</span> <span data-i18n="btn_configure_watch_sentinel">Configura Sentinella & Bot</span>
+              </button>
+              <button class="btn btn-outline-warning" onclick="openWoLModal()">
+                <span class="icon">⚡</span> <span data-i18n="wol_btn_open">Wake-on-LAN</span>
+              </button>
+
+              <button class="btn btn-outline-info btn-full-width" onclick="openNetBirdAPIModal()">
+                <span class="icon">🌐</span> <span data-i18n="btn_netbird_api">Integrazione NetBird Cloud API</span>
+              </button>
             </div>
             <p style="font-size:11px; color:var(--text-muted); margin-top:10px; font-style:italic;" data-i18n="settings_start_active_note">
               Starts only modules configured with an active level (modules with level 'off' remain off).
@@ -918,8 +908,8 @@ systemctl --user enable --now allod-panel</pre>
               <span>🛡️</span> <span data-i18n="helper_maintenance_title">Root Helper Daemon (allod-helperd)</span>
             </h3>
             <div style="display:flex; align-items:center; gap:8px;">
-              <button class="btn btn-sm btn-outline-primary" id="btn-restart-helper" onclick="restartRootHelper()" style="padding:3px 10px; font-size:11px;">
-                🔄 <span>Aggiorna &amp; Riavvia Helper</span>
+              <button class="btn btn-outline-primary" id="btn-restart-helper" onclick="restartRootHelper()" style="height:32px; padding:0 12px; font-size:12px; font-weight:600; white-space:nowrap;">
+                <span class="icon">🔄</span> <span>Aggiorna &amp; Riavvia Helper</span>
               </button>
               <div id="settings-helper-status-pill" class="helper-status" onclick="openHelperModal()" style="cursor:pointer;">
                 <span class="status-indicator"></span> <span id="settings-helper-status-text">Root Helper</span>

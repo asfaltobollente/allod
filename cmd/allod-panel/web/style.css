@@ -1123,7 +1123,14 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.topbar-title {
+  flex: 1 1 260px;
+  min-width: 240px;
 }
 
 .topbar-title h1 {
@@ -1141,7 +1148,8 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .topbar-actions .btn,
@@ -1999,10 +2007,48 @@ body {
 .btn-outline-danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
 .btn-outline-danger:hover { background: var(--danger); color: #fff; }
 
+.btn-success { background: var(--success); color: #020817; font-weight: 600; }
+.btn-success:hover { background: #059669; color: #fff; }
+
+.btn-outline-success { background: transparent; border: 1px solid var(--success); color: var(--success); }
+.btn-outline-success:hover { background: var(--success); color: #020817; }
+
 .btn-group-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+/* Maintenance Action Buttons Grid (Unified Proportions & Heights) */
+.maintenance-btn-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.maintenance-btn-grid .btn {
+  height: 42px;
+  min-height: 42px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.maintenance-btn-grid .btn-full-width {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .maintenance-btn-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-control {
