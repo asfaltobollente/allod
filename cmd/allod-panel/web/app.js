@@ -1642,6 +1642,8 @@ function createModuleCard(mod) {
   let networkBoxHtml = '';
   if (mod.id === 'network') {
     const displayMeshIp = (currentMeshIP && currentMeshIP !== '--') ? currentMeshIP : '--';
+    const isNative = window.currentClientRuntime === 'native';
+    const runtimeBadge = `<span id="network-runtime-badge" class="badge" style="background:${isNative ? '#10b981' : '#38bdf8'}; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px;">${isNative ? '⚡ Nativo Host' : '📦 Container Podman'}</span>`;
     let connBadge = '';
     let connHintHtml = '';
     const connMode = window.currentNetBirdConnectionMode;
