@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=3.0">
+  <link rel="stylesheet" href="style.css?v=3.1">
   <script>
     (function() {
       const saved = localStorage.getItem('allod_theme');
@@ -88,7 +88,7 @@
         </div>
         <div class="topbar-actions">
           <!-- Theme Quick Button -->
-          <button class="btn btn-outline-secondary" onclick="openThemeSelector()" id="btn-topbar-theme" style="padding:4px 10px; font-size:11.5px; margin-right:4px;" title="Cambia tema interfaccia">
+          <button class="btn btn-outline-secondary" onclick="openThemeSelector()" id="btn-topbar-theme" title="Cambia tema interfaccia">
             <span class="icon">🎨</span> <span id="topbar-theme-name" data-i18n="btn_theme">Tema</span>
           </button>
           <!-- Live Vitals Pill (Server Health) -->
@@ -112,7 +112,7 @@
             <span class="status-indicator"></span> <span data-i18n="helper_connected">Root Helper: Connected</span>
           </div>
           <!-- Admin Logout -->
-          <button class="btn btn-outline-danger" onclick="logoutAdmin()" id="btn-topbar-logout" style="padding:4px 10px; font-size:11.5px; margin-left:4px;" title="Disconnetti sessione amministratore">
+          <button class="btn btn-outline-danger" onclick="logoutAdmin()" id="btn-topbar-logout" title="Disconnetti sessione amministratore">
             <span class="icon">🚪</span> <span data-i18n="btn_logout">Logout</span>
           </button>
         </div>
@@ -2803,9 +2803,9 @@ restic -r rest:http://&lt;ip_wireguard_amico&gt;:8000/ restore latest --target /
   <!-- Floating Telemetry Chart Tooltip -->
   <div id="metrics-chart-tooltip" class="metrics-tooltip hidden"></div>
 
-  <script src="qrcode.js?v=3.0"></script>
-  <script src="i18n.js?v=3.0"></script>
-  <script src="app.js?v=3.0"></script>
-  <script type="module" src="network.js?v=3.0"></script>
+  <script src="qrcode.js?v=3.1"></script>
+  <script src="i18n.js?v=3.1"></script>
+  <script src="app.js?v=3.1"></script>
+  <script type="module" src="network.js?v=3.1"></script>
 </body>
 </html>

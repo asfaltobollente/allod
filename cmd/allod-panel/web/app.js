@@ -1845,7 +1845,7 @@ function createModuleCard(mod) {
             <select class="form-control" ${isLocked ? 'disabled style="opacity:0.6; cursor:not-allowed; padding:3px 8px; font-size:11.5px;"' : 'style="padding:3px 8px; font-size:11.5px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
               ${levelOptions}
             </select>
-            <span class="badge badge-info" style="font-size:10.5px;">${ramReq} MB RAM</span>
+            <span class="badge badge-info" style="font-size:11px; white-space:nowrap; flex-shrink:0;">${ramReq} MB RAM</span>
           </div>
         </div>
 
@@ -1938,7 +1938,7 @@ function createModuleCard(mod) {
         <select class="form-control" ${isLocked ? 'disabled style="opacity:0.55; cursor:not-allowed; padding:4px 8px; font-size:12px;"' : 'style="padding:4px 8px; font-size:12px;"'} onchange="changeModuleLevel('${mod.id}', this.value)">
           ${levelOptions}
         </select>
-        <span class="badge badge-info" style="font-size:11px;">${ramReq} MB RAM</span>
+        <span class="badge badge-info" style="font-size:11px; white-space:nowrap; flex-shrink:0;">${ramReq} MB RAM</span>
       </div>
 
       ${grantsHtml}
