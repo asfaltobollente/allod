@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -200,6 +201,7 @@ func TestReceiverPushMode(t *testing.T) {
 	hotPayload := &NodeHealthPayload{
 		NodeName:  "nas-server",
 		StorageOK: true,
+		SmartOK:   true,
 		CPUTemp:   85.5,
 	}
 	_ = w.HandleHeartbeat(hotPayload, "secret-token-123")
@@ -208,5 +210,35 @@ func TestReceiverPushMode(t *testing.T) {
 	}
 	if !warningReceived.Load() {
 		t.Errorf("expected high temp warning, but none received")
+	}
+
+	// 5. Test S.M.A.R.T. Hardware Warning
+	var smartWarningTitle, smartWarningDetails string
+	var smartWarningReceived atomic.Bool
+	w.OnWarning = func(nodeID, title, details string) {
+		smartWarningTitle = title
+		smartWarningDetails = details
+		smartWarningReceived.Store(true)
+	}
+
+	failingSmartPayload := &NodeHealthPayload{
+		NodeName:    "nas-server",
+		Status:      "ok",
+		StorageOK:   false,
+		SmartOK:     false,
+		SmartStatus: "🔴 Allarme Hardware: sdb (WDC WD40EFZX: GUASTO IMMINENTE)",
+	}
+	_ = w.HandleHeartbeat(failingSmartPayload, "secret-token-123")
+	for i := 0; i < 50 && !smartWarningReceived.Load(); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !smartWarningReceived.Load() {
+		t.Errorf("expected SMART warning callback, but none received")
+	}
+	if smartWarningTitle != "Allarme Hardware Disco (S.M.A.R.T.)" {
+		t.Errorf("unexpected warning title: got %q", smartWarningTitle)
+	}
+	if !strings.Contains(smartWarningDetails, "GUASTO IMMINENTE") {
+		t.Errorf("unexpected warning details: got %q", smartWarningDetails)
 	}
 }

@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
@@ -20,6 +21,8 @@ type CommandRunner interface {
 	StorageDiagnostics(mountPoint string) (string, error)
 	ScanDatasets(storageRoot string, validUsers, selectedPaths []string, remoteQuotaGB int) (string, error)
 	SnapshotCreate(subvol, name string) error
+	SnapshotPrune(subvol string, keep int) (string, error)
+	SmartRead(disk string) (*SmartReport, error)
 }
 
 var _ CommandRunner = (*Client)(nil)
@@ -176,7 +179,7 @@ func (c *Client) StorageDiagnostics(mountPoint string) (string, error) {
 
 // SnapshotCreate takes an instant read-only Btrfs snapshot of a subvolume.
 func (c *Client) SnapshotCreate(subvol, name string) error {
-	res, err := c.Execute("snapshot.create", map[string]interface{}{
+	res, err := c.Execute("snapshots.create", map[string]interface{}{
 		"subvol": subvol,
 		"name":   name,
 	}, false)
@@ -187,6 +190,41 @@ func (c *Client) SnapshotCreate(subvol, name string) error {
 		return fmt.Errorf("helper error creating snapshot: %s", res.Error)
 	}
 	return nil
+}
+
+// SnapshotPrune removes old Btrfs snapshots beyond retention count.
+func (c *Client) SnapshotPrune(subvol string, keep int) (string, error) {
+	args := map[string]interface{}{}
+	if subvol != "" {
+		args["subvolume"] = subvol
+	}
+	if keep > 0 {
+		args["keep"] = keep
+	}
+	res, err := c.Execute("snapshots.prune", args, false)
+	if err != nil {
+		return "", fmt.Errorf("helper connection error: %w", err)
+	}
+	if !res.Ok {
+		return "", fmt.Errorf("helper error pruning snapshots: %s", res.Error)
+	}
+	return res.Output, nil
+}
+
+// SmartRead queries normalized SMART health for a specific physical disk.
+func (c *Client) SmartRead(disk string) (*SmartReport, error) {
+	res, err := c.Execute("smart.read", map[string]interface{}{"disk": disk}, false)
+	if err != nil {
+		return nil, fmt.Errorf("helper connection error: %w", err)
+	}
+	if !res.Ok {
+		return nil, fmt.Errorf("helper error reading SMART: %s", res.Error)
+	}
+	var rep SmartReport
+	if err := json.Unmarshal([]byte(res.Output), &rep); err != nil {
+		return nil, fmt.Errorf("failed to decode SMART output: %w", err)
+	}
+	return &rep, nil
 }
 
 // ScanDatasets traverses datasets as root, auto-heals storage permissions, and computes forecast metrics.

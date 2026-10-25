@@ -140,6 +140,29 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	directPeersCount := 0
+	relayedPeersCount := 0
+	for _, p := range peersList {
+		isDirect := false
+		if dir, ok := p["direct"].(bool); ok && dir {
+			isDirect = true
+		} else if ct, ok := p["connectionType"].(string); ok && strings.EqualFold(ct, "p2p") {
+			isDirect = true
+		}
+		if isDirect {
+			directPeersCount++
+		} else {
+			relayedPeersCount++
+		}
+	}
+
+	connectionMode := "idle"
+	if directPeersCount > 0 {
+		connectionMode = "p2p"
+	} else if relayedPeersCount > 0 {
+		connectionMode = "relayed"
+	}
+
 	// If container status was not reachable via JSON CLI, check wt0 interface directly for assigned IP
 	if meshIP == "--" {
 		if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
@@ -182,8 +205,8 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"dashboard_running": false,
 		"domain":            "127.0.0.1",
 		"port":              33073,
-		"dashboard_port":    8088,
-		"dashboard_url":     "http://127.0.0.1:8088",
+		"dashboard_port":    8089,
+		"dashboard_url":     "http://127.0.0.1:8089",
 		"management_url":    "http://127.0.0.1:33073",
 	}
 
@@ -210,6 +233,9 @@ func (h *NetworkHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"connected":        connected,
 		"peers_count":      peersCount,
 		"nodes_count":      peersCount,
+		"direct_peers":     directPeersCount,
+		"relayed_peers":    relayedPeersCount,
+		"connection_mode":  connectionMode,
 		"peers":            peersList,
 		"nodes":            peersList,
 		"server_managed":   serverManaged,
@@ -291,7 +317,7 @@ func (h *NetworkHandler) handleConfigure(w http.ResponseWriter, r *http.Request)
 	}
 	serverDashPort := req.ServerDashPort
 	if serverDashPort <= 0 {
-		serverDashPort = 8088
+		serverDashPort = 8089
 	}
 
 	if mode == "cloud" {
@@ -449,7 +475,7 @@ func (h *NetworkHandler) handlePairingInfo(w http.ResponseWriter, r *http.Reques
 		modeLabel = "NetBird Self-Hosted (Remoto)"
 	} else if netLevel == "selfhosted_managed" {
 		modeLabel = "NetBird Server Gestito (Allod)"
-		dashURL = "http://127.0.0.1:8088"
+		dashURL = "http://127.0.0.1:8089"
 	}
 
 	json.NewEncoder(w).Encode(PanelResponse{

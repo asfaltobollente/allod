@@ -30,6 +30,8 @@ type NodeHealthPayload struct {
 	MemoryUsedMB   int      `json:"memory_used_mb,omitempty"`
 	MemoryTotalMB  int      `json:"memory_total_mb,omitempty"`
 	ActiveModules  []string `json:"active_modules,omitempty"`
+	SmartOK        bool     `json:"smart_ok"`
+	SmartStatus    string   `json:"smart_status,omitempty"`
 }
 
 // PeerStatus tracks the real-time connectivity and health of a monitored node.
@@ -44,6 +46,7 @@ type PeerStatus struct {
 	AlertSent           bool
 	LatestPayload       *NodeHealthPayload
 	StorageWarningSent  bool
+	SmartWarningSent    bool
 }
 
 // Watcher manages background polling of one or more Allod nodes.
@@ -240,11 +243,25 @@ func (w *Watcher) checkPeers() {
 			if res.payload != nil {
 				peer.LatestPayload = res.payload
 
+				// Check for S.M.A.R.T. hardware warnings
+				if !res.payload.SmartOK && !peer.SmartWarningSent && res.payload.SmartStatus != "" && !strings.Contains(res.payload.SmartStatus, "Nessun disco") {
+					peer.SmartWarningSent = true
+					if w.OnWarning != nil {
+						go w.OnWarning(peer.ID, "Allarme Hardware Disco (S.M.A.R.T.)", res.payload.SmartStatus)
+					}
+				} else if res.payload.SmartOK {
+					peer.SmartWarningSent = false
+				}
+
 				// Check for storage warnings
 				if !res.payload.StorageOK && !peer.StorageWarningSent {
 					peer.StorageWarningSent = true
 					if w.OnWarning != nil {
-						go w.OnWarning(peer.ID, "Storage Degradato", "Il pool di archiviazione segnala anomalie o spazio in esaurimento.")
+						detail := "Il pool di archiviazione segnala anomalie o spazio in esaurimento."
+						if res.payload.StorageStatus != "" {
+							detail = res.payload.StorageStatus
+						}
+						go w.OnWarning(peer.ID, "Storage Degradato", detail)
 					}
 				} else if res.payload.StorageOK {
 					peer.StorageWarningSent = false
@@ -364,11 +381,25 @@ func (w *Watcher) HandleHeartbeat(payload *NodeHealthPayload, token string) erro
 		peer.ConsecutiveFailures = 0
 	}
 
+	// S.M.A.R.T. Hardware warning check
+	if !payload.SmartOK && !peer.SmartWarningSent && payload.SmartStatus != "" && !strings.Contains(payload.SmartStatus, "Nessun disco") {
+		peer.SmartWarningSent = true
+		if w.OnWarning != nil {
+			go w.OnWarning(nodeID, "Allarme Hardware Disco (S.M.A.R.T.)", payload.SmartStatus)
+		}
+	} else if payload.SmartOK {
+		peer.SmartWarningSent = false
+	}
+
 	// Warnings check
 	if !payload.StorageOK && !peer.StorageWarningSent {
 		peer.StorageWarningSent = true
 		if w.OnWarning != nil {
-			go w.OnWarning(nodeID, "Storage Degradato", "Il pool di archiviazione segnala anomalie o spazio in esaurimento.")
+			detail := "Il pool di archiviazione segnala anomalie o spazio in esaurimento."
+			if payload.StorageStatus != "" {
+				detail = payload.StorageStatus
+			}
+			go w.OnWarning(nodeID, "Storage Degradato", detail)
 		}
 	} else if payload.StorageOK {
 		peer.StorageWarningSent = false

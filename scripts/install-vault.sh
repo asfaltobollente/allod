@@ -26,6 +26,7 @@ VAULT_NAME="allod-vault-remote"
 SETUP_KEY=""
 QUOTA_STR="500G"
 PEER_IP=""
+ANNOUNCE_TOKEN=""
 LISTEN_PORT="8000"
 STORAGE_DIR="/var/lib/allod-vault"
 REST_SERVER_VERSION="0.12.1"
@@ -49,6 +50,10 @@ while [[ $# -gt 0 ]]; do
       PEER_IP="$2"
       shift 2
       ;;
+    --token)
+      ANNOUNCE_TOKEN="$2"
+      shift 2
+      ;;
     --port)
       LISTEN_PORT="$2"
       shift 2
@@ -65,6 +70,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --key <chiave>     Setup Key di NetBird (obbligatoria)"
       echo "  --quota <dim>      Quota disco dichiarata es. 500G, 1000G (default: 500G)"
       echo "  --peer <ip_mesh>   IP NetBird dell'Allod primario (opzionale, per auto-annuncio)"
+      echo "  --token <token>    Token monouso di annuncio al Ring primario"
       echo "  --port <porta>     Porta di ascolto per rest-server (default: 8000)"
       echo "  --dir <path>       Percorso locale per i dati cifrati (default: /var/lib/allod-vault)"
       exit 0
@@ -136,15 +142,13 @@ for i in {1..20}; do
 done
 
 if [[ -z "$NETBIRD_IP" ]]; then
-  log_warn "Interfaccia wt0 non ancora assegnata. Provo a estrarre IP da 'netbird status'..."
-  NETBIRD_IP=$(netbird status 2>/dev/null | grep -i "NetBird IP" | awk '{print $3}' | cut -d'/' -f1 || true)
+  log_err "ERRORE: Impossibile rilevare l'indirizzo IP di NetBird sull'interfaccia wt0."
+  log_err "Per ragioni di sicurezza, rest-server non verrà avviato su 0.0.0.0 senza autenticazione."
+  log_err "Verifica che il nodo sia connesso alla mesh con: 'netbird status --detail' e riesegui l'installazione."
+  exit 1
 fi
 
-if [[ -n "$NETBIRD_IP" ]]; then
-  log_ok "Connesso alla rete Mesh con IP: ${NETBIRD_IP}"
-else
-  log_warn "Impossibile rilevare immediatamente l'IP NetBird. Il servizio userà 0.0.0.0 con restrizione."
-fi
+log_ok "Connesso alla rete Mesh con IP: ${NETBIRD_IP}"
 
 # 4. Installazione di rest-server
 log_info "Installazione demone rest-server (v${REST_SERVER_VERSION})..."
@@ -181,11 +185,8 @@ log_ok "Directory storage pronta su: ${STORAGE_DIR}"
 SERVICE_FILE="/etc/systemd/system/allod-vault.service"
 log_info "Configurazione servizio systemd (${SERVICE_FILE})..."
 
-# Binda preferibilmente all'IP NetBird se disponibile, altrimenti 0.0.0.0
-LISTEN_ADDR="0.0.0.0:${LISTEN_PORT}"
-if [[ -n "$NETBIRD_IP" ]]; then
-  LISTEN_ADDR="${NETBIRD_IP}:${LISTEN_PORT}"
-fi
+# Binda rigorosamente all'IP Mesh NetBird
+LISTEN_ADDR="${NETBIRD_IP}:${LISTEN_PORT}"
 
 cat << EOF > "$SERVICE_FILE"
 [Unit]
@@ -217,9 +218,10 @@ if [[ -n "$PEER_IP" && -n "$NETBIRD_IP" ]]; then
   # Estrai quota numerica (es. 500G -> 500)
   QUOTA_NUM=$(echo "$QUOTA_STR" | grep -oP '\d+' || echo "500")
   
-  ANN_PAYLOAD="{\"name\":\"${VAULT_NAME}\",\"address\":\"${NETBIRD_IP}\",\"quota_gb\":${QUOTA_NUM}}"
+  ANN_PAYLOAD="{\"name\":\"${VAULT_NAME}\",\"address\":\"${NETBIRD_IP}\",\"quota_gb\":${QUOTA_NUM},\"token\":\"${ANNOUNCE_TOKEN}\"}"
   HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://${PEER_IP}:8080/api/ring/announce" \
     -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${ANNOUNCE_TOKEN}" \
     -d "$ANN_PAYLOAD" || echo "000")
   
   if [[ "$HTTP_CODE" == "200" ]]; then

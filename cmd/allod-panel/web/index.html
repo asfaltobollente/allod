@@ -1853,13 +1853,55 @@ sudo systemctl enable --now allod-helperd</pre>
               <div id="pairing-mesh-ip" style="font-size:13px; font-weight:700; color:var(--success); font-family:monospace;">--</div>
             </div>
           </div>
-          <div>
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_status_mgmt_label">Management URL:</div>
-            <div id="pairing-server-url" style="font-size:12.5px; font-weight:600; color:var(--text-main); font-family:monospace; word-break:break-all;">https://api.netbird.io:443</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;" data-i18n="network_status_mgmt_label">Management URL:</div>
+              <div id="pairing-server-url" style="font-size:12.5px; font-weight:600; color:var(--text-main); font-family:monospace; word-break:break-all;">https://api.netbird.io:443</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Stato Connessione:</div>
+              <span id="pairing-conn-mode-badge" class="badge" style="background:#64748b; color:#fff; font-size:11px; font-weight:700;">Verifica...</span>
+            </div>
           </div>
           <div id="pairing-dash-url-row" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
             <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Dashboard Web NetBird Locale:</div>
             <a id="pairing-dash-url-link" href="#" target="_blank" style="font-size:12px; font-weight:600; color:var(--primary); font-family:monospace; word-break:break-all;">http://127.0.0.1:8088</a>
+          </div>
+        </div>
+
+        <!-- Live Peers List -->
+        <div id="pairing-peers-section" style="margin-bottom:16px;">
+          <div style="font-size:11.5px; font-weight:700; color:var(--text-main); text-transform:uppercase; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+            <span>Dispositivi Connessi:</span>
+            <span id="pairing-peers-count-badge" class="badge" style="background:rgba(255,255,255,0.08); font-size:10px;">0 nodi</span>
+          </div>
+          <div id="pairing-peers-list" style="max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
+            <div style="font-size:11.5px; color:var(--text-muted); font-style:italic; padding:6px 8px; background:rgba(255,255,255,0.02); border-radius:6px;">Nessun dispositivo attualmente collegato.</div>
+          </div>
+        </div>
+
+        <!-- Router IPv6 P2P Guidance Accordion/Box -->
+        <div id="pairing-router-guide-box" style="background:rgba(56,189,248,0.06); border-radius:8px; padding:12px 14px; border:1px solid rgba(56,189,248,0.25); margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="togglePairingRouterGuide()">
+            <div style="font-size:12px; font-weight:700; color:var(--primary); display:flex; align-items:center; gap:6px;">
+              <span>📡 Vuoi sbloccare la massima velocità P2P con Starlink IPv6?</span>
+            </div>
+            <span id="pairing-router-guide-toggle-icon" style="font-size:12px; color:var(--primary); font-weight:bold;">▼</span>
+          </div>
+          <div id="pairing-router-guide-content" style="display:none; margin-top:10px; font-size:11.5px; line-height:1.5; color:var(--text-main); border-top:1px solid rgba(255,255,255,0.08); padding-top:8px;">
+            <p style="margin:0 0 6px 0; color:var(--text-muted);">
+              Di fabbrica, router avanzati come <b>Ubiquiti UniFi (UDM)</b> bloccano il traffico IPv6 in ingresso non richiesto, costringendo NetBird al server di relay (~10 Mbps). Con una sola regola da 3 clic sul router, il tunnel passa a <b>P2P Diretto alla massima velocità di Starlink</b>:
+            </p>
+            <ol style="margin:0 0 8px 18px; padding:0; color:#e2e8f0;">
+              <li>Accedi alla console del tuo router UniFi (es. <code>https://unifi.ui.com</code> o IP UDM).</li>
+              <li>Vai in <b>Settings (Ingranaggio) ➔ Security ➔ Firewall Rules</b>.</li>
+              <li>Seleziona la scheda <b>Internet IPv6</b> e clicca <b>Create Entry</b>:
+                <div style="background:#020617; border-radius:4px; padding:6px 10px; margin:4px 0; font-family:monospace; font-size:10.5px; color:#38bdf8;">
+                  Tipo: Internet In (v6) &bull; Azione: Accept &bull; Protocollo: UDP &bull; Porta: 51820
+                </div>
+              </li>
+              <li>Salva e clicca qui sotto su <b>🔄 Riavvia NetBird</b> per rinegoziare subito il tunnel diretto!</li>
+            </ol>
           </div>
         </div>
 
@@ -1871,7 +1913,10 @@ sudo systemctl enable --now allod-helperd</pre>
           <div data-i18n="network_step4">4. Attiva la connessione: il dispositivo accede a Immich, Jellyfin 4K, Samba e Allod Panel in P2P diretto!</div>
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn btn-outline-warning" type="button" onclick="restartNetworkModule()" title="Riavvia NetBird per rinegoziare la connessione diretta P2P">
+          🔄 Riavvia NetBird
+        </button>
         <button class="btn btn-secondary" onclick="closeNetworkPairingModal()" data-i18n="sweeper_close">Chiudi</button>
       </div>
     </div>

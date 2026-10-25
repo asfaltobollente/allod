@@ -94,6 +94,59 @@ func TestNetworkStatus(t *testing.T) {
 	if dataMap["peers_count"] != float64(2) {
 		t.Errorf("expected peers_count=2, got %v", dataMap["peers_count"])
 	}
+	if dataMap["connection_mode"] != "idle" {
+		t.Errorf("expected connection_mode=idle, got %v", dataMap["connection_mode"])
+	}
+}
+
+func TestNetworkStatusConnectionModes(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ALLOD_STORAGE_DIR", tempDir)
+
+	mock := &mockHelperClient{
+		executeFn: func(action string, args map[string]interface{}, plan bool) (helper.Response, error) {
+			if action == "network.netbird_status" {
+				return helper.Response{
+					Ok: true,
+					Output: `{
+						"netbirdIp": "100.64.0.1/16",
+						"publicKey": "pubkey-xyz",
+						"management": { "connected": true, "url": "https://api.netbird.io:443" },
+						"signal": { "connected": true, "url": "https://signal.netbird.io:443" },
+						"peers": {
+							"total": 2,
+							"connected": 2,
+							"details": [
+								{ "netbirdIp": "100.64.0.2", "connectionType": "P2P", "direct": true },
+								{ "netbirdIp": "100.64.0.3", "connectionType": "Relayed", "direct": false }
+							]
+						}
+					}`,
+				}, nil
+			}
+			return helper.Response{Ok: false, Error: "unexpected action"}, nil
+		},
+	}
+
+	mux := http.NewServeMux()
+	RegisterNetworkRoutes(mux, &NetworkHandler{Helper: mock})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/network/status", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	var resp PanelResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	dataMap := resp.Data.(map[string]interface{})
+	if dataMap["connection_mode"] != "p2p" {
+		t.Errorf("expected connection_mode=p2p, got %v", dataMap["connection_mode"])
+	}
+	if dataMap["direct_peers"] != float64(1) {
+		t.Errorf("expected direct_peers=1, got %v", dataMap["direct_peers"])
+	}
+	if dataMap["relayed_peers"] != float64(1) {
+		t.Errorf("expected relayed_peers=1, got %v", dataMap["relayed_peers"])
+	}
 }
 
 func TestNetworkConfigure(t *testing.T) {

@@ -178,31 +178,43 @@ NetBird fully supports dual-stack IPv4/IPv6 ICE candidate negotiation. Once IPv6
 #### Configuring IPv6 on Your Home Router / Gateway:
 
 1. **WAN (Internet) Settings**:
-   * Open your router's management dashboard -> navigate to the **IPv6** configuration for your WAN connection.
+   * Open your router's management dashboard -> navigate to the **IPv6** configuration for your WAN connection (e.g. Starlink in Bypass).
    * Set **IPv6 Connection** to **`DHCPv6`** (or DHCPv6 Prefix Delegation).
-   * Set **Prefix Delegation Size** to **`56`** (or `64`, depending on your ISP specifications).
+   * Set **Prefix Delegation Size** to **`56`** (standard for Starlink).
    * Save changes.
 
 2. **LAN (Local Network) Settings**:
    * Navigate to your local network (LAN) settings -> **IPv6**.
-   * Set **IPv6 Interface Type** to **`Prefix Delegation`** (delegated from your primary WAN).
+   * Set **IPv6 Interface Type** to **`Prefix Delegation`** (delegated from your primary WAN / Internet 1).
    * Enable **Router Advertisement (RA)** and set to **`SLAAC`** (Stateless Address Autoconfiguration).
    * Save changes.
 
-3. **Verify Global IPv6 on Ubuntu Server**:
-   ```bash
-   ip -6 addr show scope global
-   ```
-   You should see a global unicast address (with `scope global`).
+3. **Router Firewall Rule for Direct P2P (Crucial for Ubiquiti UniFi UDM & Advanced Firewalls)**:
+   By default, enterprise and prosumer firewalls such as **Ubiquiti UniFi OS (UDM / Dream Machine)** drop all unsolicited incoming IPv6 traffic (*Internet IPv6 In*). Without an accept rule for NetBird's WireGuard port, direct ICE negotiation fails and traffic degrades to relay servers (~10 Mbps).
 
-4. **Verify Direct NetBird Connection**:
-   Reconnect the NetBird app on your smartphone over cellular data, then run on the server:
-   ```bash
-   netbird status --detail
-   ```
-   The peer status will transition from `Relayed` to:
-   ```text
-   Connection type: Direct (P2P)
-   ICE candidate endpoints (Local/Remote): [2a02:...]:51820 / [2a02:...]:51820
-   No open router ports, no UPnP, and full direct WireGuard speed!
+   **3-Click UniFi Network Configuration (Zero CLI):**
+   * Log into your UniFi console (`https://unifi.ui.com` or local UDM IP).
+   * Navigate to **Settings ➔ Security ➔ Firewall Rules** (or *Firewall & NAT*).
+   * Switch to the **IPv6** view and select **Internet In**.
+   * Click **Create Entry** with the following settings:
+     * **Name**: `NetBird WireGuard Direct`
+     * **Action**: **Accept**
+     * **Protocol**: **UDP**
+     * **Port**: `51820`
+     * **Destination**: Leave as *Any* or select your Allod server host.
+   * Click **Apply Changes / Save**.
+
+---
+
+### Step 4: Zero-CLI Verification Directly in Allod Web Panel
+
+No terminal or console commands required:
+
+1. Open your browser to the **Allod Web Panel** (`http://<SERVER-IP>:8080` or `http://allod.local:8080`).
+2. In the **Network (🌐 NetBird Sovereign Mesh)** card:
+   * Click **🔄 Restart Service**: Allod renegotiates WireGuard transport candidates within seconds.
+   * The status badge automatically turns to **`⚡ P2P DIRECT`** in green (*"Direct WireGuard P2P connection active at full ISP speed"*).
+3. Click **📱 Connect Devices**:
+   * View live connected devices with green **`⚡ P2P`** status indicators.
+   * Traffic now flows directly peer-to-peer at your ISP's full upload/download speed!
 

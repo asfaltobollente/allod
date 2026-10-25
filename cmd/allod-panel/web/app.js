@@ -182,6 +182,11 @@ async function refreshData() {
         if (netRes.data.client_runtime) {
           window.currentClientRuntime = netRes.data.client_runtime;
         }
+        if (netRes.data.connection_mode) {
+          window.currentNetBirdConnectionMode = netRes.data.connection_mode;
+          window.currentNetBirdDirectPeers = netRes.data.direct_peers || 0;
+          window.currentNetBirdRelayedPeers = netRes.data.relayed_peers || 0;
+        }
       }
     } catch (_) {}
 
@@ -1637,10 +1642,17 @@ function createModuleCard(mod) {
   let networkBoxHtml = '';
   if (mod.id === 'network') {
     const displayMeshIp = (currentMeshIP && currentMeshIP !== '--') ? currentMeshIP : '--';
-    const isNative = window.currentClientRuntime === 'native';
-    const runtimeBadge = isNative
-      ? `<span class="badge" style="background:#10b981; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px;">⚡ NATIVO</span>`
-      : `<span class="badge" style="background:#38bdf8; color:#0f172a; font-weight:700; font-size:10px; margin-left:4px;">📦 CONTAINER</span>`;
+    let connBadge = '';
+    let connHintHtml = '';
+    const connMode = window.currentNetBirdConnectionMode;
+    if (connMode === 'p2p') {
+      connBadge = `<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-weight:700; font-size:10px; margin-left:4px;" title="Tutti i nodi comunicano direttamente tramite WireGuard">⚡ P2P DIRETTO</span>`;
+      connHintHtml = `<div style="font-size:10px; color:#10b981; margin-top:3px;">⚡ Connessione WireGuard P2P diretta attiva (massima velocità Starlink)</div>`;
+    } else if (connMode === 'relayed') {
+      connBadge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-weight:700; font-size:10px; margin-left:4px;" title="Connessione tramite server relay NetBird (~10 Mbps). Per attivare il P2P diretto, apri la porta UDP 51820 su IPv6 nel router.">🟡 RELAYED</span>`;
+      connHintHtml = `<div style="font-size:10px; color:#f59e0b; margin-top:3px;">⚠️ Traffico via relay (~10 Mbps). Per P2P diretto con Starlink IPv6, apri UDP 51820 sul router UDM.</div>`;
+    }
+
     networkBoxHtml = `
       <div style="margin-top:10px; padding:10px 12px; background:rgba(30, 41, 59, 0.6); border:1px solid var(--card-border); border-radius:6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
@@ -1648,10 +1660,12 @@ function createModuleCard(mod) {
             <div style="display:flex; align-items:center; gap:6px;">
               <span style="font-size:11.5px; font-weight:600; color:var(--text-main);">🌐 ${t('network_module_title')}</span>
               ${runtimeBadge}
+              ${connBadge}
             </div>
             <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">
               ${t('network_mesh_ip_label')} <code id="network-mesh-ip-badge">${displayMeshIp}</code>
             </div>
+            ${connHintHtml}
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button class="btn btn-sm btn-outline-warning" onclick="restartNetworkModule()" style="padding:4px 10px; font-size:11px; font-weight:600;" title="Riavvia il servizio NetBird per rinegoziare UPnP e tunnel diretto">
@@ -3073,6 +3087,74 @@ async function showStorageDiagnostics() {
       return;
     }
     const d = json.data;
+
+    let smartSection = '';
+    if (d.smart && Array.isArray(d.smart) && d.smart.length > 0) {
+      const cards = d.smart.map(dev => {
+        const statusBadge = dev.smart_status === 'PASSED'
+          ? `<span class="badge badge-success">🟢 ${t('smart_status_passed', 'S.M.A.R.T. OK')}</span>`
+          : (dev.smart_status === 'FAILING'
+            ? `<span class="badge badge-danger">🔴 ${t('smart_status_failing', 'GUASTO IMMINENTE')}</span>`
+            : `<span class="badge badge-secondary">⚪ ${escapeHtml(dev.smart_status || 'N/A')}</span>`);
+
+        let tempBadge = `<span style="color:var(--text-muted); font-size:12px;">--</span>`;
+        if (dev.temperature_c > 0) {
+          const tColor = dev.temperature_c < 45 ? 'var(--success)' : (dev.temperature_c <= 55 ? 'var(--warning, #f59e0b)' : 'var(--danger)');
+          tempBadge = `<span style="color:${tColor}; font-weight:600; font-size:12px;">🌡️ ${dev.temperature_c}°C</span>`;
+        }
+
+        const sectorText = dev.reallocated_sectors > 0
+          ? `<strong style="color:var(--danger);">⚠️ ${dev.reallocated_sectors} ${t('smart_reallocated_sectors_alert', 'settori riallocati!')}</strong>`
+          : `<span>0</span>`;
+
+        const hoursText = dev.power_on_hours > 0
+          ? `${dev.power_on_hours.toLocaleString()} h (~${Math.round(dev.power_on_hours / 24)} gg)`
+          : '--';
+
+        const driveType = dev.is_ssd ? 'SSD' : 'HDD';
+        const modelDisplay = escapeHtml(dev.model_name || dev.device || 'Unità Disco');
+        const capDisplay = dev.user_capacity ? ` • ${escapeHtml(dev.user_capacity)}` : '';
+
+        return `
+          <div style="background:var(--card); border:1px solid var(--border-subtle, rgba(255,255,255,0.08)); border-radius:8px; padding:12px 14px; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+              <div>
+                <div style="font-size:13px; font-weight:600; color:var(--text);">${modelDisplay}</div>
+                <div style="font-size:11px; color:var(--text-muted);"><code>${escapeHtml(dev.device_path || dev.device)}</code> <span class="badge badge-secondary" style="font-size:10px; padding:1px 6px;">${driveType}${capDisplay}</span></div>
+              </div>
+              <div>${statusBadge}</div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; margin-top:4px; padding-top:6px; border-top:1px solid var(--border-subtle, rgba(255,255,255,0.05));">
+              <div>
+                <div style="color:var(--text-muted);">${t('smart_label_temp', 'Temperatura')}:</div>
+                <div>${tempBadge}</div>
+              </div>
+              <div>
+                <div style="color:var(--text-muted);">${t('smart_label_hours', 'Ore Operative')}:</div>
+                <div style="font-weight:500; color:var(--text);">${hoursText}</div>
+              </div>
+              <div style="grid-column:1 / -1;">
+                <div style="color:var(--text-muted);">${t('smart_label_reallocated', 'Settori Riallocati (Bit-rot/Danno)')}:</div>
+                <div>${sectorText}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      smartSection = `
+        <div style="margin:16px 0 14px 0;">
+          <h4 style="font-size:13px; color:var(--text); margin:0 0 8px 0; display:flex; align-items:center; gap:6px;">
+            <span>🩺</span> <span>${t('smart_telemetry_title', 'Telemetria Fisica Dischi & Diagnostica S.M.A.R.T.')}</span>
+          </h4>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:10px;">
+            ${cards}
+          </div>
+        </div>
+      `;
+    }
+
     body.innerHTML = `
       <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div>
@@ -3084,7 +3166,9 @@ async function showStorageDiagnostics() {
         <div style="font-size:11px; color:var(--text-muted);">${d.timestamp}</div>
       </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 6px 0;">
+      ${smartSection}
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:14px 0 6px 0;">
         <h4 style="font-size:13px; color:var(--primary); margin:0;">📊 Allocazione Btrfs Filesystem Usage (RAID 1 Real-Time):</h4>
         <button class="btn btn-sm btn-outline-secondary" onclick="copyDiagBox('diag-storage-usage', this)" style="padding:2px 8px; font-size:11px;">
           📋 ${t('btn_copy', 'Copia')}

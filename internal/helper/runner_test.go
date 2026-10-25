@@ -40,6 +40,10 @@ func TestCommandRunnerMethods(t *testing.T) {
 					resp.Output = "mock diagnostics output"
 				} else if req.Action == "storage.scan_datasets" {
 					resp.Output = "mock datasets output"
+				} else if req.Action == "snapshots.prune" {
+					resp.Output = "Pruned 2 snapshot(s)"
+				} else if req.Action == "smart.read" {
+					resp.Output = `{"device":"sda","smart_status":"PASSED","smart_passed":true,"temperature_c":34}`
 				}
 				_ = json.NewEncoder(conn).Encode(resp)
 			}
@@ -86,5 +90,11 @@ func TestCommandRunnerMethods(t *testing.T) {
 	}
 	if err := client.SnapshotCreate("photos", "snap1"); err != nil {
 		t.Errorf("SnapshotCreate failed: %v", err)
+	}
+	if outPrune, err := client.SnapshotPrune("photos", 7); err != nil || outPrune != "Pruned 2 snapshot(s)" {
+		t.Errorf("SnapshotPrune failed: out=%q, err=%v", outPrune, err)
+	}
+	if rep, err := client.SmartRead("sda"); err != nil || rep.SmartStatus != "PASSED" {
+		t.Errorf("SmartRead failed: rep=%v, err=%v", rep, err)
 	}
 }

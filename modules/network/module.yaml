@@ -31,7 +31,7 @@ levels:
 ports:
   - n: 33073
     scope: lan
-  - n: 8088
+  - n: 8089
     scope: lan
   - n: 3478
     scope: lan

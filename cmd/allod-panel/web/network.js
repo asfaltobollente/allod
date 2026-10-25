@@ -325,6 +325,59 @@ export async function openNetworkPairingModal() {
         }
       }
 
+      // Connection mode badge in modal
+      const connBadge = document.getElementById('pairing-conn-mode-badge');
+      if (connBadge) {
+        const mode = data.data.connection_mode;
+        if (mode === 'p2p') {
+          connBadge.textContent = '⚡ P2P Diretto';
+          connBadge.style.background = 'rgba(16,185,129,0.2)';
+          connBadge.style.color = '#10b981';
+          connBadge.style.border = '1px solid rgba(16,185,129,0.4)';
+        } else if (mode === 'relayed') {
+          connBadge.textContent = '🟡 Relayed (~10 Mbps)';
+          connBadge.style.background = 'rgba(245,158,11,0.2)';
+          connBadge.style.color = '#f59e0b';
+          connBadge.style.border = '1px solid rgba(245,158,11,0.4)';
+        } else {
+          connBadge.textContent = '⚪ In attesa';
+          connBadge.style.background = '#64748b';
+          connBadge.style.color = '#fff';
+          connBadge.style.border = 'none';
+        }
+      }
+
+      // Peers list rendering
+      const peersListEl = document.getElementById('pairing-peers-list');
+      const peersCountBadge = document.getElementById('pairing-peers-count-badge');
+      const peers = data.data.peers || [];
+      if (peersCountBadge) {
+        peersCountBadge.textContent = `${peers.length} ${peers.length === 1 ? 'nodo' : 'nodi'}`;
+      }
+      if (peersListEl) {
+        if (peers.length === 0) {
+          peersListEl.innerHTML = '<div style="font-size:11.5px; color:var(--text-muted); font-style:italic; padding:6px 8px; background:rgba(255,255,255,0.02); border-radius:6px;">Nessun dispositivo attualmente collegato.</div>';
+        } else {
+          peersListEl.innerHTML = peers.map(p => {
+            const isDirect = p.direct === true || (p.connectionType && p.connectionType.toLowerCase() === 'p2p');
+            const pillBg = isDirect ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)';
+            const pillColor = isDirect ? '#10b981' : '#f59e0b';
+            const pillText = isDirect ? '⚡ P2P' : '🟡 Relay';
+            const fqdn = p.fqdn || p.netbirdIp || 'Dispositivo';
+            const ip = p.netbirdIp || '';
+            return `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:rgba(255,255,255,0.03); border-radius:6px; font-size:11.5px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-weight:600; color:var(--text-main);">${escapeHtml(fqdn)}</span>
+                  ${ip ? `<code style="font-size:10.5px; color:var(--text-muted);">${escapeHtml(ip)}</code>` : ''}
+                </div>
+                <span class="badge" style="background:${pillBg}; color:${pillColor}; font-size:10px; font-weight:700;">${pillText}</span>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
       const badgeEl = document.getElementById('network-mesh-ip-badge');
       if (badgeEl && realMeshIp !== '--') badgeEl.textContent = realMeshIp;
       if (window.currentMeshIP !== undefined && realMeshIp !== '--') {
@@ -488,6 +541,26 @@ export async function setupZeroConfig() {
   }
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, s => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[s]);
+}
+
+export function togglePairingRouterGuide() {
+  const content = document.getElementById('pairing-router-guide-content');
+  const icon = document.getElementById('pairing-router-guide-toggle-icon');
+  if (!content) return;
+  const isHidden = content.style.display === 'none';
+  content.style.display = isHidden ? 'block' : 'none';
+  if (icon) icon.textContent = isHidden ? '▲' : '▼';
+}
+
 // Bind to window object for inline HTML onclick handlers
 window.toggleNetworkModeUI = toggleNetworkModeUI;
 window.openNetworkConfigModal = openNetworkConfigModal;
@@ -495,6 +568,7 @@ window.closeNetworkConfigModal = closeNetworkConfigModal;
 window.saveNetworkConfig = saveNetworkConfig;
 window.openNetworkPairingModal = openNetworkPairingModal;
 window.closeNetworkPairingModal = closeNetworkPairingModal;
+window.togglePairingRouterGuide = togglePairingRouterGuide;
 window.installNativeNetBird = installNativeNetBird;
 window.startManagedServer = startManagedServer;
 window.stopManagedServer = stopManagedServer;

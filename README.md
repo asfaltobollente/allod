@@ -68,6 +68,8 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 | **`shares`** | **[Samba (SMB/CIFS)](https://www.samba.org)** | High-speed LAN shared folders for Windows, Mac & Linux | `445` |
 | **`storage`** | **[Btrfs](https://btrfs.readthedocs.io)** + **smartmontools** | Hardware-safe RAID 1, instant snapshots & S.M.A.R.T. health | Native |
 | **`media`** | **[Jellyfin](https://jellyfin.org)** | Personal streaming server for movies, series & music | `8096` |
+| **`passwords`** | **[Vaultwarden](https://github.com/dani-garcia/vaultwarden)** | Lightweight Bitwarden-compatible sovereign password manager | `8088` |
+| **`search`** | **[SearXNG](https://github.com/searxng/searxng)** | Private, privacy-respecting meta-search engine with zero tracking | `8888` |
 | **`network`** | **[NetBird](https://netbird.io)** | Sovereign WireGuard mesh, remote access & zero open router ports (Cloud EU / Self-Hosted) | Mesh only |
 | **`odysseus`** | **[Odysseus](https://github.com/odysseus-dev/odysseus)** + ChromaDB + SearXNG | Sovereign AI workspace, deep research agent & local/cloud LLM orchestration | `7000` |
 | **`watch`** | **Allod Watch Sentinel** + **Telegram** | Remote blackout & recovery alerts, Telegram notifications & daily morning digest with weather | Standalone / Mesh |
@@ -80,8 +82,9 @@ Allod orchestrates best-in-class, audited open-source technologies. No black box
 
 | Component / Feature | Category | State & Description |
 | :--- | :--- | :--- |
-| **Allod CLI Orchestrator** | **Funzionante oggi** *(Working Today)* | Full declarative lifecycle (`plan`, `apply`, `doctor`, `set`, `purge`, `status`, `ring`, `sbom`, `version`). Rootless Quadlet generation. |
-| **Privileged Helper Daemon** | **Funzionante oggi** *(Working Today)* | Root socket at `/run/allod/helper.sock` (mode `0666` + kernel `SO_PEERCRED`, restricted to `allod` group), strict 24-action whitelist, and truncated argument hash audit logging (SMART, snapshots, and firewall actions are planned stubs). |
+| **Allod CLI Orchestrator** | **Funzionante oggi** *(Working Today)* | Full declarative lifecycle (`plan`, `apply`, `doctor`, `set`, `purge`, `status`, `top`, `ring`, `sbom`, `version`). Rootless Quadlet generation. |
+| **Privileged Helper Daemon** | **Funzionante oggi** *(Working Today)* | Root socket at `/run/allod/helper.sock` (mode `0666` + kernel `SO_PEERCRED`, restricted to `allod` group), strict 26-action whitelist, structured audit logging, real hardware S.M.A.R.T. telemetry (`smartctl -a -j`), and real read-only Btrfs snapshot creation & pruning. |
+| **Sovereign PKI & TLS Gateway** | **Funzionante oggi** *(Working Today)* | Built-in zero-dependency TLS Reverse Proxy Gateway (`internal/gateway/`) and local root CA certificate authority (`internal/pki/`) routing secure HTTPS on port `8080` (and `8443`) with automatic local trust certificates. |
 | **Multi-Tenancy & Storage** | **Funzionante oggi** *(Working Today)* | Multi-user Linux provisioning with nologin shells, Samba group/setgid `0770` shares, Btrfs RAID 1/Single pool detection and auto-healing. |
 | **Web Panel & Dashboard** | **Funzionante oggi** *(Working Today)* | Embedded SPA with live service controls, hardware preflight, speedtest, self-update (panel compiles helper; root installation requires sudo), hardware telemetry vitals pill, and streamlined navigation. |
 | **Web Panel Auth Gate** | **Funzionante oggi** *(Working Today)* | Dedicated session authentication (`/login`, `/setup`), argon2id password hashing, cryptographically secure session tokens persisted in SQLite (`state.db`), and CLI emergency recovery. |
@@ -426,7 +429,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now allod-panel
 ```
 
-Open your browser at **`http://<SERVER-IP>:8080/`** (or `http://localhost:8080/`) to access the responsive web panel.
+Open your browser at **`https://<SERVER-IP>:8080/`** (or `http://<SERVER-IP>:8080/`) to access the responsive web panel.
 
 ---
 
@@ -452,6 +455,8 @@ In case of issues or configuration updates, you can inspect logs and restart ser
 | `allod start [mod\|all]` | Starts container units and host services via systemd/Podman. |
 | `allod stop [mod\|all]` | Stops active module containers and host services. |
 | `allod status` | Displays real-time running/stopped/failed status of all configured modules. |
+| `allod top` | Live interactive terminal dashboard monitoring CPU, RAM, disk, and active containers. |
+| `allod purge [mod\|all]` | Purges Quadlet unit files and persisted state for a module or all modules. |
 | `allod set <mod>=<lvl>` | Changes module level with strict hardware & dependency preflight. |
 | `allod doctor` | Comprehensive diagnostic check of active modules and RAM limits. |
 | `allod storage disks` | Inspects physical disks and shows current NAS storage topology. |
@@ -464,6 +469,7 @@ In case of issues or configuration updates, you can inspect logs and restart ser
 | `allod wol add <name> <mac>` | Registers a new device into the persistent Wake-on-LAN database. |
 | `allod wol delete <id>` | Removes a device from the persistent Wake-on-LAN database. |
 | `allod sbom` | Generates CycloneDX JSON Software Bill of Materials (CRA compliant). |
+| `allod version` | Displays detailed CLI build version, Git commit hash, and Go toolchain details. |
 | `allod admin-password reset [password]` | Emergency reset or initialization of Web Panel administrator password. |
 | `allod install <hostname>` | Generates zero-touch cloud-init deployment configuration. |
 

@@ -903,14 +903,35 @@ func (s *Server) processRequest(req Request) Response {
 	case "snapshots.create":
 		subvol, _ := req.Args["subvolume"].(string)
 		if subvol == "" {
-			subvol = "data"
-		} else if !validNameRegex.MatchString(subvol) {
-			return Response{Ok: false, Error: "Invalid 'subvolume' name"}
+			subvol, _ = req.Args["subvol"].(string)
 		}
-		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("btrfs subvolume snapshot /data/%s /data/.snapshots/%s", subvol, subvol)}}
+		name, _ := req.Args["name"].(string)
+		readonly := true
+		if ro, ok := req.Args["readonly"].(bool); ok {
+			readonly = ro
+		}
+		storageRoot, _ := req.Args["storage_root"].(string)
+		return ExecuteSnapshotCreate(storageRoot, subvol, name, readonly, req.Plan)
 
 	case "snapshots.prune":
-		return Response{Ok: true, Applied: !req.Plan, Plan: []string{"btrfs subvolume delete old snapshots"}}
+		subvol, _ := req.Args["subvolume"].(string)
+		if subvol == "" {
+			subvol, _ = req.Args["subvol"].(string)
+		}
+		keep := 7
+		if k, ok := req.Args["keep"].(float64); ok && k > 0 {
+			keep = int(k)
+		} else if kInt, okI := req.Args["keep"].(int); okI && kInt > 0 {
+			keep = kInt
+		}
+		maxAgeHours := 0
+		if mah, ok := req.Args["max_age_hours"].(float64); ok && mah > 0 {
+			maxAgeHours = int(mah)
+		} else if mahInt, okI := req.Args["max_age_hours"].(int); okI && mahInt > 0 {
+			maxAgeHours = mahInt
+		}
+		storageRoot, _ := req.Args["storage_root"].(string)
+		return ExecuteSnapshotPrune(storageRoot, subvol, keep, maxAgeHours, req.Plan)
 
 	case "users.create":
 		username, ok := req.Args["username"].(string)
@@ -1037,7 +1058,25 @@ func (s *Server) processRequest(req Request) Response {
 		if !ok || disk == "" || !validDeviceRegex(disk) {
 			return Response{Ok: false, Error: "Invalid or missing 'disk' identifier"}
 		}
-		return Response{Ok: true, Applied: !req.Plan, Plan: []string{fmt.Sprintf("smartctl -H /dev/disk/by-id/%s", disk)}}
+		devPath := resolveDiskDevicePath(disk)
+		smartctlBin := resolveExecutable("smartctl", "/usr/sbin/smartctl", "/sbin/smartctl", "/usr/bin/smartctl")
+		plan := []string{fmt.Sprintf("%s -a -j %s", smartctlBin, devPath)}
+
+		if req.Plan {
+			return Response{Ok: true, Applied: false, Plan: plan}
+		}
+
+		report, err := ExecuteSmartRead(disk)
+		if err != nil {
+			return Response{Ok: false, Error: fmt.Sprintf("Error reading SMART data: %v", err)}
+		}
+		reportJSON, _ := json.Marshal(report)
+		return Response{
+			Ok:      true,
+			Applied: true,
+			Output:  string(reportJSON),
+			Plan:    plan,
+		}
 
 	case "service.restart":
 		unit, ok := req.Args["unit"].(string)
@@ -1238,15 +1277,19 @@ func (s *Server) processRequest(req Request) Response {
 		statsOut, _ := exec.Command("btrfs", "device", "stats", mountPoint).CombinedOutput()
 		dfOut, _ := exec.Command("btrfs", "filesystem", "df", mountPoint).CombinedOutput()
 
+		smartReports := CollectStorageSmartReports(string(statsOut))
+
 		type diagResult struct {
-			Usage string `json:"usage"`
-			Stats string `json:"stats"`
-			Df    string `json:"df"`
+			Usage string         `json:"usage"`
+			Stats string         `json:"stats"`
+			Df    string         `json:"df"`
+			Smart []*SmartReport `json:"smart,omitempty"`
 		}
 		raw, _ := json.Marshal(diagResult{
 			Usage: string(usageOut),
 			Stats: string(statsOut),
 			Df:    string(dfOut),
+			Smart: smartReports,
 		})
 
 		return Response{
@@ -1615,6 +1658,20 @@ func (s *Server) processRequest(req Request) Response {
 		_ = os.Remove(filepath.Join(dataDir, "default.sock"))
 		_ = os.Remove(filepath.Join(dataDir, "netbird.sock.lock"))
 
+		// Ensure config.json explicitly sets WgPort to 51820 for deterministic IPv6 pinholes
+		nbCfgPath := filepath.Join(dataDir, "config.json")
+		if cfgBytes, err := os.ReadFile(nbCfgPath); err == nil {
+			var rawCfg map[string]interface{}
+			if err := json.Unmarshal(cfgBytes, &rawCfg); err == nil {
+				if wp, ok := rawCfg["WgPort"].(float64); !ok || wp != 51820 {
+					rawCfg["WgPort"] = 51820
+					if updated, err := json.MarshalIndent(rawCfg, "", "  "); err == nil {
+						_ = os.WriteFile(nbCfgPath, updated, 0600)
+					}
+				}
+			}
+		}
+
 		// Enable podman-restart service so containers with --restart=always restart on boot
 		_ = exec.Command("systemctl", "enable", "--now", "podman-restart.service").Run()
 
@@ -1629,10 +1686,12 @@ func (s *Server) processRequest(req Request) Response {
 			"-v", fmt.Sprintf("%s:/var/lib/netbird:Z", dataDir),
 			"--env-file", envFile,
 			"--env", "NB_DISABLE_DNS=true",
+			"--env", "NB_WIREGUARD_PORT=51820",
 			"docker.io/netbirdio/netbird:0.79.0",
 		}
 		plan := []string{strings.Join(fullCmd, " ")}
 		if !req.Plan {
+			_ = exec.Command("ufw", "allow", "51820/udp").Run()
 			out, err := exec.Command(fullCmd[0], fullCmd[1:]...).CombinedOutput()
 			if err != nil {
 				return Response{Ok: false, Error: fmt.Sprintf("Errore avvio container NetBird: %v (%s)", err, strings.TrimSpace(string(out)))}
@@ -1653,11 +1712,35 @@ func (s *Server) processRequest(req Request) Response {
 			}
 		}
 		plan := []string{
-			"curl -fsSL https://pkgs.netbird.io/install.sh | sh",
+			"download https://pkgs.netbird.io/install.sh to verified temp script",
+			"verify installer script headers and execute securely",
 			"podman rm -f allod-netbird",
 		}
 		if !req.Plan {
-			out, err := exec.Command("sh", "-c", "curl -fsSL https://pkgs.netbird.io/install.sh | sh").CombinedOutput()
+			curlBin := resolveExecutable("curl", "/usr/bin/curl", "/bin/curl")
+			if curlBin == "" {
+				return Response{Ok: false, Error: "curl non trovato per l'installazione di NetBird"}
+			}
+			tmpScript := filepath.Join(os.TempDir(), fmt.Sprintf("netbird-install-%d.sh", time.Now().UnixNano()))
+			defer os.Remove(tmpScript)
+
+			downloadCmd := exec.Command(curlBin, "-fsSL", "https://pkgs.netbird.io/install.sh", "-o", tmpScript)
+			if dOut, dErr := downloadCmd.CombinedOutput(); dErr != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("Errore download installer NetBird: %v (%s)", dErr, strings.TrimSpace(string(dOut)))}
+			}
+
+			scriptBytes, readErr := os.ReadFile(tmpScript)
+			if readErr != nil || len(scriptBytes) < 50 {
+				return Response{Ok: false, Error: "Script di installazione NetBird non valido o vuoto"}
+			}
+			contentStr := string(scriptBytes)
+			if !strings.HasPrefix(contentStr, "#!") || (!strings.Contains(contentStr, "netbird") && !strings.Contains(contentStr, "NETBIRD")) {
+				return Response{Ok: false, Error: "Verifica integrità fallita: lo script scaricato non presenta gli header ufficiali NetBird"}
+			}
+			_ = os.Chmod(tmpScript, 0700)
+
+			shBin := resolveExecutable("sh", "/bin/sh", "/usr/bin/sh")
+			out, err := exec.Command(shBin, tmpScript).CombinedOutput()
 			if err != nil {
 				return Response{Ok: false, Error: fmt.Sprintf("Errore installazione NetBird nativo: %v (%s)", err, strings.TrimSpace(string(out)))}
 			}
@@ -1728,7 +1811,7 @@ func (s *Server) processRequest(req Request) Response {
 		} else if p, ok := req.Args["port"].(int); ok && p > 0 && p <= 65535 {
 			port = p
 		}
-		dashPort := 8088
+		dashPort := 8089
 		if dp, ok := req.Args["dash_port"].(float64); ok && dp > 0 && dp <= 65535 {
 			dashPort = int(dp)
 		} else if dp, ok := req.Args["dash_port"].(int); ok && dp > 0 && dp <= 65535 {
@@ -2091,16 +2174,28 @@ server:
 			_ = exec.Command(systemctlBin, "enable", "--now", "avahi-daemon", "wsdd", "smbd", "nmbd").Run()
 			_ = exec.Command(systemctlBin, "restart", "avahi-daemon", "wsdd", "smbd", "nmbd", "systemd-resolved").Run()
 
-			// 10. Firewall allow rules for mDNS, LLMNR, WSD, NetBIOS, SMB
+			// 10. Firewall allow rules for mDNS, LLMNR, WSD, NetBIOS, SMB (scoped to LAN interface)
 			if ufwBin, err := exec.LookPath("ufw"); err == nil {
-				_ = exec.Command(ufwBin, "allow", "5353/udp").Run() // mDNS
-				_ = exec.Command(ufwBin, "allow", "5355/udp").Run() // LLMNR
-				_ = exec.Command(ufwBin, "allow", "3702/udp").Run() // WS-Discovery
-				_ = exec.Command(ufwBin, "allow", "5357/tcp").Run() // WS-Discovery HTTP
-				_ = exec.Command(ufwBin, "allow", "137/udp").Run()  // NetBIOS Name Service
-				_ = exec.Command(ufwBin, "allow", "138/udp").Run()  // NetBIOS Datagram
-				_ = exec.Command(ufwBin, "allow", "139/tcp").Run()  // NetBIOS Session
-				_ = exec.Command(ufwBin, "allow", "445/tcp").Run()  // SMB File Sharing
+				lanIface := getHostLANInterface(lanIP)
+				if lanIface != "" {
+					_ = exec.Command(ufwBin, "allow", "in", "on", lanIface, "to", "any", "port", "5353", "proto", "udp").Run() // mDNS
+					_ = exec.Command(ufwBin, "allow", "in", "on", lanIface, "to", "any", "port", "5355", "proto", "udp").Run() // LLMNR
+					_ = exec.Command(ufwBin, "allow", "in", "on", lanIface, "to", "any", "port", "3702", "proto", "udp").Run() // WS-Discovery
+					_ = exec.Command(ufwBin, "allow", "in", "on", lanIface, "to", "any", "port", "5357", "proto", "tcp").Run() // WS-Discovery HTTP
+					_ = exec.Command(ufwBin, "allow", "in", "on", lanIface, "to", "any", "port", "137", "proto", "udp").Run()  // NetBIOS Name Service
+					_ = exec.Command(ufwBin, "allow", "in", "on", lanIface, "to", "any", "port", "138", "proto", "udp").Run()  // NetBIOS Datagram
+					_ = exec.Command(ufwBin, "allow", "in", "on", lanIface, "to", "any", "port", "139", "proto", "tcp").Run()  // NetBIOS Session
+					_ = exec.Command(ufwBin, "allow", "in", "on", lanIface, "to", "any", "port", "445", "proto", "tcp").Run()  // SMB File Sharing
+				} else {
+					_ = exec.Command(ufwBin, "allow", "5353/udp").Run() // mDNS
+					_ = exec.Command(ufwBin, "allow", "5355/udp").Run() // LLMNR
+					_ = exec.Command(ufwBin, "allow", "3702/udp").Run() // WS-Discovery
+					_ = exec.Command(ufwBin, "allow", "5357/tcp").Run() // WS-Discovery HTTP
+					_ = exec.Command(ufwBin, "allow", "137/udp").Run()  // NetBIOS Name Service
+					_ = exec.Command(ufwBin, "allow", "138/udp").Run()  // NetBIOS Datagram
+					_ = exec.Command(ufwBin, "allow", "139/tcp").Run()  // NetBIOS Session
+					_ = exec.Command(ufwBin, "allow", "445/tcp").Run()  // SMB File Sharing
+				}
 			}
 
 			// 11. NetBird LAN route (if NetBird is installed and active)
@@ -2829,6 +2924,41 @@ func getHostLANIP() string {
 		}
 	}
 	return "127.0.0.1"
+}
+
+func getHostLANInterface(lanIP string) string {
+	if lanIP == "" || lanIP == "127.0.0.1" {
+		return ""
+	}
+	target := net.ParseIP(lanIP)
+	if target == nil {
+		return ""
+	}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		name := strings.ToLower(iface.Name)
+		if strings.HasPrefix(name, "wt") || strings.HasPrefix(name, "docker") || strings.HasPrefix(name, "podman") || strings.HasPrefix(name, "veth") || strings.HasPrefix(name, "br-") {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			if ipNet, ok := addr.(*net.IPNet); ok {
+				if ipNet.IP.Equal(target) {
+					return iface.Name
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func getHostNetBirdIP() string {

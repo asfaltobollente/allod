@@ -275,6 +275,14 @@ const i18n = {
     pool_raid1: "🟢 Btrfs RAID 1 Pool",
     pool_local: "⚠️ Local Storage (Home)",
 
+    smart_telemetry_title: "Physical Drive Telemetry & S.M.A.R.T. Health",
+    smart_status_passed: "S.M.A.R.T. OK",
+    smart_status_failing: "IMMINENT FAILURE",
+    smart_label_temp: "Temperature",
+    smart_label_hours: "Power-on Hours",
+    smart_label_reallocated: "Reallocated Sectors (Physical Damage)",
+    smart_reallocated_sectors_alert: "reallocated sectors!",
+
     protected_notice: "🔒 <strong>Production Data Protected:</strong> Data and databases are persisted on the RAID 1 pool. This card is locked to prevent accidental service disruption or database changes. Click <strong>Unlock</strong> to make modifications.",
 
     // Sweeper
@@ -753,6 +761,14 @@ const i18n = {
     label_pending: "In attesa",
     pool_raid1: "🟢 Pool Btrfs RAID 1",
     pool_local: "⚠️ Storage Locale (Home)",
+
+    smart_telemetry_title: "Telemetria Fisica Dischi & Diagnostica S.M.A.R.T.",
+    smart_status_passed: "S.M.A.R.T. OK",
+    smart_status_failing: "GUASTO IMMINENTE",
+    smart_label_temp: "Temperatura",
+    smart_label_hours: "Ore Operative",
+    smart_label_reallocated: "Settori Riallocati (Bit-rot/Danno)",
+    smart_reallocated_sectors_alert: "settori riallocati!",
 
     protected_notice: "🔒 <strong>Dati Protetti in Produzione:</strong> I file e il database sono salvati sul pool NAS RAID 1. La card è protetta per evitare arresti o modifiche accidentali del database. Clicca <strong>Sblocca</strong> per apportare modifiche.",
 

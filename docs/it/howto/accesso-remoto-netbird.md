@@ -140,31 +140,42 @@ NetBird supporta nativamente lo scambio di candidati ICE sia IPv4 che IPv6. Con 
 #### Come Attivare IPv6 sul Proprio Router / Gateway Domestico:
 
 1. **Configurazione WAN (Internet)**:
-   * Nel pannello di amministrazione del proprio router, cercare la sezione **IPv6** della connessione WAN.
+   * Nel pannello del proprio router, individuare la sezione **IPv6** della connessione WAN (es. Starlink in Bypass).
    * Impostare il tipo di connessione su **`DHCPv6`** (o DHCPv6 Prefix Delegation).
-   * Impostare la dimensione della delega del prefisso (**Prefix Delegation Size**) a **`56`** (o `64` a seconda dell'operatore).
+   * Impostare la dimensione della delega del prefisso (**Prefix Delegation Size**) a **`56`** (valore standard Starlink).
    * Salvare la configurazione.
 
 2. **Configurazione LAN (Rete Locale)**:
    * Nella sezione delle reti locali (LAN), individuare le impostazioni **IPv6**.
-   * Impostare il tipo di interfaccia su **`Prefix Delegation`** (associata alla WAN) o SLAAC.
-   * Abilitare **Router Advertisement (RA)** su modalità automatica / **`SLAAC`**.
+   * Impostare il tipo di interfaccia su **`Prefix Delegation`** (associata a Internet 1 / WAN).
+   * Abilitare **Router Advertisement (RA)** con priorità alta e modalità automatica **`SLAAC`**.
    * Salvare la configurazione.
 
-3. **Verifica sul Server Ubuntu**:
-   ```bash
-   ip -6 addr show scope global
-   ```
-   Dovresti visualizzare un indirizzo IPv6 pubblico globale (es. con scope `global`).
+3. **Regola Firewall Router per P2P Diretto (Cruciale per Ubiquiti UniFi UDM / Router Avanzati)**:
+   Di fabbrica, firewall moderni come **Ubiquiti UniFi OS (UDM / Dream Machine)** bloccano il traffico IPv6 in ingresso non richiesto (*Internet IPv6 In*). Senza una regola che autorizzi i pacchetti WireGuard di NetBird, la negoziazione diretta fallisce e il flusso dati ripiega sui server relay (~10 Mbps).
 
-4. **Verifica su NetBird**:
-   Riconnetti l'app NetBird sul telefono e riesegui sul server:
-   ```bash
-   netbird status --detail
-   ```
-   Lo stato del peer passerà a:
-   ```text
-   Connection type: Direct (P2P)
-   ICE candidate endpoints (Local/Remote): [2a02:...]:51820 / [2a02:...]:51820
-   ```
-   Tutto senza aprire porte sul router, senza UPnP e a piena banda!
+   **Procedura guidata in 3 clic per UniFi Network (Zero CLI):**
+   * Accedi alla console UniFi del tuo UDM (`https://unifi.ui.com` o IP locale del router).
+   * Vai su **Settings (Ingranaggio)** ➔ **Security** ➔ **Firewall Rules** (o *Firewall & NAT*).
+   * Seleziona la visualizzazione **IPv6** e clicca su **Internet In** (oppure crea una nuova regola con Type: *Internet In* su IPv6).
+   * Clicca su **Create Entry** e compila i campi grafici:
+     * **Name**: `NetBird WireGuard Direct`
+     * **Action**: **Accept**
+     * **Protocol**: **UDP**
+     * **Port**: `51820`
+     * **Destination**: Lascia su *Any* oppure seleziona l'host del tuo server Allod.
+   * Clicca su **Apply Changes / Save**.
+
+---
+
+### 4. Verifica Zero-CLI Direttamente dal Pannello Allod
+
+Non serve aprire il terminale né digitare comandi su console. Tutto viene monitorato e gestito dall'interfaccia grafica:
+
+1. Apri il browser al **Pannello Allod** (`http://<IP-SERVER>:8080` o `http://allod.local:8080`).
+2. Nella scheda **Rete (🌐 NetBird Sovereign Mesh)**:
+   * Clicca su **🔄 Riavvia Servizio**: Allod rinegozia i candidati di trasporto in pochi istanti.
+   * Il badge di stato passa automaticamente a **`⚡ P2P DIRETTO`** in verde, con indicazione *"Connessione WireGuard P2P diretta attiva (massima velocità Starlink)"*.
+3. Clicca su **📱 Connetti Dispositivi**:
+   * Visualizzerai in tempo reale la lista dei tuoi smartphone/PC con l'etichetta verde **`⚡ P2P`**.
+   * Il traffico scorre ora in linea retta tra i tuoi dispositivi alla massima velocità di Starlink e con latenza minima!

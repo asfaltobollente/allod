@@ -144,6 +144,7 @@ type DigestReport struct {
 	CPUTemp       float64
 	ActiveModules []string
 	WeatherInfo   string // e.g. "☀️ Roma: Sereno, min 16°C / max 25°C, Pioggia: 0%"
+	SmartStatus   string
 }
 
 // SendDailyDigest sends the morning positive digest with server health & weather.
@@ -158,6 +159,11 @@ func (t *TelegramNotifier) SendDailyDigest(report DigestReport) error {
 	weatherSection := ""
 	if report.WeatherInfo != "" {
 		weatherSection = fmt.Sprintf("🌤️ <b>Meteo di Oggi:</b>\n%s\n\n", report.WeatherInfo)
+	}
+
+	smartSection := ""
+	if report.SmartStatus != "" && !strings.Contains(report.SmartStatus, "Nessun disco") {
+		smartSection = fmt.Sprintf("🩺 <b>S.M.A.R.T.:</b> %s\n", html.EscapeString(report.SmartStatus))
 	}
 
 	vitalsInfo := ""
@@ -178,6 +184,7 @@ func (t *TelegramNotifier) SendDailyDigest(report DigestReport) error {
 			"🏷️ <b>Nodo:</b> <code>%s</code>\n"+
 			"⏱️ <b>Uptime:</b> %s\n"+
 			"💾 <b>Pool Storage:</b> %s (Usati: %s, Liberi: %s)\n"+
+			"%s"+
 			"🧠 <b>Memoria RAM:</b> %d MB / %d MB\n"+
 			"%s"+
 			"🧩 <b>Servizi:</b> %s\n\n"+
@@ -188,6 +195,7 @@ func (t *TelegramNotifier) SendDailyDigest(report DigestReport) error {
 		html.EscapeString(report.StorageStatus),
 		html.EscapeString(report.StorageUsed),
 		html.EscapeString(report.StorageFree),
+		smartSection,
 		report.RAMUsedMB,
 		report.RAMTotalMB,
 		vitalsInfo,

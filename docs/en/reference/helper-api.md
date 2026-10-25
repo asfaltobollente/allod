@@ -39,9 +39,9 @@ Security is strictly enforced via kernel-level peer credential checking (`SO_PEE
 
 ---
 
-## Closed Actions Whitelist (25 Actions)
+## Closed Actions Whitelist (26 Actions)
 
-The root helper operates exclusively on a closed whitelist of 25 actions defined in `internal/helper/server.go` (`AllowedActions`) and mirrored in `schemas/helper-api.schema.json`:
+The root helper operates exclusively on a closed whitelist of 26 actions defined in `internal/helper/server.go` (`AllowedActions`) and mirrored in `schemas/helper-api.schema.json`:
 
 | Action | Purpose | Arguments | What Runs as Root |
 | :--- | :--- | :--- | :--- |
@@ -52,9 +52,9 @@ The root helper operates exclusively on a closed whitelist of 25 actions defined
 | `users.create` | Create unprivileged Linux user for share authentication | `username` (regex) | `useradd -M -s /usr/sbin/nologin <user>`, `mkdir -p`, `chmod 0770` |
 | `users.passwd` | Alias for `shares.set_password` | `username` (regex), `password` (string) | `useradd` (if missing), `smbpasswd -a -s`, `chmod`, `chown`, `systemctl reload smbd` |
 | `firewall.apply` | Reload host firewall configuration *(planned stub)* | *(none)* | Validates input; planned: `nftables reload /etc/allod/nftables.conf` |
-| `snapshots.create` | Create read-only Btrfs snapshot *(planned stub)* | `subvolume` (optional regex, default: `data`) | Validates input; planned: `btrfs subvolume snapshot /data/<subvol> /data/.snapshots/<subvol>` |
-| `snapshots.prune` | Delete expired Btrfs snapshots *(planned stub)* | *(none)* | Validates input; planned: `btrfs subvolume delete` on expired snapshots |
-| `smart.read` | Query SMART health of physical drive *(planned stub)* | `disk` (regex device / ID) | Validates input; planned: `smartctl -H /dev/disk/by-id/<disk>` |
+| `snapshots.create` | Create read-only Btrfs snapshot | `subvolume` (optional regex), `name` (optional regex), `readonly` (bool) | Validates path; executes `btrfs subvolume snapshot [-r] <src> <dst>` under `.snapshots` |
+| `snapshots.prune` | Delete expired Btrfs snapshots | `subvolume` (optional regex), `keep` (int), `max_age_hours` (int) | Validates path; executes `btrfs subvolume delete` on expired snapshots |
+| `smart.read` | Query SMART health and telemetry of physical drive | `disk` (regex device / ID) | Validates input; executes `smartctl -a -j` and parses normalized JSON telemetry |
 | `service.restart` | Restart an allowed Allod systemd service | `unit` (regex from `AllowedServiceUnits`) | `systemctl restart <unit>` (no unprivileged binary replacement) |
 | `storage.init` | Format disks and create initial Btrfs pool structure | `disks` (list/string of regex devices), `mode` (`single`\|`raid1`), `mount` (allowed path), `user` (optional regex) | `umount`, `mkfs.btrfs`, `mount`, `mkdir -p`, `chmod`, `chown` |
 | `storage.prepare_module` | Ensure group permissions (2775 root:allod-data) and config templates for module storage | `module` (regex module ID), `clean` (optional bool) | `mkdir -p`, `chmod 2775`, `chown root:allod-data`, template initializations |
@@ -112,23 +112,23 @@ The root helper operates exclusively on a closed whitelist of 25 actions defined
 * **Support for `plan: true`**: Yes.
 
 ### 7. `snapshots.create`
-* **Input & Validation**: `subvolume` must match `^[a-zA-Z0-9_-]{1,64}$` (defaults to `"data"`).
-* **Implementation Status**: Planned / in development stub. Returns planned snapshot command without mutating the Btrfs filesystem.
-* **Mitigations**: Traversal is prevented; snapshot creation targets are restricted to `/data/.snapshots/<subvol>`.
+* **Input & Validation**: `subvolume` and `name` must match `^[a-zA-Z0-9_-]{1,64}$`. Path validated to remain strictly within `/mnt/allod-storage` (or configured storage root).
+* **Implementation Status**: Fully implemented. Executes `btrfs subvolume snapshot [-r] <src> <dst>` under `/mnt/allod-storage/.snapshots`.
+* **Mitigations**: Strict path allowlist and safe naming regex prevent path traversal and arbitrary command injection.
 * **Idempotency**: Yes.
 * **Support for `plan: true`**: Yes.
 
 ### 8. `snapshots.prune`
-* **Input & Validation**: No input arguments.
-* **Implementation Status**: Planned / in development stub. Returns planned retention prune command.
-* **Mitigations**: Operates only on managed snapshot directories according to retention policy.
+* **Input & Validation**: Optional `subvolume` prefix filter, `keep` integer count (defaults to 7), and `max_age_hours`.
+* **Implementation Status**: Fully implemented. Inspects `/mnt/allod-storage/.snapshots`, sorts snapshots by age, and executes `btrfs subvolume delete` on snapshots exceeding retention.
+* **Mitigations**: Operates only on managed snapshot directories under `/mnt/allod-storage/.snapshots`.
 * **Idempotency**: Yes.
 * **Support for `plan: true`**: Yes.
 
 ### 9. `smart.read`
-* **Input & Validation**: `disk` must match valid device pattern (`^[a-zA-Z0-9_-]{2,64}$`).
-* **Implementation Status**: Planned / in development stub. Validates disk identifier and returns planned command.
-* **Mitigations**: Strictly passes sanitized identifier to `smartctl -H /dev/disk/by-id/<disk>`.
+* **Input & Validation**: `disk` must match valid device pattern (`^[a-zA-Z0-9_-]{1,64}$`).
+* **Implementation Status**: Fully implemented. Resolves device path (`/dev/disk/by-id/<disk>` or `/dev/<disk>`), executes `smartctl -a -j`, and returns normalized telemetry (health status, temperature, power-on hours, reallocated/pending/uncorrectable sectors) supporting SATA and NVMe.
+* **Mitigations**: Strictly read-only physical telemetry; device identifier sanitized via `validDeviceRegex`.
 * **Idempotency**: Yes (read-only).
 * **Support for `plan: true`**: Yes.
 

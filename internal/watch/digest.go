@@ -155,6 +155,7 @@ func (s *DailyDigestScheduler) dispatch() error {
 			report.CPULoad = peer.LatestPayload.CPULoad
 			report.CPUTemp = peer.LatestPayload.CPUTemp
 			report.ActiveModules = peer.LatestPayload.ActiveModules
+			report.SmartStatus = peer.LatestPayload.SmartStatus
 		}
 
 		if err := s.telegram.SendDailyDigest(report); err != nil {

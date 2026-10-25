@@ -300,6 +300,34 @@ func buildNodeHealthPayload() watch.NodeHealthPayload {
 		}
 	}
 
+	smartOK := true
+	var smartIssues []string
+	var smartHealthyCount int
+
+	client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+	for _, d := range storageTopo.DataDisks {
+		if rep, err := client.SmartRead(d.Name); err == nil && rep != nil {
+			if rep.SmartStatus == "FAILING" || (!rep.SmartPassed && rep.SmartStatus != "UNAVAILABLE" && rep.SmartStatus != "UNKNOWN") {
+				smartOK = false
+				smartIssues = append(smartIssues, fmt.Sprintf("%s (%s: GUASTO IMMINENTE)", d.Name, rep.ModelName))
+			} else if rep.ReallocatedSectors > 50 {
+				smartOK = false
+				smartIssues = append(smartIssues, fmt.Sprintf("%s (%s: %d settori riallocati)", d.Name, rep.ModelName, rep.ReallocatedSectors))
+			} else if rep.SmartStatus == "PASSED" {
+				smartHealthyCount++
+			}
+		}
+	}
+
+	smartStatus := "Tutti i dischi integri (S.M.A.R.T. OK)"
+	if !smartOK && len(smartIssues) > 0 {
+		smartStatus = "🔴 Allarme Hardware S.M.A.R.T.: " + strings.Join(smartIssues, ", ")
+		storageOK = false
+		storageStatus = "⚠️ Rilevato Guasto S.M.A.R.T." + modeTag
+	} else if len(storageTopo.DataDisks) == 0 {
+		smartStatus = "Nessun disco dedicato rilevato"
+	}
+
 	return watch.NodeHealthPayload{
 		Status:         "ok",
 		NodeName:       nodeName,
@@ -314,6 +342,8 @@ func buildNodeHealthPayload() watch.NodeHealthPayload {
 		MemoryUsedMB:   ram.UsedMB,
 		MemoryTotalMB:  ram.TotalMB,
 		ActiveModules:  activeMods,
+		SmartOK:        smartOK,
+		SmartStatus:    smartStatus,
 	}
 }
 
@@ -4091,20 +4121,23 @@ WantedBy=default.target
 
 		mountPoint := "/mnt/allod-storage"
 		var usageStr, statsStr, dfStr string
+		var smartData []*helper.SmartReport
 		isMounted := true
 
-		// Try privileged helper first for 100% complete root device stats and detailed chunks
+		// Try privileged helper first for 100% complete root device stats, chunks, and SMART telemetry
 		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
 		if output, err := client.StorageDiagnostics(mountPoint); err == nil && output != "" {
 			var diagData struct {
-				Usage string `json:"usage"`
-				Stats string `json:"stats"`
-				Df    string `json:"df"`
+				Usage string                `json:"usage"`
+				Stats string                `json:"stats"`
+				Df    string                `json:"df"`
+				Smart []*helper.SmartReport `json:"smart"`
 			}
 			if err := json.Unmarshal([]byte(output), &diagData); err == nil {
 				usageStr = diagData.Usage
 				statsStr = diagData.Stats
 				dfStr = diagData.Df
+				smartData = diagData.Smart
 			}
 		}
 
@@ -4134,11 +4167,27 @@ WantedBy=default.target
 			dfStr = string(dfOut)
 		}
 
+		if len(smartData) == 0 && statsStr != "" {
+			smartData = helper.CollectStorageSmartReports(statsStr)
+		}
+		if len(smartData) == 0 {
+			topo := preflight.DetectStorageTopology()
+			for _, d := range topo.DataDisks {
+				if rep, err := client.SmartRead(d.Name); err == nil && rep != nil {
+					smartData = append(smartData, rep)
+				}
+			}
+		}
+		if smartData == nil {
+			smartData = []*helper.SmartReport{}
+		}
+
 		data := map[string]interface{}{
 			"mount_point": mountPoint,
 			"usage":       usageStr,
 			"stats":       statsStr,
 			"df":          dfStr,
+			"smart":       smartData,
 			"is_mounted":  isMounted,
 			"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		}
@@ -4699,7 +4748,7 @@ WantedBy=default.target
 		return key, nil
 	}
 
-	generateCloudInit := func(vaultName, setupKey, peerIP string, quotaGB int) string {
+	generateCloudInit := func(vaultName, setupKey, peerIP, announceToken string, quotaGB int) string {
 		return fmt.Sprintf(`#cloud-config
 hostname: %s
 manage_etc_hosts: true
@@ -4734,6 +4783,16 @@ write_files:
       curl -fsSL https://pkgs.netbird.io/install.sh | sh
       netbird up --setup-key "%s"
       sleep 6
+      NETBIRD_IP=""
+      for i in {1..20}; do
+        NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
+        if [ -n "$NETBIRD_IP" ]; then break; fi
+        sleep 1
+      done
+      if [ -z "$NETBIRD_IP" ]; then
+        echo "[!] Impossibile acquisire IP NetBird su wt0. Abort."
+        exit 1
+      fi
       ARCH=$(uname -m)
       if [ "$ARCH" = "x86_64" ]; then R_ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then R_ARCH="arm64"; else R_ARCH="amd64"; fi
       curl -fsSL "https://github.com/restic/rest-server/releases/download/v0.12.1/rest-server_0.12.1_linux_${R_ARCH}.tar.gz" | tar -xz -C /tmp
@@ -4742,7 +4801,7 @@ write_files:
       mkdir -p /vault/data
       chmod 750 /vault/data
 
-      cat << 'EOF' > /etc/systemd/system/allod-vault.service
+      cat << EOF > /etc/systemd/system/allod-vault.service
       [Unit]
       Description=Allod Standalone Vault (Append-Only Restic Receiver)
       After=network-online.target netbird.service
@@ -4750,7 +4809,7 @@ write_files:
 
       [Service]
       Type=simple
-      ExecStart=/usr/local/bin/rest-server --append-only --no-auth --listen 0.0.0.0:8000 --path /vault/data
+      ExecStart=/usr/local/bin/rest-server --append-only --no-auth --listen ${NETBIRD_IP}:8000 --path /vault/data
       Restart=always
       RestartSec=5
       LimitNOFILE=65536
@@ -4762,17 +4821,17 @@ write_files:
       systemctl daemon-reload
       systemctl enable --now allod-vault.service
 
-      NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
       if [ -n "%s" ] && [ -n "$NETBIRD_IP" ]; then
         curl -s -X POST "http://%s:8080/api/ring/announce" \
           -H "Content-Type: application/json" \
-          -d '{"name":"%s","address":"'$NETBIRD_IP'","quota_gb":%d}' || true
+          -H "Authorization: Bearer %s" \
+          -d '{"name":"%s","address":"'$NETBIRD_IP'","quota_gb":%d,"token":"%s"}' || true
       fi
 
 runcmd:
   - systemctl daemon-reload
   - systemctl enable --now allod-vault-bootstrap.service
-`, vaultName, setupKey, peerIP, peerIP, vaultName, quotaGB)
+`, vaultName, setupKey, peerIP, peerIP, announceToken, vaultName, quotaGB, announceToken)
 	}
 
 	generateDockerCompose := func(setupKey string) string {
@@ -4993,16 +5052,22 @@ runcmd:
 			primaryMeshIP = "100.64.0.1"
 		}
 
-		scriptCommand := fmt.Sprintf("curl -fsSL \"http://%s:8080/api/vault/install.sh\" | sudo bash -s -- --name \"%s\" --key \"%s\" --quota \"%dG\" --peer \"%s\"",
-			primaryMeshIP, req.Name, setupKey, req.QuotaGB, primaryMeshIP)
+		announceToken, errAnn := globalRingAnnounceTokens.Generate(24 * time.Hour)
+		if errAnn != nil {
+			announceToken = ""
+		}
 
-		cloudInitData := generateCloudInit(req.Name, setupKey, primaryMeshIP, req.QuotaGB)
+		scriptCommand := fmt.Sprintf("curl -fsSL \"http://%s:8080/api/vault/install.sh\" | sudo bash -s -- --name \"%s\" --key \"%s\" --quota \"%dG\" --peer \"%s\" --token \"%s\"",
+			primaryMeshIP, req.Name, setupKey, req.QuotaGB, primaryMeshIP, announceToken)
+
+		cloudInitData := generateCloudInit(req.Name, setupKey, primaryMeshIP, announceToken, req.QuotaGB)
 		dockerComposeData := generateDockerCompose(setupKey)
 
 		data := map[string]interface{}{
 			"name":            req.Name,
 			"quota_gb":        req.QuotaGB,
 			"setup_key":       setupKey,
+			"announce_token":  announceToken,
 			"auto_generated":  autoGenerated,
 			"primary_mesh_ip": primaryMeshIP,
 			"script_command":  scriptCommand,
@@ -5036,12 +5101,44 @@ runcmd:
 			Name    string `json:"name"`
 			Address string `json:"address"`
 			QuotaGB int    `json:"quota_gb"`
+			Token   string `json:"token"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Payload JSON non valido: " + err.Error()})
 			return
 		}
+
+		authorized := false
+		st, err := state.Open(dbPath)
+		if err == nil {
+			if admToken := panel.GetSessionToken(r, panel.AdminCookieName); admToken != "" {
+				if sess, errGet := st.GetSession(admToken); errGet == nil && sess != nil && sess.UserType == "admin" {
+					authorized = true
+				}
+			}
+			st.Close()
+		}
+
+		if !authorized {
+			tokenCandidate := extractRingAnnounceToken(r)
+			if tokenCandidate == "" {
+				tokenCandidate = strings.TrimSpace(req.Token)
+			}
+			if tokenCandidate != "" && globalRingAnnounceTokens.ValidateAndConsume(tokenCandidate) {
+				authorized = true
+			}
+		}
+
+		if !authorized {
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: "Accesso negato: richiesta autenticazione admin o token di annuncio monouso valido",
+			})
+			return
+		}
+
 		req.Name = strings.TrimSpace(req.Name)
 		req.Address = strings.TrimSpace(req.Address)
 		if req.Name == "" || req.Address == "" {
@@ -5049,7 +5146,17 @@ runcmd:
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome e Indirizzo del vault sono obbligatori"})
 			return
 		}
-		if req.QuotaGB <= 0 {
+		if !validVaultNameRegex.MatchString(req.Name) {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome vault non valido (deve contenere solo caratteri alfanumerici, trattini o underscore, max 64 caratteri)"})
+			return
+		}
+		if !isValidVaultAddress(req.Address) {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Indirizzo vault non valido (deve essere un IP o un hostname valido)"})
+			return
+		}
+		if req.QuotaGB <= 0 || req.QuotaGB > 100000 {
 			req.QuotaGB = 500
 		}
 
@@ -5409,9 +5516,16 @@ runcmd:
 		path := r.URL.Path
 
 		// CSRF defense: enforce Origin/Referer check on mutating API requests
-		if strings.HasPrefix(path, "/api/") && path != "/api/speedtest/upload" && path != "/api/ring/announce" {
+		if strings.HasPrefix(path, "/api/") && path != "/api/speedtest/upload" {
 			if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete || r.Method == http.MethodPatch {
-				if !panel.CheckSameOrigin(r) {
+				isTokenAnnounce := false
+				if path == "/api/ring/announce" {
+					tok := extractRingAnnounceToken(r)
+					if tok != "" && globalRingAnnounceTokens.Peek(tok) {
+						isTokenAnnounce = true
+					}
+				}
+				if !isTokenAnnounce && !panel.CheckSameOrigin(r) {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusForbidden)
 					json.NewEncoder(w).Encode(PanelResponse{
