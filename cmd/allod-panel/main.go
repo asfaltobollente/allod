@@ -1299,7 +1299,7 @@ func main() {
 			}
 		}
 		if city == "" {
-			city = "Atri"
+			city = "Roma"
 		}
 		if token == "" || chatID == "" {
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Token del bot e Chat ID sono entrambi necessari per inviare il resoconto di test."})
@@ -1331,15 +1331,42 @@ func main() {
 			storageFree = formatBytes(freeBytes)
 		}
 
+		nodeName := "allod-node"
+		if cfg, _ := config.LoadConfig(getConfigPath()); cfg != nil && cfg.Node.Name != "" {
+			nodeName = cfg.Node.Name
+		} else if h, errH := os.Hostname(); errH == nil && h != "" {
+			nodeName = h
+		}
+
+		vitals := preflight.GetServerVitals()
+		uptimeDur := time.Duration(vitals.UptimeSeconds) * time.Second
+		if uptimeDur <= 0 {
+			uptimeDur = 24 * time.Hour
+		}
+
+		ram := preflight.GetRealRAMStats()
+		ramUsed := ram.UsedMB
+		ramTotal := ram.TotalMB
+		if ramTotal <= 0 {
+			ramTotal = 8192
+			ramUsed = 1024
+		}
+
+		storageStatus := "Integro e Sano"
+		storageTopo := preflight.DetectStorageTopology()
+		if storageTopo.ModeSummary != "" {
+			storageStatus = fmt.Sprintf("Integro e Sano (%s)", storageTopo.ModeSummary)
+		}
+
 		client := watch.NewTelegramNotifier(token, chatID, 0)
 		report := watch.DigestReport{
-			NodeName:      "allod-ferretti",
-			Uptime:        24 * time.Hour,
-			StorageStatus: "Integro e Sano (RAID 1)",
+			NodeName:      nodeName,
+			Uptime:        uptimeDur,
+			StorageStatus: storageStatus,
 			StorageUsed:   storageUsed,
 			StorageFree:   storageFree,
-			RAMUsedMB:     1680,
-			RAMTotalMB:    7746,
+			RAMUsedMB:     ramUsed,
+			RAMTotalMB:    ramTotal,
 			ActiveModules: []string{"shares", "storage", "watch", "media", "network", "photos"},
 			WeatherInfo:   weatherStr,
 		}

@@ -32,12 +32,12 @@ func TestScanDatasetTree(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Create fake structure:
-	// shares/davide/doc.txt
+	// shares/alice/doc.txt
 	// shares/public/Stampa 3D/part.stl
 	// photos/upload/pic.jpg
 	// media/config/conf.xml
-	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "davide"), 0755)
-	_ = os.WriteFile(filepath.Join(tempDir, "shares", "davide", "doc.txt"), []byte("davide-data"), 0644)
+	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "alice"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "shares", "alice", "doc.txt"), []byte("alice-data"), 0644)
 
 	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "public", "Stampa 3D"), 0755)
 	_ = os.WriteFile(filepath.Join(tempDir, "shares", "public", "Stampa 3D", "part.stl"), []byte("stl-data-3d"), 0644)
@@ -54,9 +54,9 @@ func TestScanDatasetTree(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(tempDir, "search", "config"), 0755)
 	_ = os.WriteFile(filepath.Join(tempDir, "search", "config", "settings.yml"), []byte("searxng-yaml"), 0644)
 
-	// Add dummy bind-mounted photos folder inside davide to verify it is NOT counted in personal size
-	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "davide", "photos"), 0755)
-	_ = os.WriteFile(filepath.Join(tempDir, "shares", "davide", "photos", "heavy_photo.raw"), make([]byte, 5*1024*1024), 0644)
+	// Add dummy bind-mounted photos folder inside alice to verify it is NOT counted in personal size
+	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "alice", "photos"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "shares", "alice", "photos", "heavy_photo.raw"), make([]byte, 5*1024*1024), 0644)
 
 	// Add a deleted user and a generic media share inside shares/ to ensure they are excluded
 	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "mario.deleted.20260911171325"), 0755)
@@ -64,7 +64,7 @@ func TestScanDatasetTree(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(tempDir, "shares", "film"), 0755)
 	_ = os.WriteFile(filepath.Join(tempDir, "shares", "film", "movie.mkv"), []byte("movie"), 0644)
 
-	items := ScanDatasetTree(tempDir, []string{"davide"}, nil)
+	items := ScanDatasetTree(tempDir, []string{"alice"}, nil)
 	if len(items) == 0 {
 		t.Fatalf("expected scanned dataset items, got empty")
 	}
@@ -77,11 +77,11 @@ func TestScanDatasetTree(t *testing.T) {
 	foundSearch := false
 
 	for _, it := range items {
-		if it.ID == "user-davide" {
+		if it.ID == "user-alice" {
 			foundUser = true
-			// Size must be exactly len("davide-data") = 11 bytes, NOT 5MB+ because photos was skipped!
-			if it.SizeBytes != int64(len("davide-data")) {
-				t.Errorf("expected user-davide to skip photos bind mount (size=%d, expected=%d)", it.SizeBytes, len("davide-data"))
+			// Size must be exactly len("alice-data") = 10 bytes, NOT 5MB+ because photos was skipped!
+			if it.SizeBytes != int64(len("alice-data")) {
+				t.Errorf("expected user-alice to skip photos bind mount (size=%d, expected=%d)", it.SizeBytes, len("alice-data"))
 			}
 		}
 		if it.ID == "user-mario.deleted.20260911171325" {

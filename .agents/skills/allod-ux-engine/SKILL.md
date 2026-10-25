@@ -56,7 +56,7 @@ Analizza qualsiasi schermata esistente e restituisci:
 * Proponi sempre il codice corretto direttamente applicabile.
 
 ### 7. Design System Enforcer
-Fai sempre riferimento al file [`DESIGN.md`](file:///c:/Users/arrus/Documents/Code/Antigravity/Allod-v1/DESIGN.md) alla radice del repository:
+Fai sempre riferimento al file [`DESIGN.md`](DESIGN.md) alla radice del repository:
 * Utilizza esclusivamente i token CSS definiti in `style.css` (`--background`, `--card`, `--primary`, `--border-subtle`, `--radius-*`, `--font-size-*`).
 * Zero colori esadecimali arbitrari inline.
 * Zero dipendenze esterne (Google Fonts, CDN JS): Allod funziona in totale isolamento LAN/Air-gapped.
@@ -85,7 +85,7 @@ Pianifica da zero una nuova interfaccia.
 * Presenta le specifiche e il wireframe prima di scrivere il codice definitivo.
 
 ### 2. `/restyle [componente o modale]`
-Rifinisce graficamente un componente esistente applicando [`DESIGN.md`](file:///c:/Users/arrus/Documents/Code/Antigravity/Allod-v1/DESIGN.md).
+Rifinisce graficamente un componente esistente applicando [`DESIGN.md`](DESIGN.md).
 * Ispeziona i 4 assi (Tipografia, Colore, Spazio, Finiture).
 * Sostituisce stili inline e stili generici con i token CSS ufficiali.
 * Mostra un confronto prima/dopo lasciando inalterata la logica di business.

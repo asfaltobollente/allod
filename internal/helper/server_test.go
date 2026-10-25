@@ -714,8 +714,8 @@ func TestFindImmichPhotosSource(t *testing.T) {
 	basePhotos := filepath.Join(tmpDir, "photos", "upload")
 
 	// 1. Without any files, returns fallback
-	res := findImmichPhotosSource(basePhotos, "davide")
-	expectedFallback := filepath.Join(basePhotos, "library", "davide")
+	res := findImmichPhotosSource(basePhotos, "mario")
+	expectedFallback := filepath.Join(basePhotos, "library", "mario")
 	if res != expectedFallback {
 		t.Errorf("expected fallback %s, got %s", expectedFallback, res)
 	}
@@ -726,7 +726,7 @@ func TestFindImmichPhotosSource(t *testing.T) {
 	_ = os.MkdirAll(userUploadDir, 0777)
 	_ = os.WriteFile(filepath.Join(userUploadDir, "photo1.jpg"), []byte("fake jpg"), 0644)
 
-	resWithUpload := findImmichPhotosSource(basePhotos, "davide")
+	resWithUpload := findImmichPhotosSource(basePhotos, "mario")
 	if resWithUpload != userUploadDir {
 		t.Errorf("expected upload dir %s, got %s", userUploadDir, resWithUpload)
 	}
@@ -736,7 +736,7 @@ func TestFindImmichPhotosSource(t *testing.T) {
 	_ = os.MkdirAll(userLibraryDir, 0777)
 	_ = os.WriteFile(filepath.Join(userLibraryDir, "photo2.jpg"), []byte("fake jpg 2"), 0644)
 
-	resWithLibrary := findImmichPhotosSource(basePhotos, "davide")
+	resWithLibrary := findImmichPhotosSource(basePhotos, "mario")
 	expectedLibRoot := filepath.Join(basePhotos, "library", uuid)
 	if resWithLibrary != expectedLibRoot {
 		t.Errorf("expected library dir %s, got %s", expectedLibRoot, resWithLibrary)

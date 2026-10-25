@@ -38,7 +38,7 @@ func TestWeatherMockOpenMeteo(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.Path, "search") {
-			_, _ = fmt.Fprintln(w, `{"results":[{"id":3182697,"name":"Atri","latitude":42.576,"longitude":13.988,"country":"Italy"}]}`)
+			_, _ = fmt.Fprintln(w, `{"results":[{"id":3169070,"name":"Roma","latitude":41.8919,"longitude":12.5113,"country":"Italy"}]}`)
 			return
 		}
 		if strings.Contains(r.URL.Path, "forecast") {
@@ -58,8 +58,8 @@ func TestWeatherMockOpenMeteo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to fetch mock geo: %v", err)
 	}
-	if !strings.Contains(string(geoData), "Atri") {
-		t.Errorf("expected geo to contain Atri, got %s", string(geoData))
+	if !strings.Contains(string(geoData), "Roma") {
+		t.Errorf("expected geo to contain Roma, got %s", string(geoData))
 	}
 
 	fData, err := client.fetchWithRetry(ts.URL+"/forecast", 1)

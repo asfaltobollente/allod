@@ -137,7 +137,7 @@ func ScanDatasetTree(storageRoot string, validUsers []string, selectedPaths map[
 		userMap[strings.ToLower(strings.TrimSpace(u))] = true
 	}
 
-	// 1. User Personal Shares (e.g. shares/davide, shares/rita)
+	// 1. User Personal Shares (e.g. shares/alice, shares/bob)
 	if entries, err := os.ReadDir(sharesDir); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() {

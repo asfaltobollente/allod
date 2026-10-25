@@ -77,7 +77,7 @@ Abilitando la funzione **Network Route** di NetBird, puoi inserire nelle app e n
 3. Compila i campi:
    * **Network Name**: `Allod-LAN` (o a scelta).
    * **Network Range**: l'IP LAN del tuo server Allod con `/32` (es. `192.168.1.50/32`), oppure l'intera subnet domestica (es. `192.168.1.0/24`) se desideri raggiungere da 4G anche altri dispositivi di casa (es. router, telecamere).
-   * **Routing Peer**: seleziona il tuo server Allod (es. `ferrettiubuntuserver`).
+   * **Routing Peer**: seleziona il tuo server Allod (es. `allod-server`).
    * **Distribution Groups**: seleziona `All` (per distribuire la rotta a tutti i tuoi dispositivi mobili).
    * **Masquerade**: Lascia la spunta attiva (**Enabled**).
 4. Clicca su **Save**.
@@ -88,7 +88,7 @@ Da questo momento, puoi configurare l'app Immich su `http://192.168.1.50:2283` e
 
 #### Alternativa: Nome Host Breve tramite NetBird MagicDNS (`http://allod:8080`)
 Se per il browser preferisci digitare una parola invece dei numeri:
-1. Nella dashboard NetBird, vai su **Peers**, clicca sul tuo server e rinominalo da `ferrettiubuntuserver` a **`allod`**.
+1. Nella dashboard NetBird, vai su **Peers**, clicca sul tuo server e rinominalo da `allod-server` a **`allod`**.
 2. Da smartphone in 4G con NetBird attivo, puoi aprire `http://allod:8080` (MagicDNS risolverà il nome automaticamente).
 
 ---

@@ -104,7 +104,7 @@ By configuring a **Network Route** in NetBird, you can enter **the single local 
 3. Fill in the fields:
    * **Network Name**: `Allod-LAN`
    * **Network Range**: Your server's local LAN IP with `/32` (e.g. `192.168.1.50/32`), or your entire home subnet (e.g. `192.168.1.0/24`) if you also want access to other home hardware (e.g. routers, cameras).
-   * **Routing Peer**: Select your Allod node (e.g. `ferrettiubuntuserver`).
+   * **Routing Peer**: Select your Allod node (e.g. `allod-server`).
    * **Distribution Groups**: Select `All` (or your mobile device group).
    * **Masquerade**: Keep checked (**Enabled**).
 4. Click **Save**.
@@ -115,7 +115,7 @@ Now set Immich to `http://192.168.1.50:2283` and Allod Panel to `http://192.168.
 
 #### Alternative: Short Hostname via NetBird MagicDNS (`http://allod:8080`)
 If you prefer typing words rather than numbers in your browser:
-1. In the NetBird dashboard under **Peers**, rename your Allod node from `ferrettiubuntuserver` to **`allod`**.
+1. In the NetBird dashboard under **Peers**, rename your Allod node from `allod-server` to **`allod`**.
 2. When connected via NetBird on 4G, you can open `http://allod:8080` directly.
 
 ---

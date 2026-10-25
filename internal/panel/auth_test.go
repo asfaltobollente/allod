@@ -323,11 +323,11 @@ func TestPortalLoginAutoSyncWithSamba(t *testing.T) {
 		t.Fatalf("failed to open store: %v", err)
 	}
 
-	// Create user 'davide' without password (as imported from Samba share)
+	// Create user 'mario' without password (as imported from Samba share)
 	err = store.CreateFamilyMember(&state.FamilyMember{
-		Username:     "davide",
-		FirstName:    "Davide",
-		LastName:     "Arrus",
+		Username:     "mario",
+		FirstName:    "Mario",
+		LastName:     "Rossi",
 		Role:         "member",
 		SmbActive:    true,
 		PasswordHash: "",
@@ -344,7 +344,7 @@ func TestPortalLoginAutoSyncWithSamba(t *testing.T) {
 			if action == "shares.verify_password" {
 				user, _ := args["username"].(string)
 				pass, _ := args["password"].(string)
-				if user == "davide" && pass == "DavideSambaPass2026!" {
+				if user == "mario" && pass == "MarioSambaPass2026!" {
 					return helper.Response{Ok: true, Applied: true, Output: "valid"}, nil
 				}
 				return helper.Response{Ok: true, Applied: true, Output: "invalid"}, nil
@@ -358,7 +358,7 @@ func TestPortalLoginAutoSyncWithSamba(t *testing.T) {
 	authHandler.RegisterAuthRoutes(mux)
 
 	// 1. Try login with wrong password -> 400 with "Nessuna password ancora impostata"
-	badLogin := bytes.NewBufferString(`{"username":"davide","password":"WrongPassword"}`)
+	badLogin := bytes.NewBufferString(`{"username":"mario","password":"WrongPassword"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/portal/login", badLogin)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -367,7 +367,7 @@ func TestPortalLoginAutoSyncWithSamba(t *testing.T) {
 	}
 
 	// 2. Try login with valid Samba password -> 200 OK & auto-activates!
-	goodLogin := bytes.NewBufferString(`{"username":"davide","password":"DavideSambaPass2026!"}`)
+	goodLogin := bytes.NewBufferString(`{"username":"mario","password":"MarioSambaPass2026!"}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/portal/login", goodLogin)
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -377,7 +377,7 @@ func TestPortalLoginAutoSyncWithSamba(t *testing.T) {
 
 	// 3. Verify in state.db that password_hash is now populated
 	stCheck, _ := state.Open(dbPath)
-	mem, _ := stCheck.GetFamilyMember("davide")
+	mem, _ := stCheck.GetFamilyMember("mario")
 	stCheck.Close()
 	if mem.PasswordHash == "" || mem.PasswordSalt == "" {
 		t.Errorf("expected password hash and salt to be populated in state.db after auto-sync")
@@ -385,7 +385,7 @@ func TestPortalLoginAutoSyncWithSamba(t *testing.T) {
 
 	// 4. Subsequent login works directly via PBKDF2
 	rec2 := httptest.NewRecorder()
-	goodLogin2 := bytes.NewBufferString(`{"username":"davide","password":"DavideSambaPass2026!"}`)
+	goodLogin2 := bytes.NewBufferString(`{"username":"mario","password":"MarioSambaPass2026!"}`)
 	req2 := httptest.NewRequest(http.MethodPost, "/api/portal/login", goodLogin2)
 	mux.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK {

@@ -207,7 +207,7 @@ func (w *WeatherClient) getWttrInForecast(city string) (string, error) {
 		html.EscapeString(city), html.EscapeString(desc), minT, maxT, rainProb), nil
 }
 
-// GetDailyForecast returns a formatted one-line forecast for the given city (e.g. "Atri", "Roma").
+// GetDailyForecast returns a formatted one-line forecast for the given city (e.g. "Milano", "Roma").
 func (w *WeatherClient) GetDailyForecast(city string) (string, error) {
 	city = strings.TrimSpace(city)
 	if city == "" {

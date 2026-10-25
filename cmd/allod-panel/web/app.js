@@ -5325,7 +5325,7 @@ async function testWatchTelegram() {
 }
 
 async function testWatchDigest() {
-  const city = (document.getElementById('watch-weather-city')?.value || '').trim() || 'Atri';
+  const city = (document.getElementById('watch-weather-city')?.value || '').trim() || 'Roma';
   const token = (document.getElementById('watch-telegram-token')?.value || '').trim();
   let chatId = (document.getElementById('watch-telegram-chat-id')?.value || '').trim();
   if (chatId === 'undefined') chatId = '';
