@@ -143,32 +143,133 @@ func getValidFamilyUsernames(st *state.Store) []string {
 	return usernames
 }
 
-func getRingTopology(cfg *config.Config) (*ring.RingTopology, bool) {
-	if _, err := os.Stat("ring.yaml"); err == nil {
-		topo, err := ring.LoadTopology("ring.yaml")
-		if err == nil {
-			return topo, false
-		}
+const dbPath = "state.db"
+
+func getLocalNodeName(cfg *config.Config) string {
+	if cfg != nil && strings.TrimSpace(cfg.Node.Name) != "" {
+		return strings.TrimSpace(cfg.Node.Name)
 	}
-	// Standalone single-node topology if no ring.yaml has been configured
-	nodeName := "allod-node"
-	if cfg != nil && cfg.Node.Name != "" {
-		nodeName = cfg.Node.Name
+	if h, err := os.Hostname(); err == nil && strings.TrimSpace(h) != "" {
+		return strings.TrimSpace(h)
 	}
-	topo := ring.NewRingTopology("allod-standalone", 2)
-	topo.AddMember(&ring.Member{
-		ID:      nodeName,
-		Address: "127.0.0.1 (Locale)",
-		QuotaGB: 500,
-		Datasets: []ring.Dataset{
-			{ID: "photos", SizeGB: 40, Critical: true},
-			{ID: "documents", SizeGB: 10, Critical: true},
-		},
-	})
-	return topo, true
+	return "allod-node"
 }
 
-const dbPath = "state.db"
+func getLocalNodeAddress() string {
+	if ip := getLocalNetBirdIP(); ip != "" {
+		return ip
+	}
+	return "127.0.0.1 (Locale)"
+}
+
+func getLocalDatasets() []ring.Dataset {
+	st, err := state.Open(dbPath)
+	if err == nil {
+		defer st.Close()
+		selPathsJSON, _ := st.GetMeta("backup_selected_paths")
+		if selPathsJSON != "" {
+			var savedPaths []string
+			if err := json.Unmarshal([]byte(selPathsJSON), &savedPaths); err == nil && len(savedPaths) > 0 {
+				var dsList []ring.Dataset
+				for _, p := range savedPaths {
+					base := filepath.Base(p)
+					sizeGB := int((ring.FastDirSize(p) + (1024*1024*1024 - 1)) / (1024 * 1024 * 1024))
+					if sizeGB <= 0 {
+						sizeGB = 1
+					}
+					dsList = append(dsList, ring.Dataset{
+						ID:       base,
+						SizeGB:   sizeGB,
+						Critical: true,
+					})
+				}
+				if len(dsList) > 0 {
+					return dsList
+				}
+			}
+		}
+	}
+	return []ring.Dataset{
+		{ID: "photos", SizeGB: 40, Critical: true},
+		{ID: "documents", SizeGB: 10, Critical: true},
+	}
+}
+
+func getRingTopology(cfg *config.Config) (*ring.RingTopology, bool) {
+	localID := getLocalNodeName(cfg)
+	localAddr := getLocalNodeAddress()
+
+	var topo *ring.RingTopology
+	var loadedFromDisk bool
+
+	if _, err := os.Stat("ring.yaml"); err == nil {
+		if t, err := ring.LoadTopology("ring.yaml"); err == nil && t != nil {
+			topo = t
+			loadedFromDisk = true
+		}
+	}
+
+	if topo == nil {
+		topo = ring.NewRingTopology("allod-ring", 2)
+	}
+
+	if topo.Members == nil {
+		topo.Members = make(map[string]*ring.Member)
+	}
+
+	needSave := false
+
+	// Ensure the local primary node is ALWAYS present in the topology
+	localMember, hasLocal := topo.Members[localID]
+	if !hasLocal {
+		// If there is an old generic "allod-node" member, rename it to localID
+		if oldDefault, exists := topo.Members["allod-node"]; exists && localID != "allod-node" {
+			delete(topo.Members, "allod-node")
+			oldDefault.ID = localID
+			if (oldDefault.Address == "127.0.0.1 (Locale)" || oldDefault.Address == "127.0.0.1") && localAddr != "127.0.0.1 (Locale)" {
+				oldDefault.Address = localAddr
+			}
+			topo.Members[localID] = oldDefault
+			localMember = oldDefault
+			needSave = true
+		} else {
+			// Local node was missing (e.g. initial state or ring.yaml created with only remote vaults)
+			localMember = &ring.Member{
+				ID:       localID,
+				Address:  localAddr,
+				QuotaGB:  500,
+				Datasets: getLocalDatasets(),
+			}
+			topo.AddMember(localMember)
+			if loadedFromDisk {
+				needSave = true
+			}
+		}
+	} else {
+		// Local node exists: if address was localhost but we now have a NetBird Mesh IP, update it
+		if (localMember.Address == "127.0.0.1" || localMember.Address == "127.0.0.1 (Locale)") && localAddr != "127.0.0.1 (Locale)" {
+			localMember.Address = localAddr
+			if loadedFromDisk {
+				needSave = true
+			}
+		}
+		// If local node has 0 datasets, populate defaults/selected paths
+		if len(localMember.Datasets) == 0 {
+			localMember.Datasets = getLocalDatasets()
+			if loadedFromDisk {
+				needSave = true
+			}
+		}
+	}
+
+	if loadedFromDisk && needSave {
+		_ = topo.Save("ring.yaml")
+	}
+
+	// Standalone if there is only 1 member (which is the local node itself)
+	isStandalone := len(topo.Members) <= 1
+	return topo, isStandalone
+}
 
 func getLocalNetBirdIP() string {
 	if ip := helper.GetInterfaceIPv4("wt0"); ip != "" {
@@ -1009,7 +1110,7 @@ func main() {
 
 		data := map[string]interface{}{
 			"version":                  version.Get(),
-			"node_name":                cfg.Node.Name,
+			"node_name":                getLocalNodeName(cfg),
 			"channel":                  cfg.Node.Channel,
 			"ram_total_mb":             realRAM.TotalMB,
 			"ram_used_mb":              realRAM.UsedMB,
@@ -4596,6 +4697,7 @@ WantedBy=default.target
 			"members":         topo.Members,
 			"placements":      placements,
 			"is_standalone":   isStandalone,
+			"local_node":      getLocalNodeName(cfg),
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: data})
@@ -4628,6 +4730,53 @@ WantedBy=default.target
 		}
 
 		json.NewEncoder(w).Encode(PanelResponse{Status: "ok", Data: impact})
+	})
+
+	// 8b. API Ring Remove Member (POST /api/ring/remove)
+	mux.HandleFunc("/api/ring/remove", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Member string `json:"member"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Member) == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Nome membro obbligatorio"})
+			return
+		}
+		req.Member = strings.TrimSpace(req.Member)
+
+		cfg, _ := config.LoadConfig(getConfigPath())
+		localID := getLocalNodeName(cfg)
+		if req.Member == localID {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Impossibile rimuovere il nodo locale dal Ring"})
+			return
+		}
+
+		topo, _ := getRingTopology(cfg)
+		if _, exists := topo.Members[req.Member]; !exists {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: fmt.Sprintf("Membro '%s' non presente nel Ring", req.Member)})
+			return
+		}
+
+		topo.RemoveMember(req.Member)
+		if err := topo.Save("ring.yaml"); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore salvataggio ring.yaml: " + err.Error()})
+			return
+		}
+
+		fmt.Printf("[RING] Membro rimosso dal Ring: '%s'\n", req.Member)
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Membro '%s' rimosso con successo dal Ring", req.Member),
+		})
 	})
 
 	// 9. API Update Rollback Simulation
@@ -5228,11 +5377,8 @@ runcmd:
 			req.QuotaGB = 500
 		}
 
-		targetRing := "ring.yaml"
-		topo, err := ring.LoadTopology(targetRing)
-		if err != nil {
-			topo = ring.NewRingTopology("allod-ring", 2)
-		}
+		cfg, _ := config.LoadConfig(getConfigPath())
+		topo, _ := getRingTopology(cfg)
 
 		topo.AddMember(&ring.Member{
 			ID:       req.Name,
@@ -5241,7 +5387,7 @@ runcmd:
 			Datasets: []ring.Dataset{},
 		})
 
-		if err := topo.Save(targetRing); err != nil {
+		if err := topo.Save("ring.yaml"); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore salvataggio ring.yaml: " + err.Error()})
 			return
@@ -5288,9 +5434,10 @@ runcmd:
 		if remoteQuotaGB <= 0 {
 			cfg, _ := config.LoadConfig(getConfigPath())
 			topo, _ := getRingTopology(cfg)
+			localID := getLocalNodeName(cfg)
 			if topo != nil {
-				for _, m := range topo.Members {
-					if m.QuotaGB > 0 {
+				for id, m := range topo.Members {
+					if id != localID && m.QuotaGB > 0 {
 						remoteQuotaGB = m.QuotaGB
 						break
 					}
@@ -5403,22 +5550,13 @@ runcmd:
 		_ = st.SetMeta("backup_remote_quota_gb", fmt.Sprintf("%d", req.RemoteQuotaGB))
 
 		cfg, _ := config.LoadConfig(getConfigPath())
-		nodeName := "allod-node"
-		if cfg != nil && cfg.Node.Name != "" {
-			nodeName = cfg.Node.Name
-		}
+		localID := getLocalNodeName(cfg)
 
 		if _, err := os.Stat("ring.yaml"); err == nil {
-			if topo, err := ring.LoadTopology("ring.yaml"); err == nil {
-				member, exists := topo.Members[nodeName]
-				if !exists {
-					for _, m := range topo.Members {
-						member = m
-						break
-					}
-				}
-				if member != nil {
-					member.QuotaGB = req.RemoteQuotaGB
+			topo, _ := getRingTopology(cfg)
+			if topo != nil {
+				// 1. Update datasets on local primary node
+				if localMember, exists := topo.Members[localID]; exists && localMember != nil {
 					var ringDatasets []ring.Dataset
 					for _, p := range req.Paths {
 						base := filepath.Base(p)
@@ -5432,9 +5570,17 @@ runcmd:
 							Critical: true,
 						})
 					}
-					member.Datasets = ringDatasets
-					_ = topo.Save("ring.yaml")
+					localMember.Datasets = ringDatasets
 				}
+				// 2. Update remote vault quota if provided
+				if req.RemoteQuotaGB > 0 {
+					for id, m := range topo.Members {
+						if id != localID && m != nil {
+							m.QuotaGB = req.RemoteQuotaGB
+						}
+					}
+				}
+				_ = topo.Save("ring.yaml")
 			}
 		}
 

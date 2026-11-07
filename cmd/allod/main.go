@@ -960,6 +960,26 @@ var ringAddCmd = &cobra.Command{
 			topo = ring.NewRingTopology("allod-ring", 2)
 		}
 
+		// Also ensure local node exists in targetRing if creating or missing
+		cfg, _ := config.LoadConfig("config.yaml")
+		localName := "allod-node"
+		if cfg != nil && cfg.Node.Name != "" {
+			localName = cfg.Node.Name
+		} else if h, err := os.Hostname(); err == nil && h != "" {
+			localName = h
+		}
+		if _, hasLocal := topo.Members[localName]; !hasLocal && nodeID != localName {
+			topo.AddMember(&ring.Member{
+				ID:      localName,
+				Address: "127.0.0.1 (Locale)",
+				QuotaGB: 500,
+				Datasets: []ring.Dataset{
+					{ID: "photos", SizeGB: 40, Critical: true},
+					{ID: "documents", SizeGB: 10, Critical: true},
+				},
+			})
+		}
+
 		topo.AddMember(&ring.Member{
 			ID:      nodeID,
 			Address: meshIP,

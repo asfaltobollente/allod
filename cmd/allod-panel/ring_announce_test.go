@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asfaltobollente/allod/internal/config"
 	"github.com/asfaltobollente/allod/internal/panel"
+	"github.com/asfaltobollente/allod/internal/ring"
 	"github.com/asfaltobollente/allod/internal/state"
 )
 
@@ -145,5 +147,80 @@ func TestRingAnnounceEndpointSecurity(t *testing.T) {
 	mux.ServeHTTP(rec5, req5)
 	if rec5.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 Bad Request for invalid name, got %d", rec5.Code)
+	}
+}
+
+func TestRingLocalNodeRetentionAndPlacement(t *testing.T) {
+	tempDir := t.TempDir()
+	origWd, _ := os.Getwd()
+	_ = os.Chdir(tempDir)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	// 1. Initial state without ring.yaml
+	cfg := &config.Config{
+		Node: config.NodeConfig{
+			Name: "ferretti",
+		},
+	}
+	topo, isStandalone := getRingTopology(cfg)
+	if !isStandalone {
+		t.Fatalf("expected isStandalone true when no remote members exist")
+	}
+	if len(topo.Members) != 1 {
+		t.Fatalf("expected 1 member (local), got %d", len(topo.Members))
+	}
+	if _, ok := topo.Members["ferretti"]; !ok {
+		t.Fatalf("expected local member 'ferretti' to be present")
+	}
+
+	// 2. Simulate vault-only ring.yaml (the bug that occurred earlier where only Casa-Test was in ring.yaml)
+	vaultOnlyTopo := ring.NewRingTopology("allod-ring", 2)
+	vaultOnlyTopo.AddMember(&ring.Member{
+		ID:       "Casa-Test",
+		Address:  "100.100.66.117",
+		QuotaGB:  100,
+		Datasets: []ring.Dataset{},
+	})
+	if err := vaultOnlyTopo.Save("ring.yaml"); err != nil {
+		t.Fatalf("failed to save vault-only ring.yaml: %v", err)
+	}
+
+	// 3. getRingTopology must auto-heal and restore the local node alongside Casa-Test
+	healedTopo, isStandaloneNow := getRingTopology(cfg)
+	if isStandaloneNow {
+		t.Fatalf("expected isStandalone false when 2 members exist")
+	}
+	if len(healedTopo.Members) != 2 {
+		t.Fatalf("expected 2 members after healing, got %d", len(healedTopo.Members))
+	}
+	if _, ok := healedTopo.Members["ferretti"]; !ok {
+		t.Fatalf("expected 'ferretti' to be restored in topology")
+	}
+	if _, ok := healedTopo.Members["Casa-Test"]; !ok {
+		t.Fatalf("expected 'Casa-Test' to remain in topology")
+	}
+
+	// 4. CalculatePlacement must place local datasets onto Casa-Test
+	placements := healedTopo.CalculatePlacement()
+	if len(placements) == 0 {
+		t.Fatalf("expected replica placements for local datasets")
+	}
+	foundTarget := false
+	for _, p := range placements {
+		for _, tgt := range p.TargetNodes {
+			if tgt == "Casa-Test" {
+				foundTarget = true
+				break
+			}
+		}
+	}
+	if !foundTarget {
+		t.Fatalf("expected Casa-Test to be a replica target for local datasets")
+	}
+
+	// 5. Verify local node name resolver
+	locName := getLocalNodeName(cfg)
+	if locName != "ferretti" {
+		t.Fatalf("expected local node name 'ferretti', got %s", locName)
 	}
 }

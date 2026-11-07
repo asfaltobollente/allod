@@ -891,9 +891,10 @@ function renderOverview() {
   if (visualGrid && currentRing && currentRing.members) {
     visualGrid.innerHTML = '';
     const isStandalone = currentRing.is_standalone || Object.keys(currentRing.members).length <= 1;
+    const localNodeName = currentRing.local_node || (currentStatus ? currentStatus.node_name : '') || 'allod-node';
 
     if (isStandalone) {
-      const selfMember = Object.values(currentRing.members)[0] || { id: currentStatus.node_name, address: '127.0.0.1', quota_gb: 500 };
+      const selfMember = currentRing.members[localNodeName] || Object.values(currentRing.members)[0] || { id: localNodeName, address: '127.0.0.1', quota_gb: 500 };
       visualGrid.innerHTML = `
         <div class="node-item-box" style="grid-column: 1 / -1; background: rgba(30, 41, 59, 0.5); border-left: 4px solid var(--primary);">
           <div class="node-item-icon">🏠</div>
@@ -909,14 +910,14 @@ function renderOverview() {
         const mId = m.id || m.ID || 'node';
         const mAddr = m.address || m.Address || '127.0.0.1';
         const mQuota = m.quota_gb !== undefined ? m.quota_gb : (m.QuotaGB || 500);
-        const isSelf = mId === currentStatus.node_name;
+        const isSelf = (mId === localNodeName);
 
         const box = document.createElement('div');
         box.className = 'node-item-box';
         box.innerHTML = `
           <div class="node-item-icon">${isSelf ? '🏠' : '🤝'}</div>
           <div class="node-item-info">
-            <h4>${mId} ${isSelf ? '<span class="badge badge-info">Locale</span>' : ''}</h4>
+            <h4>${mId} ${isSelf ? '<span class="badge badge-info">Locale</span>' : '<span class="badge badge-success">Vault Remoto</span>'}</h4>
             <p>IP: <code>${mAddr}</code> | Quota: <strong>${mQuota} GB</strong></p>
           </div>
         `;
@@ -2326,6 +2327,7 @@ function renderRing() {
   }
 
   const isStandalone = currentRing.is_standalone || Object.keys(currentRing.members).length <= 1;
+  const localNodeName = currentRing.local_node || (currentStatus ? currentStatus.node_name : '') || 'allod-node';
 
   // Members
   const membersContainer = document.getElementById('ring-members-container');
@@ -2333,7 +2335,7 @@ function renderRing() {
     membersContainer.innerHTML = '';
 
     if (isStandalone) {
-      const selfMember = Object.values(currentRing.members)[0] || { id: currentStatus ? currentStatus.node_name : 'allod-node', address: '127.0.0.1', quota_gb: 500 };
+      const selfMember = currentRing.members[localNodeName] || Object.values(currentRing.members)[0] || { id: localNodeName, address: '127.0.0.1', quota_gb: 500 };
       membersContainer.innerHTML = `
         <div style="background: rgba(30, 41, 59, 0.4); padding: 16px; border-radius: 8px; border: 1px solid var(--card-border);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -2345,7 +2347,7 @@ function renderRing() {
           </div>
           <p style="font-size:13px; color:var(--text-muted); margin:0;">
             Attualmente questo nodo opera in modalità indipendente. I tuoi backup sono protetti in locale.<br>
-            Per aggiungere un amico al tuo gruppo Ring e abilitare la replica remota:
+            Per aggiungere un vault remoto o collegare il server di un amico al tuo Ring e abilitare la replica remota, clicca <strong>Collega Nuovo Vault Remoto</strong> in alto oppure esegui:
           </p>
           <pre style="background:#0f172a; padding:8px 12px; border-radius:6px; margin-top:8px; font-size:12px;">allod ring add &lt;id-amico&gt; &lt;ip-wireguard&gt; &lt;quota_gb&gt;</pre>
         </div>
@@ -2357,9 +2359,11 @@ function renderRing() {
         <thead>
           <tr>
             <th>Nodo</th>
+            <th>Ruolo</th>
             <th>Indirizzo Mesh</th>
             <th>Quota Fornita</th>
-            <th>Datasets Locali</th>
+            <th>Datasets</th>
+            <th style="text-align:right;">Azioni</th>
           </tr>
         </thead>
         <tbody>
@@ -2368,12 +2372,23 @@ function renderRing() {
             const mAddr = m.address || m.Address || '100.64.0.x';
             const mQuota = m.quota_gb !== undefined ? m.quota_gb : (m.QuotaGB || 500);
             const mData = m.datasets || m.Datasets || [];
+            const isSelf = (mId === localNodeName);
             return `
               <tr>
                 <td><strong>${mId}</strong></td>
+                <td>${isSelf ? '<span class=\"badge badge-info\">Nodo Locale</span>' : '<span class=\"badge badge-success\">Vault Remoto</span>'}</td>
                 <td><code>${mAddr}</code></td>
                 <td>${mQuota} GB</td>
                 <td>${mData.length}</td>
+                <td style=\"text-align:right;\">
+                  ${!isSelf ? `
+                    <button class=\"btn btn-sm btn-outline-danger\" onclick=\"removeRingMember('${mId}')\" style=\"padding: 2px 8px; font-size: 11px;\" title=\"Rimuovi dal Ring\">
+                      🗑️ Rimuovi
+                    </button>
+                  ` : `
+                    <span style=\"color:var(--text-muted); font-size:11.5px;\">(Master)</span>
+                  `}
+                </td>
               </tr>
             `;
           }).join('')}
@@ -2922,9 +2937,10 @@ function renderResilience() {
         simulateBtn.style.opacity = '1';
         simulateBtn.title = '';
       }
+      const localNodeName = currentRing.local_node || (currentStatus ? currentStatus.node_name : '') || 'allod-node';
       Object.values(currentRing.members).forEach(m => {
         const mId = m.id || m.ID;
-        const isSelf = currentStatus && mId === currentStatus.node_name;
+        const isSelf = (mId === localNodeName);
         if (!isSelf) {
           const opt = document.createElement('option');
           opt.value = mId;
@@ -7289,3 +7305,25 @@ function updateVaultVpsCommandDisplay() {
   }
 }
 window.updateVaultVpsCommandDisplay = updateVaultVpsCommandDisplay;
+
+// ==============================================================================
+// RING MEMBER REMOVAL
+// ==============================================================================
+async function removeRingMember(memberId) {
+  if (!confirm(`Sei sicuro di voler rimuovere il vault remoto '${memberId}' dal Ring federato?`)) {
+    return;
+  }
+  try {
+    const res = await apiPost('/api/ring/remove', { member: memberId });
+    if (res && res.status === 'ok') {
+      showAlert(res.message || `Membro '${memberId}' rimosso con successo`, 'success');
+      if (typeof loadRing === 'function') loadRing();
+      if (typeof loadStatus === 'function') loadStatus();
+    } else {
+      showAlert((res && res.message) ? res.message : 'Errore durante la rimozione', 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di comunicazione: ' + err.message, 'danger');
+  }
+}
+window.removeRingMember = removeRingMember;
