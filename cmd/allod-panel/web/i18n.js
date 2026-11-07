@@ -266,6 +266,8 @@ const i18n = {
     btn_lock: "Lock",
     btn_reset: "Reset",
     btn_open_web: "Open Web Interface",
+    btn_create_master_account: "Create Master Account (First Setup)",
+    vaultwarden_setup_hint: "First time here? Click 'Create Master Account' to register your admin user and set your master password.",
 
     label_level: "Level:",
     label_userns: "UserNS:",
@@ -754,6 +756,8 @@ const i18n = {
     btn_lock: "Blocca",
     btn_reset: "Ripristina",
     btn_open_web: "Apri interfaccia web",
+    btn_create_master_account: "Crea Account Master (Prima Configurazione)",
+    vaultwarden_setup_hint: "Prima installazione? Clicca 'Crea Account Master' per registrare il tuo utente principale e impostare la master password.",
 
     label_level: "Livello:",
     label_userns: "UserNS:",

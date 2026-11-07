@@ -483,11 +483,21 @@ function renderLaunchpad() {
         </div>
       `;
     } else if (isRunning && app.url) {
+      const isVwLaunchpadUnregistered = (app.id === 'passwords' && !localStorage.getItem('allod_vw_registered'));
       actionButtons = `
         <div class="launchpad-actions">
-          <a href="${app.url}" target="_blank" rel="noopener noreferrer" class="launchpad-btn-primary">
-            ${app.primaryActionText} ↗
-          </a>
+          ${isVwLaunchpadUnregistered ? `
+            <button type="button" class="launchpad-btn-primary" onclick="openVaultwardenRegistration('${app.url}/#/register')" style="background:var(--success, #10b981); color:#fff; font-weight:700;">
+              ✨ ${t('btn_create_master_account', 'Crea Account Master')} ↗
+            </button>
+            <a href="${app.url}" target="_blank" rel="noopener noreferrer" class="launchpad-btn-secondary" style="text-align:center; text-decoration:none;">
+              ${app.primaryActionText}
+            </a>
+          ` : `
+            <a href="${app.url}" target="_blank" rel="noopener noreferrer" class="launchpad-btn-primary">
+              ${app.primaryActionText} ↗
+            </a>
+          `}
           ${app.path ? `
             <button type="button" class="launchpad-btn-secondary" onclick="copyLaunchpadText('${app.path}', this)">
               ${app.secondaryActionText}
@@ -1781,7 +1791,19 @@ function createModuleCard(mod) {
           <button class="btn btn-sm btn-secondary" onclick="fetchOdysseusTempPassword(this)" style="padding:7px 12px; font-size:12px; font-weight:600;">🔑 Password</button>
         `;
       } else if (tech.linkPort) {
-        primaryActionBtn = `<a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" class="btn btn-sm btn-primary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none; padding:7px 12px; font-weight:600;">🌐 ${t('btn_open_app', 'Apri')} ↗</a>`;
+        const isVwUnregistered = (mod.id === 'passwords' && !localStorage.getItem('allod_vw_registered'));
+        if (isVwUnregistered) {
+          primaryActionBtn = `
+            <button type="button" class="btn btn-sm btn-success" onclick="openVaultwardenRegistration('${tech.linkProtocol}://${host}:${tech.linkPort}/#/register')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:7px 12px; font-weight:700;" title="${t('vaultwarden_setup_hint')}">
+              ✨ ${t('btn_create_master_account', 'Crea Account Master')} ↗
+            </button>
+            <a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" class="btn btn-sm btn-outline-secondary" style="display:flex; align-items:center; justify-content:center; padding:7px 10px; font-size:11.5px; text-decoration:none;" title="${t('btn_open_app', 'Apri')}">
+              🌐 ${t('btn_open_app', 'Apri')}
+            </a>
+          `;
+        } else {
+          primaryActionBtn = `<a href="${tech.linkProtocol}://${host}:${tech.linkPort}" target="_blank" class="btn btn-sm btn-primary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none; padding:7px 12px; font-weight:600;">🌐 ${t('btn_open_app', 'Apri')} ↗</a>`;
+        }
       } else if (mod.id === 'shares') {
         primaryActionBtn = `<button class="btn btn-sm btn-primary" onclick="openSmbPasswordModal()" style="flex:1; padding:7px 12px; font-size:12px; font-weight:600;">🔑 ${t('btn_smb_password', 'Password SMB')}</button>`;
       } else if (mod.id === 'backup') {
@@ -7244,3 +7266,13 @@ window.copyWindowsPowerShellCommand = copyWindowsPowerShellCommand;
 window.copyPkiPemText = copyPkiPemText;
 
 
+
+// Vaultwarden first-setup onboarding helper
+function openVaultwardenRegistration(url) {
+  try {
+    localStorage.setItem('allod_vw_registered', 'true');
+  } catch (e) {}
+  window.open(url, '_blank', 'noopener,noreferrer');
+  if (typeof renderModules === 'function') renderModules();
+  if (typeof renderLaunchpad === 'function') renderLaunchpad();
+}
