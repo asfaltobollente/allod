@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -88,11 +89,17 @@ func (m *Manager) EnsureRootCA() error {
 		return fmt.Errorf("failed to generate Root CA serial number: %w", err)
 	}
 
+	var rootSKID []byte
+	if pubDER, errPK := x509.MarshalPKIXPublicKey(&privKey.PublicKey); errPK == nil {
+		h := sha1.Sum(pubDER)
+		rootSKID = h[:]
+	}
+
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			CommonName:   "Allod Sovereign Family Root CA",
-			Organization: []string{"Allod Sovereign NAS"},
+			CommonName:         "Allod Sovereign Family Root CA",
+			Organization:       []string{"Allod Sovereign NAS"},
 			OrganizationalUnit: []string{"Security & Privacy"},
 		},
 		NotBefore:             time.Now().Add(-1 * time.Hour),
@@ -101,6 +108,7 @@ func (m *Manager) EnsureRootCA() error {
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 		MaxPathLenZero:        false,
+		SubjectKeyId:          rootSKID,
 	}
 
 	caDER, err := x509.CreateCertificate(rand.Reader, template, template, &privKey.PublicKey, privKey)
@@ -152,9 +160,6 @@ func CollectServerSANs() (ips []net.IP, dnsNames []string) {
 	// Detect all active interface IPs (LAN ethernet/wifi, WireGuard wt0, etc.)
 	if ifaces, err := net.Interfaces(); err == nil {
 		for _, iface := range ifaces {
-			if iface.Flags&net.FlagUp == 0 {
-				continue
-			}
 			if addrs, err := iface.Addrs(); err == nil {
 				for _, addr := range addrs {
 					var ip net.IP
@@ -190,7 +195,7 @@ func CollectServerSANs() (ips []net.IP, dnsNames []string) {
 
 // EnsureServerCert ensures that a 90-day server certificate exists, is signed by the Root CA,
 // covers all current SANs (LAN IP + Mesh IP + allod.local), and has more than 30 days of runway remaining.
-// If expiring soon or missing, it automatically regenerates and signs a fresh 90-day certificate.
+// If expiring soon, missing SANs, or missing fullchain bundle, it automatically regenerates.
 func (m *Manager) EnsureServerCert() error {
 	if err := m.EnsureRootCA(); err != nil {
 		return err
@@ -204,16 +209,25 @@ func (m *Manager) EnsureServerCert() error {
 
 	ips, dnsNames := CollectServerSANs()
 
-	// Check existing server cert validity and SAN coverage
+	// Check existing server cert validity, fullchain presence, and SAN coverage
 	if certBytes, err := os.ReadFile(srvCertPath); err == nil {
 		if keyBytes, errK := os.ReadFile(srvKeyPath); errK == nil {
-			blockCert, _ := pem.Decode(certBytes)
+			blockCert, rest := pem.Decode(certBytes)
 			blockKey, _ := pem.Decode(keyBytes)
 			if blockCert != nil && blockKey != nil {
 				parsedCert, errP := x509.ParseCertificate(blockCert.Bytes)
 				parsedKey, errPK := x509.ParseECPrivateKey(blockKey.Bytes)
-				// Require at least 25 days before expiration (standard 90-day cycle with auto-renewal at ~65 days)
-				if errP == nil && errPK == nil && time.Now().Add(25*24*time.Hour).Before(parsedCert.NotAfter) {
+
+				// Verify full chain is present in file (contains root CA as second block for Android/mobile trust)
+				hasFullChain := false
+				if len(rest) > 0 {
+					if block2, _ := pem.Decode(rest); block2 != nil {
+						hasFullChain = true
+					}
+				}
+
+				// Require at least 25 days before expiration, fullchain present, and all required SANs
+				if errP == nil && errPK == nil && hasFullChain && time.Now().Add(25*24*time.Hour).Before(parsedCert.NotAfter) {
 					// Verify that current primary IP is included in SANs
 					hasAllSANs := true
 					existingIPs := make(map[string]bool)
@@ -251,18 +265,35 @@ func (m *Manager) EnsureServerCert() error {
 		return fmt.Errorf("failed to generate server cert serial number: %w", err)
 	}
 
+	// Compute SubjectKeyId and AuthorityKeyId per RFC 5280 for mobile (Android/iOS) path validation
+	var srvSKID []byte
+	if pubDER, errPK := x509.MarshalPKIXPublicKey(&privKey.PublicKey); errPK == nil {
+		h := sha1.Sum(pubDER)
+		srvSKID = h[:]
+	}
+
+	var authKeyID []byte
+	if len(m.rootCert.SubjectKeyId) > 0 {
+		authKeyID = m.rootCert.SubjectKeyId
+	} else if rootPubDER, errRP := x509.MarshalPKIXPublicKey(m.rootCert.PublicKey); errRP == nil {
+		h := sha1.Sum(rootPubDER)
+		authKeyID = h[:]
+	}
+
 	template := &x509.Certificate{
-		SerialNumber: serialNumber,
+		SerialNumber:   serialNumber,
 		Subject: pkix.Name{
 			CommonName:   "allod.local",
 			Organization: []string{"Allod Sovereign NAS"},
 		},
-		NotBefore:    time.Now().Add(-1 * time.Hour),
-		NotAfter:     time.Now().Add(90 * 24 * time.Hour), // 90 days validity (standard modern TLS lifecycle)
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-		IPAddresses:  ips,
-		DNSNames:     dnsNames,
+		NotBefore:      time.Now().Add(-1 * time.Hour),
+		NotAfter:       time.Now().Add(90 * 24 * time.Hour), // 90 days validity (standard modern TLS lifecycle)
+		KeyUsage:       x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:    []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		IPAddresses:    ips,
+		DNSNames:       dnsNames,
+		SubjectKeyId:   srvSKID,
+		AuthorityKeyId: authKeyID,
 	}
 
 	srvDER, err := x509.CreateCertificate(rand.Reader, template, m.rootCert, &privKey.PublicKey, m.rootKey)
@@ -277,21 +308,30 @@ func (m *Manager) EnsureServerCert() error {
 	}
 	srvKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 
-	if err := os.WriteFile(srvCertPath, srvCertPEM, 0644); err != nil {
+	// Bundle Full Chain (Server Leaf + Root CA) required by Android Conscrypt & mobile browsers
+	caCertPath := filepath.Join(m.cfg.StorageDir, "allod-root-ca.crt")
+	rootCertPEM, _ := os.ReadFile(caCertPath)
+	if len(rootCertPEM) == 0 && m.rootCert != nil {
+		rootCertPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: m.rootCert.Raw})
+	}
+	fullChainPEM := append(srvCertPEM, rootCertPEM...)
+
+	if err := os.WriteFile(srvCertPath, fullChainPEM, 0644); err != nil {
 		return fmt.Errorf("failed to save server certificate: %w", err)
 	}
 	if err := os.WriteFile(srvKeyPath, srvKeyPEM, 0600); err != nil {
 		return fmt.Errorf("failed to save server private key: %w", err)
 	}
+	_ = os.WriteFile(filepath.Join(m.cfg.StorageDir, "fullchain.pem"), fullChainPEM, 0644)
 
 	parsedCert, _ := x509.ParseCertificate(srvDER)
 	m.serverCert = parsedCert
 	m.serverKey = privKey
-	if tlsC, errT := tls.X509KeyPair(srvCertPEM, srvKeyPEM); errT == nil {
+	if tlsC, errT := tls.X509KeyPair(fullChainPEM, srvKeyPEM); errT == nil {
 		m.tlsCert = &tlsC
 	}
 
-	log.Printf("[PKI] Generated & Signed 90-Day TLS Server Certificate (valid until %s, SANs: %d IPs, %d DNS)",
+	log.Printf("[PKI] Generated & Signed 90-Day TLS Server Certificate (valid until %s, SANs: %d IPs, %d DNS, fullchain: yes)",
 		template.NotAfter.Format("2006-01-02"), len(ips), len(dnsNames))
 	return nil
 }

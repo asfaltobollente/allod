@@ -55,13 +55,28 @@ func TestPKIManagerLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read server cert: %v", err)
 	}
-	block, _ := pem.Decode(srvPEM)
+	block, rest := pem.Decode(srvPEM)
 	if block == nil {
 		t.Fatalf("failed to decode server cert pem")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		t.Fatalf("failed to parse server cert: %v", err)
+	}
+
+	// Verify fullchain in server.crt
+	block2, _ := pem.Decode(rest)
+	if block2 == nil {
+		t.Fatalf("expected server.crt to contain full chain (2 PEM blocks), but only 1 found")
+	}
+	if len(cert.AuthorityKeyId) == 0 {
+		t.Fatalf("expected server cert to have AuthorityKeyId per RFC 5280")
+	}
+
+	// Verify fullchain.pem exists
+	fullchainPath := filepath.Join(tmpDir, "fullchain.pem")
+	if _, err := os.Stat(fullchainPath); err != nil {
+		t.Fatalf("fullchain.pem was not created: %v", err)
 	}
 
 	// Verify signed by Root CA
