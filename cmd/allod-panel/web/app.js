@@ -1544,7 +1544,7 @@ function createModuleCard(mod) {
     if (mod.runtime_status === 'running' || elapsed > 25000) {
       startingModules.delete(mod.id);
     } else {
-      statusBadge = `<span class="badge badge-info" style="opacity:0.9;">⏳ ${t('status_starting')}</span>`;
+      statusBadge = `<span class="badge badge-info" style="opacity:0.9;">${t('status_starting')}</span>`;
       actionButtons = `
         <button class="btn btn-sm btn-secondary" disabled style="opacity:0.65; cursor:wait; padding:2px 10px; font-size:11px; margin-left:8px;">${t('status_starting')}</button>
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
@@ -1773,7 +1773,7 @@ function createModuleCard(mod) {
     const isRunning = (mod.runtime_status === 'running' || (mod.id === 'storage' && mod.is_on_nas_pool));
 
     if (isStarting) {
-      primaryActionBtn = `<button class="btn btn-sm btn-secondary" disabled style="flex:1; opacity:0.75; cursor:wait; padding:7px 12px; font-size:12px; font-weight:600;">⏳ ${t('status_starting', 'Avvio in corso...')}</button>`;
+      primaryActionBtn = `<button class="btn btn-sm btn-secondary" disabled style="flex:1; opacity:0.75; cursor:wait; padding:7px 12px; font-size:12px; font-weight:600;">${t('status_starting', '⏳ Avvio in corso...')}</button>`;
     } else if (isRunning) {
       if (mod.id === 'odysseus') {
         primaryActionBtn = `
