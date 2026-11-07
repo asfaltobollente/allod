@@ -2462,11 +2462,13 @@ sudo systemctl enable --now allod-helperd</pre>
         <button type="button" class="btn btn-sm" id="btn-tab-vault-vps" onclick="switchVaultTab('vps')" style="padding:6px 14px; font-size:12px; font-weight:700; background:var(--primary); color:#000; border-radius:6px;">
           ⚡ Opzione 1: Script VPS (One-Liner)
         </button>
-        <button type="button" class="btn btn-sm" id="btn-tab-vault-appliance" onclick="switchVaultTab('appliance')" style="padding:6px 14px; font-size:12px; font-weight:700; background:transparent; color:var(--text-muted); border-radius:6px;">
-          💾 Opzione 2: Appliance Mini-PC (USB / SD)
+        <button type="button" class="btn btn-sm" id="btn-tab-vault-appliance" onclick="switchVaultTab('appliance')" style="padding:6px 14px; font-size:12px; font-weight:700; background:transparent; color:var(--text-muted); border-radius:6px; display:inline-flex; align-items:center; gap:6px;">
+          <span>💾 Opzione 2: Appliance Mini-PC (USB / SD)</span>
+          <span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:800; font-size:9.5px; padding:2px 5px; border-radius:4px; letter-spacing:0.5px;">BETA</span>
         </button>
-        <button type="button" class="btn btn-sm" id="btn-tab-vault-docker" onclick="switchVaultTab('docker')" style="padding:6px 14px; font-size:12px; font-weight:700; background:transparent; color:var(--text-muted); border-radius:6px;">
-          📦 Opzione 3: Docker Compose (NAS / Synology)
+        <button type="button" class="btn btn-sm" id="btn-tab-vault-docker" onclick="switchVaultTab('docker')" style="padding:6px 14px; font-size:12px; font-weight:700; background:transparent; color:var(--text-muted); border-radius:6px; display:inline-flex; align-items:center; gap:6px;">
+          <span>📦 Opzione 3: Docker Compose (NAS / Synology)</span>
+          <span class="badge" style="background:#f59e0b; color:#0f172a; font-weight:800; font-size:9.5px; padding:2px 5px; border-radius:4px; letter-spacing:0.5px;">BETA</span>
         </button>
       </div>
 
@@ -2808,9 +2810,9 @@ restic -r rest:http://&lt;ip_wireguard_amico&gt;:8000/ restore latest --target /
   <!-- Floating Telemetry Chart Tooltip -->
   <div id="metrics-chart-tooltip" class="metrics-tooltip hidden"></div>
 
-  <script src="qrcode.js?v=3.9"></script>
-  <script src="i18n.js?v=3.9"></script>
-  <script src="app.js?v=3.9"></script>
-  <script type="module" src="network.js?v=3.9"></script>
+  <script src="qrcode.js?v=3.10"></script>
+  <script src="i18n.js?v=3.10"></script>
+  <script src="app.js?v=3.10"></script>
+  <script type="module" src="network.js?v=3.10"></script>
 </body>
 </html>
