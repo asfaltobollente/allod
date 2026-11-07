@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/asfaltobollente/allod/internal/backup"
 	"github.com/asfaltobollente/allod/internal/cloudinit"
 	"github.com/asfaltobollente/allod/internal/config"
 	"github.com/asfaltobollente/allod/internal/helper"
@@ -999,6 +1001,113 @@ var ringAddCmd = &cobra.Command{
 	},
 }
 
+// Backup CLI commands
+var backupCmd = &cobra.Command{
+	Use:   "backup",
+	Short: "Gestione e monitoraggio dei backup cifrati verso i vault remoti",
+}
+
+var backupStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Visualizza lo stato dei backup e dei repository remoti",
+	Run: func(cmd *cobra.Command, args []string) {
+		engine := backup.NewEngine(stateDB, cfgFile, ringFile)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		st, err := engine.GetStatus(ctx)
+		if err != nil {
+			fmt.Printf("Errore recupero stato backup: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("======================================================")
+		fmt.Println("         ALLOD SOVEREIGN BACKUP & VAULT STATUS        ")
+		fmt.Println("======================================================")
+		if st.RemotePeerName != "" {
+			fmt.Printf("Vault Remoto:            %s (%s:%d)\n", st.RemotePeerName, st.RemoteAddress, st.RemotePort)
+		} else {
+			fmt.Println("Vault Remoto:            Nessun peer remoto configurato nel Ring")
+		}
+		fmt.Printf("Stato Sincronizzazione:  %s\n", strings.ToUpper(st.LastStatus))
+		if st.IsRunning {
+			fmt.Printf("Azione in corso:         %s (%s)\n", st.CurrentAction, st.CurrentProgress)
+		}
+		if st.LastRun != "" {
+			fmt.Printf("Ultimo Backup Eseguito:  %s\n", st.LastRun)
+		}
+		if st.LastError != "" {
+			fmt.Printf("Ultimo Errore:           %s\n", st.LastError)
+		}
+		fmt.Printf("Modalità Cifratura:      %s\n", st.EncryptionMode)
+		fmt.Printf("Client Restic Installato:%v\n", st.HasRestic)
+		fmt.Printf("Snapshot Consolidati:    %d\n", st.TotalSnapshots)
+		if len(st.Snapshots) > 0 {
+			fmt.Println("------------------------------------------------------")
+			fmt.Println("Ultimi Snapshot sul Vault Remoto:")
+			for idx, s := range st.Snapshots {
+				if idx >= 5 {
+					break
+				}
+				fmt.Printf("  • ID: %s | Data: %s | Dimensione: %s\n", s.ShortID, s.TimeFormatted, s.SizeFormatted)
+			}
+		}
+		fmt.Println("======================================================")
+	},
+}
+
+var backupRunCmd = &cobra.Command{
+	Use:   "run",
+	Short: "Esegue una sincronizzazione immediata verso il vault remoto",
+	Run: func(cmd *cobra.Command, args []string) {
+		engine := backup.NewEngine(stateDB, cfgFile, ringFile)
+		ctx := context.Background()
+
+		fmt.Println("🚀 Avvio backup cifrato verso il vault remoto...")
+		err := engine.Run(ctx, func(action, progress string) {
+			fmt.Printf("\r\033[K[%s] %s", progress, action)
+		})
+		fmt.Println()
+		if err != nil {
+			fmt.Printf("\n❌ Errore durante il backup: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Backup completato con successo sul vault remoto!")
+	},
+}
+
+var backupListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Elenca gli snapshot storici archiviati nel vault remoto",
+	Run: func(cmd *cobra.Command, args []string) {
+		engine := backup.NewEngine(stateDB, cfgFile, ringFile)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		st, err := engine.GetStatus(ctx)
+		if err != nil {
+			fmt.Printf("Errore recupero snapshot: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(st.Snapshots) == 0 {
+			fmt.Println("Nessuno snapshot trovato sul vault remoto.")
+			return
+		}
+
+		fmt.Printf("Trovati %d snapshot immutabili su %s:\n", len(st.Snapshots), st.RemotePeerName)
+		fmt.Printf("%-10s  %-20s  %-12s  %s\n", "ID", "DATA / ORA", "DIMENSIONE", "PERCORSI")
+		fmt.Println(strings.Repeat("-", 70))
+		for _, s := range st.Snapshots {
+			pathsStr := strings.Join(s.Paths, ", ")
+			if len(pathsStr) > 30 {
+				pathsStr = pathsStr[:27] + "..."
+			}
+			fmt.Printf("%-10s  %-20s  %-12s  %s\n", s.ShortID, s.TimeFormatted, s.SizeFormatted, pathsStr)
+		}
+	},
+}
+
 // sbomCmd per M7 (Cyber Resilience Act SBOM)
 var sbomCmd = &cobra.Command{
 	Use:   "sbom",
@@ -1572,6 +1681,11 @@ func init() {
 	topCmd.Flags().StringVarP(&topSort, "sort", "s", "cpu", "Criterio di ordinamento: 'cpu' oppure 'mem'")
 	topCmd.Flags().BoolVarP(&topWatch, "watch", "w", false, "Modalità continua con aggiornamento ogni 2 secondi")
 	rootCmd.AddCommand(topCmd)
+
+	backupCmd.AddCommand(backupStatusCmd)
+	backupCmd.AddCommand(backupRunCmd)
+	backupCmd.AddCommand(backupListCmd)
+	rootCmd.AddCommand(backupCmd)
 
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(storageCmd)

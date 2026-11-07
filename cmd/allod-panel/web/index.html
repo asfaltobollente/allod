@@ -757,6 +757,69 @@ systemctl --user enable --now allod-panel</pre>
             </div>
           </div>
         </div>
+
+        <!-- Live Backup Synchronization & Vault Snapshots -->
+        <div class="card mt-4" id="card-backup-live-sync">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h3 style="display:flex; align-items:center; gap:8px;">
+                <span>🛡️</span> <span>Sincronizzazione Attiva & Snapshot nel Vault Remoto</span>
+              </h3>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                Punti di ripristino storici consolidati nel repository crittografato (Zero-Knowledge AES-256)
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span id="backup-status-pill" class="badge badge-secondary">Verifica in corso...</span>
+              <button class="btn btn-primary btn-sm" id="btn-trigger-backup" onclick="triggerManualBackup()" style="display:inline-flex; align-items:center; gap:6px;">
+                <span>🚀</span> <span>Esegui Backup Ora</span>
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="loadBackupLiveStatus(true)" title="Ricarica lista snapshot">
+                🔄
+              </button>
+            </div>
+          </div>
+          <div class="card-body" style="padding:16px;">
+            <!-- Active Progress Banner (visible during transfer) -->
+            <div id="backup-active-banner" class="hidden mb-3" style="background:rgba(14,165,233,0.1); border:1px solid rgba(14,165,233,0.25); border-radius:8px; padding:12px 14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="spinner" style="width:14px; height:14px; border-width:2px;"></span>
+                  <strong style="color:var(--primary); font-size:13px;" id="backup-active-action">Invio in corso...</strong>
+                </div>
+                <span style="font-size:12px; font-weight:700; color:var(--primary);" id="backup-active-pct">0%</span>
+              </div>
+              <div style="height:6px; background:rgba(30,41,59,0.8); border-radius:3px; overflow:hidden;">
+                <div id="backup-active-bar" style="height:100%; width:0%; background:var(--primary); transition:width 0.3s ease;"></div>
+              </div>
+            </div>
+
+            <!-- Metadata Stats Bar -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:16px; padding:12px; background:rgba(15,23,42,0.45); border:1px solid var(--card-border); border-radius:8px;">
+              <div>
+                <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted);">Vault di Destinazione</span>
+                <div style="font-size:13px; font-weight:600; color:var(--foreground); margin-top:2px;" id="backup-meta-vault">--</div>
+              </div>
+              <div>
+                <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted);">Ultima Sincronizzazione</span>
+                <div style="font-size:13px; font-weight:600; color:var(--foreground); margin-top:2px;" id="backup-meta-last-run">--</div>
+              </div>
+              <div>
+                <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted);">Snapshot Consolidati</span>
+                <div style="font-size:13px; font-weight:600; color:var(--foreground); margin-top:2px;" id="backup-meta-total-snaps">0</div>
+              </div>
+              <div>
+                <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted);">Protezione Dati</span>
+                <div style="font-size:13px; font-weight:600; color:var(--foreground); margin-top:2px;">Zero-Knowledge AES-256</div>
+              </div>
+            </div>
+
+            <!-- Snapshots Table / Empty State Container -->
+            <div id="backup-snapshots-container">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- TAB 4: RESILIENCE & SIMULATION -->
@@ -2810,9 +2873,9 @@ restic -r rest:http://&lt;ip_wireguard_amico&gt;:8000/ restore latest --target /
   <!-- Floating Telemetry Chart Tooltip -->
   <div id="metrics-chart-tooltip" class="metrics-tooltip hidden"></div>
 
-  <script src="qrcode.js?v=3.11"></script>
-  <script src="i18n.js?v=3.11"></script>
-  <script src="app.js?v=3.11"></script>
-  <script type="module" src="network.js?v=3.11"></script>
+  <script src="qrcode.js?v=3.12"></script>
+  <script src="i18n.js?v=3.12"></script>
+  <script src="app.js?v=3.12"></script>
+  <script type="module" src="network.js?v=3.12"></script>
 </body>
 </html>

@@ -2447,6 +2447,11 @@ function renderRing() {
   if (!window.datasetsTreeLoaded && document.getElementById('ring-datasets-tree')) {
     loadBackupDatasets(false);
   }
+
+  // Auto-load live backup status and remote snapshots
+  if (document.getElementById('card-backup-live-sync')) {
+    loadBackupLiveStatus(false);
+  }
 }
 
 // ============================================================================
@@ -7327,3 +7332,241 @@ async function removeRingMember(memberId) {
   }
 }
 window.removeRingMember = removeRingMember;
+
+// ==============================================================================
+// 16. LIVE BACKUP SYNCHRONIZATION & REMOTE VAULT SNAPSHOTS
+// ==============================================================================
+
+let backupPollingTimer = null;
+
+async function loadBackupLiveStatus(force = false) {
+  const container = document.getElementById('backup-snapshots-container');
+  const pill = document.getElementById('backup-status-pill');
+  const vaultMeta = document.getElementById('backup-meta-vault');
+  const lastRunMeta = document.getElementById('backup-meta-last-run');
+  const totalSnapsMeta = document.getElementById('backup-meta-total-snaps');
+  const btn = document.getElementById('btn-trigger-backup');
+  const activeBanner = document.getElementById('backup-active-banner');
+  const activeAction = document.getElementById('backup-active-action');
+  const activePct = document.getElementById('backup-active-pct');
+  const activeBar = document.getElementById('backup-active-bar');
+
+  if (!container) return;
+
+  if (force && container) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:28px; color:var(--text-muted);">
+        <span class="spinner" style="width:16px; height:16px; border-width:2px;"></span>
+        <div style="margin-top:8px; font-size:12.5px;">Interrogazione repository crittografico nel vault...</div>
+      </div>
+    `;
+  }
+
+  try {
+    const res = await apiGet('/api/backup/status');
+    if (!res || res.status !== 'ok' || !res.data) {
+      if (pill) {
+        pill.className = 'badge badge-danger';
+        pill.textContent = 'Errore Stato';
+      }
+      return;
+    }
+
+    const d = res.data;
+
+    // 1. Vault metadata
+    if (vaultMeta) {
+      if (d.remote_peer_name) {
+        vaultMeta.innerHTML = `<strong>${d.remote_peer_name}</strong> <span style="font-size:11.5px; color:var(--text-muted); font-family:monospace;">(${d.remote_address || '100.64.0.x'})</span>`;
+      } else {
+        vaultMeta.innerHTML = `<span style="color:var(--text-muted); font-style:italic;">Nessun vault configurato</span>`;
+      }
+    }
+
+    if (lastRunMeta) {
+      if (d.last_run) {
+        try {
+          const dt = new Date(d.last_run);
+          lastRunMeta.textContent = dt.toLocaleString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        } catch (_) {
+          lastRunMeta.textContent = d.last_run;
+        }
+      } else {
+        lastRunMeta.textContent = 'Nessuna sincronizzazione';
+      }
+    }
+
+    if (totalSnapsMeta) {
+      totalSnapsMeta.textContent = d.total_snapshots !== undefined ? d.total_snapshots : (d.snapshots ? d.snapshots.length : 0);
+    }
+
+    // 2. Active Run Banner & Pill Status
+    if (d.is_running) {
+      if (pill) {
+        pill.className = 'badge badge-warning';
+        pill.innerHTML = `<span class="spinner" style="width:10px; height:10px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:4px;"></span> In Sincronizzazione`;
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span> <span>Backup in corso...</span>`;
+      }
+      if (activeBanner) {
+        activeBanner.classList.remove('hidden');
+        if (activeAction) activeAction.textContent = d.current_action || 'Invio snapshot in corso...';
+        const progStr = d.current_progress || '0%';
+        if (activePct) activePct.textContent = progStr;
+        if (activeBar) {
+          const match = progStr.match(/(\\d+)%/);
+          const pct = match ? match[1] : 35;
+          activeBar.style.width = pct + '%';
+        }
+      }
+
+      // Schedule next polling tick
+      if (!backupPollingTimer) {
+        backupPollingTimer = setTimeout(() => {
+          backupPollingTimer = null;
+          loadBackupLiveStatus(false);
+        }, 2000);
+      }
+    } else {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🚀</span> <span>Esegui Backup Ora</span>`;
+      }
+      if (activeBanner) {
+        activeBanner.classList.add('hidden');
+      }
+
+      if (pill) {
+        if (d.last_status === 'success') {
+          pill.className = 'badge badge-success';
+          pill.textContent = '● Protetto';
+        } else if (d.last_status === 'error') {
+          pill.className = 'badge badge-danger';
+          pill.textContent = '● Errore Backup';
+        } else {
+          pill.className = 'badge badge-secondary';
+          pill.textContent = '○ Nessun backup eseguito';
+        }
+      }
+
+      if (backupPollingTimer) {
+        clearTimeout(backupPollingTimer);
+        backupPollingTimer = null;
+      }
+    }
+
+    // 3. Render Snapshots Table or Empty State
+    const snaps = d.snapshots || [];
+    if (snaps.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:32px 16px; background:rgba(30,41,59,0.3); border-radius:8px; border:1px dashed var(--card-border);">
+          <div style="font-size:32px; margin-bottom:8px;">📦</div>
+          <h4 style="margin:0 0 4px 0; font-size:15px; font-weight:600;">Nessuno snapshot archiviato nel vault remoto</h4>
+          <p style="font-size:12.5px; color:var(--text-muted); max-width:480px; margin:0 auto 16px auto;">
+            I tuoi dataset selezionati non sono ancora stati consolidati su <strong>${d.remote_peer_name || 'vault remoto'}</strong>.<br>
+            Clicca sul pulsante qui sotto per avviare il primo salvataggio crittografato e creare un punto di ripristino immutabile.
+          </p>
+          <button class="btn btn-primary btn-sm" onclick="triggerManualBackup()" ${d.is_running ? 'disabled' : ''}>
+            🚀 Avvia il Primo Backup Adesso
+          </button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div style="overflow-x:auto;">
+          <table class="data-table" style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="width:120px;">ID Snapshot</th>
+                <th style="width:180px;">Data & Ora</th>
+                <th style="width:120px;">Dimensione</th>
+                <th style="width:100px;">File Totali</th>
+                <th>Percorsi / Dataset Inclusi</th>
+                <th style="width:110px; text-align:right;">Stato Integrità</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${snaps.map((s, idx) => {
+                const isLatest = idx === 0;
+                const pathsClean = (s.paths || []).map(p => {
+                  const parts = p.split('/').filter(Boolean);
+                  return parts[parts.length - 1] || p;
+                }).join(', ');
+                return `
+                  <tr>
+                    <td>
+                      <code style="background:rgba(15,23,42,0.8); padding:2px 6px; border-radius:4px; font-size:11.5px; color:var(--primary);">#${s.short_id || (s.id ? s.id.substring(0, 8) : '--------')}</code>
+                      ${isLatest ? '<span class=\"badge badge-info\" style=\"font-size:10px; padding:1px 4px; margin-left:4px;\">Recente</span>' : ''}
+                    </td>
+                    <td style=\"font-size:12.5px; font-weight:500;\">${s.time_formatted || s.time}</td>
+                    <td style=\"font-size:12.5px; font-weight:600;\">${s.size_formatted || '--'}</td>
+                    <td style=\"font-size:12px; color:var(--text-muted);\">${s.files_count || '--'}</td>
+                    <td style=\"font-size:12px; color:var(--text-muted);\" title=\"${(s.paths || []).join('\n')}\">
+                      ${pathsClean || '/mnt/allod-storage'}
+                    </td>
+                    <td style=\"text-align:right;\">
+                      <span class=\"badge badge-success\" style=\"font-size:11px; padding:2px 6px;\">✓ Immutabile</span>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+  } catch (err) {
+    if (container) {
+      container.innerHTML = `
+        <div style="padding:16px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:8px; color:#fca5a5; font-size:13px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong>Errore lettura repository vault:</strong> ${err.message}<br>
+            <span style="font-size:11.5px; color:var(--text-muted);">Verifica che la connessione WireGuard Mesh con il nodo remoto sia attiva.</span>
+          </div>
+          <button class="btn btn-sm btn-outline-danger" onclick="loadBackupLiveStatus(true)">Riprova</button>
+        </div>
+      `;
+    }
+  }
+}
+
+async function triggerManualBackup() {
+  const btn = document.getElementById('btn-trigger-backup');
+  if (btn && btn.disabled) return;
+
+  if (!confirm('Vuoi avviare subito la sincronizzazione crittografata verso il vault remoto?')) {
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:4px;"></span> Avvio...`;
+  }
+
+  try {
+    const res = await apiPost('/api/backup/run', {});
+    if (res && res.status === 'ok') {
+      showAlert(res.message || 'Sincronizzazione avviata con successo!', 'success');
+      setTimeout(() => {
+        loadBackupLiveStatus(false);
+      }, 500);
+    } else {
+      showAlert((res && res.message) ? res.message : 'Errore avvio backup', 'danger');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🚀</span> <span>Esegui Backup Ora</span>`;
+      }
+    }
+  } catch (err) {
+    showAlert('Errore di comunicazione: ' + err.message, 'danger');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span>🚀</span> <span>Esegui Backup Ora</span>`;
+    }
+  }
+}
+
+window.loadBackupLiveStatus = loadBackupLiveStatus;
+window.triggerManualBackup = triggerManualBackup;

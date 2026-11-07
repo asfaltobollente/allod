@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/asfaltobollente/allod/internal/backup"
 	"github.com/asfaltobollente/allod/internal/config"
 	"github.com/asfaltobollente/allod/internal/gateway"
 	"github.com/asfaltobollente/allod/internal/helper"
@@ -41,6 +42,7 @@ import (
 var webFS embed.FS
 
 var validTriadUserRegex = regexp.MustCompile(`^[a-z0-9_.-]+$`)
+var globalBackupEngine = backup.NewEngine(dbPath, "config.yaml", "ring.yaml")
 
 func getGitVersionBuildArgs() []string {
 	cmd := exec.Command("git", "describe", "--tags", "--always", "--dirty")
@@ -5723,6 +5725,53 @@ runcmd:
 			Status:  "ok",
 			Message: fmt.Sprintf("Nessun alert inviato: quota normale (%s, %.1f%%) o notifica già recapitata nell'intervallo di sicurezza.", fc.QuotaStatus, fc.QuotaUsedPercent),
 			Data:    fc,
+		})
+	})
+
+	// 19. API Backup Live Status & Remote Snapshots (GET /api/backup/status)
+	mux.HandleFunc("/api/backup/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		status, err := globalBackupEngine.GetStatus(ctx)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data:   status,
+		})
+	})
+
+	// 20. API Trigger Immediate Backup (POST /api/backup/run)
+	mux.HandleFunc("/api/backup/run", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Asynchronously run backup in background
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+			defer cancel()
+			if err := globalBackupEngine.Run(bgCtx, nil); err != nil {
+				fmt.Printf("[BACKUP] Errore esecuzione backup: %v\n", err)
+			}
+		}()
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Processo di backup cifrato avviato verso il vault remoto.",
 		})
 	})
 

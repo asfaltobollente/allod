@@ -224,6 +224,53 @@ systemctl enable allod-vault.service
 systemctl restart allod-vault.service
 log_ok "Servizio allod-vault.service avviato e abilitato all'avvio del sistema."
 
+# 6b. Creazione utility CLI locale allod-vault
+cat << 'EOF' > /usr/local/bin/allod-vault
+#!/usr/bin/env bash
+# Allod Standalone Vault Helper CLI
+STORAGE_DIR="/var/lib/allod-vault"
+
+case "${1:-status}" in
+  status)
+    echo -e "\033[0;36m====================================================\033[0m"
+    echo -e "\033[1;37m   ALLOD STANDALONE VAULT — DIAGNOSTICA STORAGE     \033[0m"
+    echo -e "\033[0;36m====================================================\033[0m"
+    if systemctl is-active --quiet allod-vault; then
+      echo -e "Servizio Vault:          \033[0;32m● ATTIVO (rest-server in esecuzione)\033[0m"
+    else
+      echo -e "Servizio Vault:          \033[0;31m○ INATTIVO (systemctl start allod-vault)\033[0m"
+    fi
+    echo "Directory Repository:    ${STORAGE_DIR}"
+    
+    USED_BYTES=$(du -sh "${STORAGE_DIR}" 2>/dev/null | awk '{print $1}' || echo "0 B")
+    echo "Spazio Occupato Chunk:   ${USED_BYTES}"
+    
+    FREE_SPACE=$(df -h "${STORAGE_DIR}" 2>/dev/null | awk 'NR==2 {print $4 " liberi di " $2}' || echo "N/D")
+    echo "Spazio Disco Disponibile: ${FREE_SPACE}"
+
+    SNAPSHOT_COUNT=0
+    if [[ -d "${STORAGE_DIR}/snapshots" ]]; then
+      SNAPSHOT_COUNT=$(find "${STORAGE_DIR}/snapshots" -type f 2>/dev/null | wc -l)
+    fi
+    echo -e "Snapshot Consolidati:    \033[1;33m${SNAPSHOT_COUNT}\033[0m"
+    
+    echo -e "\033[0;36m----------------------------------------------------\033[0m"
+    echo "Ultime richieste HTTP ricevute dai nodi Mesh:"
+    journalctl -u allod-vault -n 6 --no-pager 2>/dev/null | tail -n 6
+    echo -e "\033[0;36m====================================================\033[0m"
+    ;;
+  logs)
+    journalctl -u allod-vault -f
+    ;;
+  *)
+    echo "Uso: allod-vault [status|logs]"
+    exit 1
+    ;;
+esac
+EOF
+chmod +x /usr/local/bin/allod-vault
+log_ok "Utility CLI allod-vault installata in /usr/local/bin/allod-vault"
+
 # 7. Annuncio automatico all'Allod Primario (se specificato --peer)
 if [[ -n "$PEER_IP" && -n "$PRIMARY_NODE_IP" ]]; then
   PEER_URL_HOST="$PEER_IP"
@@ -258,8 +305,8 @@ echo -e "  • Quota Riservata:     ${CYAN}${QUOTA_STR}${NC}"
 echo -e "  • Percorso Dati:       ${CYAN}${STORAGE_DIR}${NC}"
 echo -e "  • Modalità Protezione: ${CYAN}Append-Only Immutabile (Anti-Ransomware)${NC}"
 echo ""
-echo "Per verificare lo stato del servizio:"
+echo "Comandi utili per la gestione del Vault:"
+echo "  allod-vault status    # Mostra spazio occupato, snapshot ricevuti e attività"
+echo "  allod-vault logs      # Segui in tempo reale il traffico HTTP in arrivo"
 echo "  sudo systemctl status allod-vault"
-echo "Per visualizzare i log del vault:"
-echo "  sudo journalctl -u allod-vault -f"
 echo ""
