@@ -5120,7 +5120,7 @@ runcmd:
 		}
 
 		// Two-phase bootstrap: install NetBird & join mesh FIRST, THEN fetch install.sh and configure vault
-		scriptCommand := fmt.Sprintf("curl -fsSL https://pkgs.netbird.io/install.sh | sh && sudo netbird up --setup-key \"%s\" && sleep 4 && curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \"http://%s:8080/api/vault/install.sh\" | sudo bash -s -- --name \"%s\" --key \"%s\" --quota \"%dG\" --peer \"%s\" --token \"%s\"",
+		scriptCommand := fmt.Sprintf("curl -fsSL https://pkgs.netbird.io/install.sh | sudo bash && sudo netbird up --setup-key \"%s\" && until ip addr show wt0 2>/dev/null | grep -q \"inet \"; do sleep 1; done && sleep 2 && curl -fsSL --retry 10 --retry-delay 2 --retry-connrefused \"http://%s:8080/api/vault/install.sh\" | sudo bash -s -- --name \"%s\" --key \"%s\" --quota \"%dG\" --peer \"%s\" --token \"%s\"",
 			setupKey, downloadHost, req.Name, setupKey, req.QuotaGB, peerHost, announceToken)
 
 		scriptCommandAlreadyMesh := fmt.Sprintf("curl -fsSL \"http://%s:8080/api/vault/install.sh\" | sudo bash -s -- --name \"%s\" --key \"%s\" --quota \"%dG\" --peer \"%s\" --token \"%s\"",
