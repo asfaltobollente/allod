@@ -7000,7 +7000,7 @@ async function generateVaultArtifacts() {
     const json = await res.json();
     if (json.status === 'ok' && json.data) {
       currentVaultArtifacts = json.data;
-      if (vpsArea) vpsArea.value = json.data.script_command || '';
+      updateVaultVpsCommandDisplay();
       if (cloudInitArea) cloudInitArea.value = json.data.cloud_init || '';
       if (composeArea) composeArea.value = json.data.docker_compose || '';
     } else {
@@ -7276,3 +7276,16 @@ function openVaultwardenRegistration(url) {
   if (typeof renderModules === 'function') renderModules();
   if (typeof renderLaunchpad === 'function') renderLaunchpad();
 }
+
+function updateVaultVpsCommandDisplay() {
+  const vpsArea = document.getElementById('vault-code-vps');
+  const alreadyMeshCheck = document.getElementById('vault-vps-already-mesh');
+  if (!vpsArea || !currentVaultArtifacts) return;
+  const isAlreadyMesh = alreadyMeshCheck ? alreadyMeshCheck.checked : false;
+  if (isAlreadyMesh && currentVaultArtifacts.script_command_mesh_only) {
+    vpsArea.value = currentVaultArtifacts.script_command_mesh_only;
+  } else {
+    vpsArea.value = currentVaultArtifacts.script_command || '';
+  }
+}
+window.updateVaultVpsCommandDisplay = updateVaultVpsCommandDisplay;

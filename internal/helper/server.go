@@ -427,6 +427,31 @@ func GetInterfaceIPv4(ifaceName string) string {
 	return ""
 }
 
+// GetInterfaceIPv6 extracts the first non-loopback global or ULA IPv6 address for a given network interface.
+func GetInterfaceIPv6(ifaceName string) string {
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		return ""
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return ""
+	}
+	for _, a := range addrs {
+		var ip net.IP
+		switch v := a.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip != nil && ip.To4() == nil && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() {
+			return ip.String()
+		}
+	}
+	return ""
+}
+
 func addUserToAllodData(username string) {
 	_ = exec.Command("groupadd", "-f", "allod").Run()
 	_ = exec.Command("groupadd", "-f", "allod-data").Run()

@@ -98,8 +98,8 @@ echo -e "${NC}"
 log_info "Configurazione Vault: Nome='${VAULT_NAME}', Quota='${QUOTA_STR}', Storage='${STORAGE_DIR}'"
 
 # Verifica Setup Key
-if [[ -z "${SETUP_KEY}" ]]; then
-  log_err "Setup Key mancante! Specifica '--key <NETBIRD_SETUP_KEY>'."
+if [[ -z "${SETUP_KEY}" ]] && ! (command -v netbird &>/dev/null && netbird status 2>/dev/null | grep -qi "connected"); then
+  log_err "Setup Key mancante e nodo non connesso a NetBird! Specifica '--key <NETBIRD_SETUP_KEY>'."
   exit 1
 fi
 
@@ -124,31 +124,39 @@ fi
 
 # 3. Connessione a NetBird Mesh con Setup Key
 log_info "Connessione alla rete mesh sovrana..."
-netbird up --setup-key "${SETUP_KEY}" || {
-  log_warn "Tentativo di connessione con setup-key terminato, verifico stato..."
-}
+if [[ -n "${SETUP_KEY}" ]]; then
+  log_info "Connessione alla rete mesh sovrana..."
+  netbird up --setup-key "${SETUP_KEY}" || {
+    log_warn "Tentativo di connessione con setup-key terminato, verifico stato..."
+  }
+else
+  log_info "Nessuna setup-key fornita: utilizzo sessione NetBird già attiva sul nodo..."
+fi
 
 # Attesa interfaccia wt0
 log_info "Attesa inizializzazione interfaccia mesh WireGuard (wt0)..."
 NETBIRD_IP=""
+NETBIRD_IPV6=""
 for i in {1..20}; do
   if ip addr show wt0 &> /dev/null; then
-    NETBIRD_IP=$(ip -4 addr show wt0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
-    if [[ -n "$NETBIRD_IP" ]]; then
+    NETBIRD_IP=$(ip -4 addr show wt0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1 || true)
+    NETBIRD_IPV6=$(ip -6 addr show wt0 scope global 2>/dev/null | grep -oP '(?<=inet6\s)[a-f0-9:]+' | head -n1 || true)
+    if [[ -n "$NETBIRD_IP" || -n "$NETBIRD_IPV6" ]]; then
       break
     fi
   fi
   sleep 1
 done
 
-if [[ -z "$NETBIRD_IP" ]]; then
-  log_err "ERRORE: Impossibile rilevare l'indirizzo IP di NetBird sull'interfaccia wt0."
+if [[ -z "$NETBIRD_IP" && -z "$NETBIRD_IPV6" ]]; then
+  log_err "ERRORE: Impossibile rilevare l'indirizzo IP (IPv4 o IPv6) di NetBird sull'interfaccia wt0."
   log_err "Per ragioni di sicurezza, rest-server non verrà avviato su 0.0.0.0 senza autenticazione."
   log_err "Verifica che il nodo sia connesso alla mesh con: 'netbird status --detail' e riesegui l'installazione."
   exit 1
 fi
 
-log_ok "Connesso alla rete Mesh con IP: ${NETBIRD_IP}"
+PRIMARY_NODE_IP="${NETBIRD_IP:-$NETBIRD_IPV6}"
+log_ok "Connesso alla rete Mesh (IPv4: ${NETBIRD_IP:-'N/D'}, IPv6: ${NETBIRD_IPV6:-'N/D'})"
 
 # 4. Installazione di rest-server
 log_info "Installazione demone rest-server (v${REST_SERVER_VERSION})..."
@@ -186,7 +194,11 @@ SERVICE_FILE="/etc/systemd/system/allod-vault.service"
 log_info "Configurazione servizio systemd (${SERVICE_FILE})..."
 
 # Binda rigorosamente all'IP Mesh NetBird
-LISTEN_ADDR="${NETBIRD_IP}:${LISTEN_PORT}"
+if [[ -n "$NETBIRD_IP" ]]; then
+  LISTEN_ADDR="${NETBIRD_IP}:${LISTEN_PORT}"
+else
+  LISTEN_ADDR="[${NETBIRD_IPV6}]:${LISTEN_PORT}"
+fi
 
 cat << EOF > "$SERVICE_FILE"
 [Unit]
@@ -213,13 +225,16 @@ systemctl restart allod-vault.service
 log_ok "Servizio allod-vault.service avviato e abilitato all'avvio del sistema."
 
 # 7. Annuncio automatico all'Allod Primario (se specificato --peer)
-if [[ -n "$PEER_IP" && -n "$NETBIRD_IP" ]]; then
-  log_info "Invio annuncio al server Allod primario (http://${PEER_IP}:8080)..."
-  # Estrai quota numerica (es. 500G -> 500)
+if [[ -n "$PEER_IP" && -n "$PRIMARY_NODE_IP" ]]; then
+  PEER_URL_HOST="$PEER_IP"
+  if [[ "$PEER_IP" =~ : ]]; then
+    PEER_URL_HOST="[${PEER_IP}]"
+  fi
+  log_info "Invio annuncio al server Allod primario (http://${PEER_URL_HOST}:8080)..."
   QUOTA_NUM=$(echo "$QUOTA_STR" | grep -oP '\d+' || echo "500")
   
-  ANN_PAYLOAD="{\"name\":\"${VAULT_NAME}\",\"address\":\"${NETBIRD_IP}\",\"quota_gb\":${QUOTA_NUM},\"token\":\"${ANNOUNCE_TOKEN}\"}"
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://${PEER_IP}:8080/api/ring/announce" \
+  ANN_PAYLOAD="{\"name\":\"${VAULT_NAME}\",\"address\":\"${PRIMARY_NODE_IP}\",\"quota_gb\":${QUOTA_NUM},\"token\":\"${ANNOUNCE_TOKEN}\"}"
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://${PEER_URL_HOST}:8080/api/ring/announce" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${ANNOUNCE_TOKEN}" \
     -d "$ANN_PAYLOAD" || echo "000")
