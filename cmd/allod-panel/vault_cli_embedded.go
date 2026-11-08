@@ -1,6 +1,6 @@
 package main
 
-const embeddedUpdateVaultCLIScript = `#!/usr/bin/env bash
+const embeddedUpdateVaultCLIScript = `#!/bin/bash
 # ==============================================================================
 # ALLOD STANDALONE VAULT — AGGIORNAMENTO CLI ONE-LINER
 # Scarica e installa l'ultima versione di allod-vault dal nodo Allod primario
@@ -57,8 +57,9 @@ echo -e "[ALLOD] Download CLI aggiornata da \033[1;36mhttp://${PRIMARY_HOST}/api
 TMP_FILE=$(mktemp)
 if curl -fsSL --retry 3 --retry-delay 2 "http://${PRIMARY_HOST}/api/vault/cli.sh" -o "${TMP_FILE}"; then
   if head -n 1 "${TMP_FILE}" | grep -q "bash"; then
-    chmod +x "${TMP_FILE}"
+    chmod 755 "${TMP_FILE}"
     mv "${TMP_FILE}" /usr/local/bin/allod-vault
+    chmod 755 /usr/local/bin/allod-vault
     
     PEER_ONLY_IP=$(echo "${PRIMARY_HOST}" | cut -d':' -f1 | tr -d '[]')
     mkdir -p /etc
@@ -80,7 +81,7 @@ else
 fi
 `
 
-const embeddedAllodVaultCLIScript = `#!/usr/bin/env bash
+const embeddedAllodVaultCLIScript = `#!/bin/bash
 # ==============================================================================
 # ALLOD STANDALONE VAULT — DIAGNOSTICA & GESTIONE LOCALE
 # Sovereign Zero-Knowledge Storage Node CLI
@@ -202,8 +203,9 @@ case "${1:-status}" in
     TMP_CLI=$(mktemp)
     if curl -fsSL --retry 3 --retry-delay 1 "http://${PEER_TARGET}:8080/api/vault/cli.sh" -o "$TMP_CLI"; then
       if head -n 1 "$TMP_CLI" | grep -q "bash"; then
-        chmod +x "$TMP_CLI"
+        chmod 755 "$TMP_CLI"
         mv "$TMP_CLI" /usr/local/bin/allod-vault
+        chmod 755 /usr/local/bin/allod-vault
         mkdir -p /etc
         echo "PEER_HOST=\"${PEER_TARGET}\"" > "$CONF_FILE"
         echo -e "\033[0;32m✓ CLI allod-vault aggiornata con successo!\033[0m"

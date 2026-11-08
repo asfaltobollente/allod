@@ -226,7 +226,7 @@ log_ok "Servizio allod-vault.service avviato e abilitato all'avvio del sistema."
 
 # 6b. Creazione utility CLI locale allod-vault
 cat << 'EOF' > /usr/local/bin/allod-vault
-#!/usr/bin/env bash
+#!/bin/bash
 # ==============================================================================
 # ALLOD STANDALONE VAULT — DIAGNOSTICA & GESTIONE LOCALE
 # Sovereign Zero-Knowledge Storage Node CLI
@@ -391,7 +391,7 @@ case "${1:-status}" in
     ;;
 esac
 EOF
-chmod +x /usr/local/bin/allod-vault
+chmod 755 /usr/local/bin/allod-vault
 log_ok "Utility CLI allod-vault installata in /usr/local/bin/allod-vault"
 
 # Salvataggio configurazione peer se specificato
