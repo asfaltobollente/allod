@@ -5885,24 +5885,20 @@ runcmd:
 			return
 		}
 
-		// 2. Direct fallback via sudo apt-get
-		aptBin := "/usr/bin/apt-get"
-		cmdApt := exec.Command("sudo", aptBin, "install", "-y", "-q", "restic")
-		cmdApt.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
-		out, errApt := cmdApt.CombinedOutput()
-		if errApt != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			errMsg := fmt.Sprintf("Installazione automatica fallita: %v (%s). Esegui da terminale: sudo apt update && sudo apt install -y restic", errApt, strings.TrimSpace(string(out)))
-			json.NewEncoder(w).Encode(PanelResponse{
-				Status:  "error",
-				Message: errMsg,
-			})
-			return
+		// If helper is unavailable or outdated, report clean message without failing on non-interactive sudo
+		var helperErr string
+		if err != nil {
+			helperErr = fmt.Sprintf("allod-helperd non raggiungibile (%v)", err)
+		} else if resp.Error != "" {
+			helperErr = fmt.Sprintf("allod-helperd: %s", resp.Error)
+		} else {
+			helperErr = "allod-helperd ha rifiutato l'operazione"
 		}
 
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(PanelResponse{
-			Status:  "ok",
-			Message: "Client restic installato con successo sul sistema!",
+			Status:  "error",
+			Message: fmt.Sprintf("Installazione automatica non disponibile (%s). Il pannello opera in modalità sicura rootless: esegui da terminale SSH su questo server:\n\nsudo apt update && sudo apt install -y restic", helperErr),
 		})
 	})
 
