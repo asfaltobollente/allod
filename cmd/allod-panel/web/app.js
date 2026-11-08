@@ -7600,20 +7600,32 @@ function openVaultCliModal(targetName, targetIp) {
   if (targetNameEl) targetNameEl.textContent = currentVaultCliTarget.name;
   if (targetIpEl) targetIpEl.textContent = currentVaultCliTarget.ip ? ("(" + currentVaultCliTarget.ip + ")") : '';
 
-  // Primary mesh host
-  let primaryHost = '100.100.64.229:8080';
+  // Canonical Primary Mesh IP (must ALWAYS use WireGuard Mesh IP for remote VMs, never local/mDNS names like allod.local)
+  let meshIP = '';
   if (window.lastBackupStatus && window.lastBackupStatus.primary_mesh_ip) {
-    primaryHost = window.lastBackupStatus.primary_mesh_ip + ':8080';
-  } else if (window.location && window.location.host) {
-    primaryHost = window.location.host;
+    meshIP = window.lastBackupStatus.primary_mesh_ip;
   }
+  // Try finding local node's WireGuard mesh address in currentRing
+  if (!meshIP && typeof currentRing !== 'undefined' && currentRing && currentRing.members) {
+    const localNodeName = currentRing.local_node || (currentStatus ? currentStatus.node_name : '') || 'allod-node';
+    const localMember = currentRing.members[localNodeName];
+    if (localMember && localMember.address && (localMember.address.startsWith('100.') || localMember.address.includes(':'))) {
+      meshIP = localMember.address.split(':')[0];
+    }
+  }
+  // If user is currently browsing via a 100.x mesh IP, use that
+  if (!meshIP && window.location && window.location.hostname && (window.location.hostname.startsWith('100.') || window.location.hostname.startsWith('fd'))) {
+    meshIP = window.location.hostname;
+  }
+  if (!meshIP) {
+    meshIP = '100.100.64.229'; // Fallback to verified NetBird mesh IP of primary node
+  }
+
+  const primaryHost = meshIP + ':8080';
   if (primaryIpEl) primaryIpEl.textContent = primaryHost;
 
-  // Dedicated Oneliner
-  let cmd = 'curl -fsSL "http://' + primaryHost + '/api/vault/update-cli.sh" | sudo bash';
-  if (window.lastBackupStatus && window.lastBackupStatus.cli_update_oneliner) {
-    cmd = window.lastBackupStatus.cli_update_oneliner;
-  }
+  // Dedicated Oneliner strictly using the Mesh IP
+  const cmd = 'curl -fsSL "http://' + primaryHost + '/api/vault/update-cli.sh" | sudo bash';
   if (onelinerArea) onelinerArea.value = cmd;
 
   modal.classList.remove('hidden');

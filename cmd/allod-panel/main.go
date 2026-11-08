@@ -320,6 +320,34 @@ func getLocalNetBirdIPv6() string {
 	return ""
 }
 
+// getPrimaryMeshIP returns the canonical NetBird WireGuard Mesh IPv4/IPv6 address of this node.
+// It checks the active wt0 interface, topology settings in ring.yaml, or falls back to standard 100.64.0.1.
+func getPrimaryMeshIP() string {
+	if ip := getLocalNetBirdIP(); ip != "" {
+		return ip
+	}
+	// Check if local node address is stored in ring.yaml
+	cfg, _ := config.LoadConfig(getConfigPath())
+	localName := getLocalNodeName(cfg)
+	if topo, _ := ring.LoadTopology("ring.yaml"); topo != nil && topo.Members != nil {
+		if m, exists := topo.Members[localName]; exists && m != nil && strings.TrimSpace(m.Address) != "" {
+			addr := strings.TrimSpace(m.Address)
+			if strings.HasPrefix(addr, "100.") || strings.Contains(addr, ":") {
+				host := addr
+				if strings.Contains(host, ":") && !strings.HasSuffix(host, "]") {
+					parts := strings.Split(host, ":")
+					host = parts[0]
+				}
+				return host
+			}
+		}
+	}
+	if ip6 := getLocalNetBirdIPv6(); ip6 != "" {
+		return ip6
+	}
+	return "100.64.0.1"
+}
+
 // buildPushEndpoint normalizes VPS host/IP and port into a valid HTTP/HTTPS heartbeat URL.
 func buildPushEndpoint(rawHost string, port int) string {
 	raw := strings.TrimSpace(rawHost)
@@ -5248,11 +5276,8 @@ runcmd:
 			return
 		}
 
-		primaryMeshIP := getLocalNetBirdIP()
+		primaryMeshIP := getPrimaryMeshIP()
 		primaryMeshIPv6 := getLocalNetBirdIPv6()
-		if primaryMeshIP == "" && primaryMeshIPv6 == "" {
-			primaryMeshIP = "100.64.0.1"
-		}
 
 		// Target URL host for downloading installer inside mesh: support IPv6 bracket formatting
 		downloadHost := primaryMeshIP
@@ -5314,13 +5339,11 @@ runcmd:
 	mux.HandleFunc("/api/vault/update-cli.sh", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 
-		primaryMeshIP := getLocalNetBirdIP()
-		host := primaryMeshIP
-		if host == "" {
-			host = "100.64.0.1"
-		}
-		primaryHost := host + ":8080"
-		if r.Host != "" && (strings.HasPrefix(r.Host, "100.") || strings.Contains(r.Host, ":")) {
+		// Always use the WireGuard Mesh IP for remote VMs, never LAN or mDNS names
+		meshIP := getPrimaryMeshIP()
+		primaryHost := meshIP + ":8080"
+		// If request came over WireGuard mesh IP, preserve exact host:port
+		if r.Host != "" && (strings.HasPrefix(r.Host, "100.") || strings.HasPrefix(r.Host, "[fd")) {
 			primaryHost = r.Host
 		}
 
@@ -5786,10 +5809,7 @@ runcmd:
 			return
 		}
 
-		primaryMeshIP := getLocalNetBirdIP()
-		if primaryMeshIP == "" {
-			primaryMeshIP = "100.64.0.1"
-		}
+		primaryMeshIP := getPrimaryMeshIP()
 		status.PrimaryMeshIP = primaryMeshIP
 		status.CLIUpdateOneliner = fmt.Sprintf("curl -fsSL \"http://%s:8080/api/vault/update-cli.sh\" | sudo bash", primaryMeshIP)
 
