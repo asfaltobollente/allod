@@ -2,6 +2,7 @@ package backup
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -42,19 +43,41 @@ type Snapshot struct {
 	FilesCount    int       `json:"files_count,omitempty"`
 }
 
+// LogEntry represents an event or diagnostic step in a backup execution.
+type LogEntry struct {
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"` // "INFO", "WARN", "ERROR", "SUCCESS"
+	Message   string `json:"message"`
+}
+
+// Diagnostics collects preflight checks and historical logs for GUI display.
+type Diagnostics struct {
+	HasRestic      bool       `json:"has_restic"`
+	ResticBin      string     `json:"restic_bin"`
+	RemoteVault    string     `json:"remote_vault"`
+	RemoteAddr     string     `json:"remote_addr"`
+	RemotePort     int        `json:"remote_port"`
+	VaultReachable bool       `json:"vault_reachable"`
+	SelectedPaths  []string   `json:"selected_paths"`
+	LastError      string     `json:"last_error"`
+	LastStatus     string     `json:"last_status"`
+	LastRun        string     `json:"last_run"`
+	Logs           []LogEntry `json:"logs"`
+}
+
 // Status represents the comprehensive backup status across the node and vaults.
 type Status struct {
-	IsRunning       bool       `json:"is_running"`
-	CurrentAction   string     `json:"current_action,omitempty"`
-	CurrentProgress string     `json:"current_progress,omitempty"`
-	LastRun         string     `json:"last_run,omitempty"`
-	LastStatus      string     `json:"last_status"` // "never", "running", "success", "error"
-	LastError       string     `json:"last_error,omitempty"`
-	LastSnapshotID  string     `json:"last_snapshot_id,omitempty"`
-	RemotePeerName  string     `json:"remote_peer_name,omitempty"`
-	RemoteAddress   string     `json:"remote_address,omitempty"`
-	RemotePort      int        `json:"remote_port,omitempty"`
-	SelectedPaths   []string   `json:"selected_paths"`
+	IsRunning         bool       `json:"is_running"`
+	CurrentAction     string     `json:"current_action,omitempty"`
+	CurrentProgress   string     `json:"current_progress,omitempty"`
+	LastRun           string     `json:"last_run,omitempty"`
+	LastStatus        string     `json:"last_status"` // "never", "running", "success", "error"
+	LastError         string     `json:"last_error,omitempty"`
+	LastSnapshotID    string     `json:"last_snapshot_id,omitempty"`
+	RemotePeerName    string     `json:"remote_peer_name,omitempty"`
+	RemoteAddress     string     `json:"remote_address,omitempty"`
+	RemotePort        int        `json:"remote_port,omitempty"`
+	SelectedPaths     []string   `json:"selected_paths"`
 	TotalSnapshots    int        `json:"total_snapshots"`
 	Snapshots         []Snapshot `json:"snapshots"`
 	EncryptionMode    string     `json:"encryption_mode"`
@@ -74,6 +97,7 @@ type Engine struct {
 	currentAction   string
 	currentProgress string
 	lastError       string
+	logs            []LogEntry
 }
 
 // NewEngine initializes a backup coordinator instance.
@@ -315,6 +339,121 @@ func (e *Engine) querySnapshots(ctx context.Context, resticBin, repoURL, passwor
 	return result, nil
 }
 
+// AddLog appends a timestamped log entry to in-memory history and logs to stdout.
+func (e *Engine) AddLog(level, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	entry := LogEntry{
+		Timestamp: time.Now().Format("15:04:05"),
+		Level:     strings.ToUpper(level),
+		Message:   msg,
+	}
+
+	e.mu.Lock()
+	e.logs = append(e.logs, entry)
+	if len(e.logs) > 250 {
+		e.logs = e.logs[len(e.logs)-250:]
+	}
+	e.mu.Unlock()
+
+	fmt.Printf("[BACKUP %s] %s\n", entry.Level, entry.Message)
+}
+
+// GetLogs returns the current run logs, or falls back to persisted logs from database.
+func (e *Engine) GetLogs(st *state.Store) []LogEntry {
+	e.mu.Lock()
+	if len(e.logs) > 0 {
+		res := make([]LogEntry, len(e.logs))
+		copy(res, e.logs)
+		e.mu.Unlock()
+		return res
+	}
+	e.mu.Unlock()
+
+	if st != nil {
+		raw, err := st.GetMeta("backup_last_logs")
+		if err == nil && strings.TrimSpace(raw) != "" {
+			var persisted []LogEntry
+			if errJ := json.Unmarshal([]byte(raw), &persisted); errJ == nil && len(persisted) > 0 {
+				return persisted
+			}
+		}
+	}
+	return []LogEntry{}
+}
+
+func (e *Engine) persistLogs(st *state.Store) {
+	if st == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.logs) == 0 {
+		return
+	}
+	data, err := json.Marshal(e.logs)
+	if err == nil {
+		_ = st.SetMeta("backup_last_logs", string(data))
+	}
+}
+
+// GetDiagnostics provides a snapshot of prerequisites, connectivity, and log history.
+func (e *Engine) GetDiagnostics(ctx context.Context) (*Diagnostics, error) {
+	st, err := state.Open(e.dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer st.Close()
+
+	cfg, _ := config.LoadConfig(e.configPath)
+	vName, vAddr, vPort, _ := e.FindRemoteVault(cfg)
+
+	resticBin := FindRestic()
+	hasRestic := resticBin != ""
+
+	vaultReachable := false
+	if vAddr != "" {
+		vaultReachable = CheckVaultReachable(vAddr, vPort, 2*time.Second)
+	}
+
+	lastRun, _ := st.GetMeta("backup_last_run")
+	lastStatus, _ := st.GetMeta("backup_last_status")
+	if lastStatus == "" {
+		lastStatus = "never"
+	}
+	lastErr, _ := st.GetMeta("backup_last_error")
+
+	var selectedPaths []string
+	selPathsJSON, _ := st.GetMeta("backup_selected_paths")
+	if selPathsJSON != "" {
+		_ = json.Unmarshal([]byte(selPathsJSON), &selectedPaths)
+	}
+
+	e.mu.Lock()
+	if e.lastError != "" {
+		lastErr = e.lastError
+	}
+	if e.isRunning {
+		lastStatus = "running"
+	}
+	e.mu.Unlock()
+
+	logs := e.GetLogs(st)
+
+	return &Diagnostics{
+		HasRestic:      hasRestic,
+		ResticBin:      resticBin,
+		RemoteVault:    vName,
+		RemoteAddr:     vAddr,
+		RemotePort:     vPort,
+		VaultReachable: vaultReachable,
+		SelectedPaths:  selectedPaths,
+		LastError:      lastErr,
+		LastStatus:     lastStatus,
+		LastRun:        lastRun,
+		Logs:           logs,
+	}, nil
+}
+
 // Run executes the full backup workflow towards the remote peer.
 func (e *Engine) Run(ctx context.Context, progressCb func(action, progress string)) error {
 	e.mu.Lock()
@@ -326,7 +465,10 @@ func (e *Engine) Run(ctx context.Context, progressCb func(action, progress strin
 	e.currentAction = "Preparazione backup..."
 	e.currentProgress = "0%"
 	e.lastError = ""
+	e.logs = nil
 	e.mu.Unlock()
+
+	e.AddLog("INFO", "Avvio processo di backup crittografato (Zero-Knowledge AES-256)...")
 
 	defer func() {
 		e.mu.Lock()
@@ -338,6 +480,7 @@ func (e *Engine) Run(ctx context.Context, progressCb func(action, progress strin
 
 	st, err := state.Open(e.dbPath)
 	if err != nil {
+		e.AddLog("ERROR", "Impossibile aprire il database di stato %s: %v", e.dbPath, err)
 		return err
 	}
 	defer st.Close()
@@ -345,21 +488,34 @@ func (e *Engine) Run(ctx context.Context, progressCb func(action, progress strin
 	cfg, _ := config.LoadConfig(e.configPath)
 	vName, vAddr, vPort, errV := e.FindRemoteVault(cfg)
 	if errV != nil {
-		e.recordFailure(st, errV.Error())
+		errMsg := "Nessun vault remoto configurato nel Ring. Aggiungi un peer al tuo gruppo per abilitare il backup."
+		e.recordFailure(st, errMsg)
 		return errV
+	}
+	e.AddLog("INFO", "Vault remoto individuato: %s (%s:%d)", vName, vAddr, vPort)
+
+	// Check remote vault port connectivity
+	if CheckVaultReachable(vAddr, vPort, 3*time.Second) {
+		e.AddLog("INFO", "Connessione WireGuard al vault remoto verificata (%s:%d raggiungibile).", vAddr, vPort)
+	} else {
+		e.AddLog("WARN", "Attenzione: porta %d su %s non risponde al ping TCP. Il processo tenterà comunque di proseguire...", vPort, vAddr)
 	}
 
 	resticBin := FindRestic()
 	if resticBin == "" {
-		e.recordFailure(st, ErrResticMissing.Error())
+		errMsg := "Client restic non installato sul sistema. Esegui 'sudo apt update && sudo apt install -y restic' sul nodo principale per abilitare il motore di backup."
+		e.recordFailure(st, errMsg)
 		return ErrResticMissing
 	}
+	e.AddLog("INFO", "Binario restic rilevato sul sistema: %s", resticBin)
 
 	key, errK := e.GetOrCreateEncryptionKey(st)
 	if errK != nil {
-		e.recordFailure(st, errK.Error())
+		errMsg := fmt.Sprintf("Errore caricamento chiave crittografica: %v", errK)
+		e.recordFailure(st, errMsg)
 		return errK
 	}
+	e.AddLog("INFO", "Chiave simmetrica Zero-Knowledge caricata (AES-256).")
 
 	// Resolve target paths
 	var candidatePaths []string
@@ -374,44 +530,77 @@ func (e *Engine) Run(ctx context.Context, progressCb func(action, progress strin
 			validPaths = append(validPaths, p)
 		}
 	}
+
+	// Smart fallback to default Allod storage datasets if none manually saved
 	if len(validPaths) == 0 {
-		e.recordFailure(st, ErrNoPaths.Error())
+		stdCandidates := []string{
+			"/mnt/allod-storage",
+			"/mnt/allod-storage/data",
+			"/mnt/allod-storage/config",
+			"/mnt/allod-storage/media",
+			"/mnt/allod-storage/Cartella Pubblica",
+		}
+		for _, std := range stdCandidates {
+			if fi, errS := os.Stat(std); errS == nil && fi.IsDir() {
+				validPaths = append(validPaths, std)
+			}
+		}
+		if len(validPaths) > 0 {
+			e.AddLog("WARN", "Nessuna selezione personalizzata salvata; utilizzo percorsi predefiniti Allod: %s", strings.Join(validPaths, ", "))
+		}
+	}
+
+	if len(validPaths) == 0 {
+		errMsg := "Nessuna cartella valida selezionata per il backup. Seleziona le cartelle nel tab 'Ring' ('Selezione Granulare Dataset') e premi 'Salva Selezione'."
+		e.recordFailure(st, errMsg)
 		return ErrNoPaths
 	}
+	e.AddLog("INFO", "Dataset pronti per la sincronizzazione (%d cartelle): %s", len(validPaths), strings.Join(validPaths, ", "))
 
 	repoURL := FormatRepoURL(vAddr, vPort)
 
 	// 1. Check if repository is initialized
 	e.updateProgress(progressCb, fmt.Sprintf("Connessione a %s (%s:%d)...", vName, vAddr, vPort), "10%")
+	e.AddLog("INFO", "Interrogazione stato repository su %s...", repoURL)
+
 	checkCmd := exec.CommandContext(ctx, resticBin, "-r", repoURL, "snapshots", "--json")
 	checkCmd.Env = append(os.Environ(), "RESTIC_PASSWORD="+key)
 	if errCheck := checkCmd.Run(); errCheck != nil {
 		// Attempt initialization
 		e.updateProgress(progressCb, fmt.Sprintf("Inizializzazione repository cifrato su %s...", vName), "25%")
+		e.AddLog("INFO", "Repository non ancora presente sul vault %s. Avvio 'restic init'...", vName)
+
 		initCmd := exec.CommandContext(ctx, resticBin, "-r", repoURL, "init")
 		initCmd.Env = append(os.Environ(), "RESTIC_PASSWORD="+key)
 		if outInit, errInit := initCmd.CombinedOutput(); errInit != nil {
-			msg := fmt.Sprintf("Inizializzazione fallita: %v (%s)", errInit, strings.TrimSpace(string(outInit)))
+			msg := fmt.Sprintf("Inizializzazione fallita: %v - Dettagli: %s", errInit, strings.TrimSpace(string(outInit)))
 			e.recordFailure(st, msg)
 			return errors.New(msg)
 		}
+		e.AddLog("SUCCESS", "Repository crittografico creato con successo sul vault remoto!")
+	} else {
+		e.AddLog("INFO", "Repository crittografico confermato e accessibile.")
 	}
 
-	// 2. Execute restic backup with JSON streaming
+	// 2. Execute restic backup with JSON streaming and stderr capture
 	e.updateProgress(progressCb, fmt.Sprintf("Invio snapshot cifrato verso %s...", vName), "35%")
+	e.AddLog("INFO", "Avvio creazione e trasferimento snapshot crittografato...")
 
 	backupArgs := append([]string{"-r", repoURL, "backup", "--json"}, validPaths...)
 	cmd := exec.CommandContext(ctx, resticBin, backupArgs...)
 	cmd.Env = append(os.Environ(), "RESTIC_PASSWORD="+key)
 
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	stdoutPipe, errPipe := cmd.StdoutPipe()
 	if errPipe != nil {
-		e.recordFailure(st, errPipe.Error())
+		e.recordFailure(st, fmt.Sprintf("Errore apertura pipe stdout: %v", errPipe))
 		return errPipe
 	}
 
 	if errStart := cmd.Start(); errStart != nil {
-		e.recordFailure(st, errStart.Error())
+		e.recordFailure(st, fmt.Sprintf("Errore avvio processo restic: %v", errStart))
 		return errStart
 	}
 
@@ -438,9 +627,15 @@ func (e *Engine) Run(ctx context.Context, progressCb func(action, progress strin
 	}
 
 	if errWait := cmd.Wait(); errWait != nil {
-		msg := fmt.Sprintf("Backup fallito: %v", errWait)
-		e.recordFailure(st, msg)
-		return errors.New(msg)
+		errDetail := strings.TrimSpace(stderrBuf.String())
+		var fullErr string
+		if errDetail != "" {
+			fullErr = fmt.Sprintf("Backup fallito (%v): %s", errWait, errDetail)
+		} else {
+			fullErr = fmt.Sprintf("Backup fallito: %v", errWait)
+		}
+		e.recordFailure(st, fullErr)
+		return errors.New(fullErr)
 	}
 
 	// 3. Success recording
@@ -455,8 +650,12 @@ func (e *Engine) Run(ctx context.Context, progressCb func(action, progress strin
 	_ = st.SetMeta("backup_last_error", "")
 	if shortID != "" {
 		_ = st.SetMeta("backup_last_snapshot", shortID)
+		e.AddLog("SUCCESS", "Backup completato con successo! Snapshot archiviato: %s", shortID)
+	} else {
+		e.AddLog("SUCCESS", "Backup completato con successo nel vault remoto.")
 	}
 
+	e.persistLogs(st)
 	e.updateProgress(progressCb, "Completato con successo!", "100%")
 	return nil
 }
@@ -475,9 +674,11 @@ func (e *Engine) recordFailure(st *state.Store, msg string) {
 	e.mu.Lock()
 	e.lastError = msg
 	e.mu.Unlock()
+	e.AddLog("ERROR", "%s", msg)
 	if st != nil {
 		_ = st.SetMeta("backup_last_status", "error")
 		_ = st.SetMeta("backup_last_error", msg)
+		e.persistLogs(st)
 	}
 }
 

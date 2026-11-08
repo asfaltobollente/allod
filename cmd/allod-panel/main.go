@@ -5842,6 +5842,30 @@ runcmd:
 		})
 	})
 
+	// 21. API Backup Diagnostics & Execution Logs (GET /api/backup/logs)
+	mux.HandleFunc("/api/backup/logs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		diag, err := globalBackupEngine.GetDiagnostics(ctx)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data:   diag,
+		})
+	})
+
 	adminProtectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 

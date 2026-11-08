@@ -143,3 +143,64 @@ func TestGetStatusInitialState(t *testing.T) {
 		t.Errorf("expected last status 'never', got %q", status.LastStatus)
 	}
 }
+
+func TestEngineLoggingAndDiagnostics(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "state.db")
+	ringPath := filepath.Join(tempDir, "ring.yaml")
+
+	st, err := state.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed opening state: %v", err)
+	}
+	_ = st.Close()
+
+	topo := ring.NewRingTopology("allod-ring", 2)
+	topo.AddMember(&ring.Member{
+		ID:      "allod-ferretti",
+		Address: "100.100.64.229",
+		QuotaGB: 500,
+	})
+	topo.AddMember(&ring.Member{
+		ID:      "Casa-Test",
+		Address: "100.100.66.117",
+		QuotaGB: 100,
+	})
+	_ = topo.Save(ringPath)
+
+	engine := NewEngine(dbPath, "config.yaml", ringPath)
+
+	// Add sample logs
+	engine.AddLog("info", "Test log 1")
+	engine.AddLog("warn", "Test warning 2")
+	engine.AddLog("error", "Test error 3")
+
+	st2, _ := state.Open(dbPath)
+	logs := engine.GetLogs(st2)
+	st2.Close()
+
+	if len(logs) != 3 {
+		t.Fatalf("expected 3 logs, got %d", len(logs))
+	}
+	if logs[0].Level != "INFO" || logs[0].Message != "Test log 1" {
+		t.Errorf("unexpected log 0: %+v", logs[0])
+	}
+	if logs[2].Level != "ERROR" || logs[2].Message != "Test error 3" {
+		t.Errorf("unexpected log 2: %+v", logs[2])
+	}
+
+	// Test GetDiagnostics
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	diag, errD := engine.GetDiagnostics(ctx)
+	if errD != nil {
+		t.Fatalf("GetDiagnostics failed: %v", errD)
+	}
+	if diag.RemoteVault != "Casa-Test" {
+		t.Errorf("expected Casa-Test, got %s", diag.RemoteVault)
+	}
+	if len(diag.Logs) != 3 {
+		t.Errorf("expected 3 logs in diag, got %d", len(diag.Logs))
+	}
+}

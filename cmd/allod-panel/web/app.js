@@ -7428,6 +7428,8 @@ async function loadBackupLiveStatus(force = false) {
       }
       if (activeBanner) {
         activeBanner.classList.remove('hidden');
+        const errBanner = document.getElementById('backup-error-banner');
+        if (errBanner) errBanner.classList.add('hidden');
         if (activeAction) activeAction.textContent = d.current_action || 'Invio snapshot in corso...';
         const progStr = d.current_progress || '0%';
         if (activePct) activePct.textContent = progStr;
@@ -7452,6 +7454,15 @@ async function loadBackupLiveStatus(force = false) {
       }
       if (activeBanner) {
         activeBanner.classList.add('hidden');
+      }
+
+      const errBanner = document.getElementById('backup-error-banner');
+      const errMsg = document.getElementById('backup-error-message');
+      if (d.last_status === 'error' || d.last_error) {
+        if (errBanner) errBanner.classList.remove('hidden');
+        if (errMsg) errMsg.textContent = d.last_error || 'Errore non specificato durante l\'esecuzione del backup.';
+      } else {
+        if (errBanner) errBanner.classList.add('hidden');
       }
 
       if (pill) {
@@ -7689,3 +7700,189 @@ async function copyVaultCliOneliner() {
 window.openVaultCliModal = openVaultCliModal;
 window.closeVaultCliModal = closeVaultCliModal;
 window.copyVaultCliOneliner = copyVaultCliOneliner;
+
+// ==============================================================================
+// 18. BACKUP LOGS & DIAGNOSTICS VIEWER MODAL
+// ==============================================================================
+let currentBackupLogsText = '';
+
+async function openBackupLogsModal() {
+  const modal = document.getElementById('modal-backup-logs');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  await loadBackupLogs(true);
+}
+
+function closeBackupLogsModal() {
+  const modal = document.getElementById('modal-backup-logs');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function loadBackupLogs(force = false) {
+  const consoleEl = document.getElementById('backup-logs-console');
+  const countEl = document.getElementById('backup-logs-count');
+  const resticPill = document.getElementById('backup-diag-restic-pill');
+  const resticVal = document.getElementById('backup-diag-restic-val');
+  const resticFix = document.getElementById('backup-diag-restic-fix');
+  const vaultPill = document.getElementById('backup-diag-vault-pill');
+  const vaultVal = document.getElementById('backup-diag-vault-val');
+  const vaultAddr = document.getElementById('backup-diag-vault-addr');
+  const pathsPill = document.getElementById('backup-diag-paths-pill');
+  const pathsVal = document.getElementById('backup-diag-paths-val');
+
+  if (force && consoleEl) {
+    consoleEl.innerHTML = `
+      <div style="color:var(--text-muted); font-style:italic;">
+        <span class="spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:6px;"></span>
+        Interrogazione diagnostica in tempo reale...
+      </div>
+    `;
+  }
+
+  try {
+    const res = await apiGet('/api/backup/logs');
+    if (!res || res.status !== 'ok' || !res.data) {
+      if (consoleEl) {
+        consoleEl.innerHTML = `<span style="color:#f87171;">[ERRORE] Impossibile recuperare i log: ${res && res.message ? res.message : 'Risposta server non valida'}</span>`;
+      }
+      return;
+    }
+
+    const d = res.data;
+
+    // 1. Restic check
+    if (resticPill && resticVal) {
+      if (d.has_restic) {
+        resticPill.className = 'badge badge-success';
+        resticPill.textContent = 'Installato';
+        resticVal.textContent = d.restic_bin || 'restic';
+        if (resticFix) resticFix.classList.add('hidden');
+      } else {
+        resticPill.className = 'badge badge-danger';
+        resticPill.textContent = 'Mancante';
+        resticVal.textContent = 'restic non presente';
+        if (resticFix) resticFix.classList.remove('hidden');
+      }
+    }
+
+    // 2. Vault network check
+    if (vaultPill && vaultVal) {
+      const vName = d.remote_vault || 'Nessun vault';
+      const vAddr = d.remote_addr || '0.0.0.0';
+      const vPort = d.remote_port || 8000;
+      vaultVal.textContent = `${vName} (${vAddr}:${vPort})`;
+      if (d.vault_reachable) {
+        vaultPill.className = 'badge badge-success';
+        vaultPill.textContent = 'Porta 8000 OK';
+      } else {
+        vaultPill.className = 'badge badge-danger';
+        vaultPill.textContent = 'Non raggiungibile';
+      }
+      if (vaultAddr) {
+        vaultAddr.textContent = d.vault_reachable 
+          ? 'WireGuard Mesh connesso su porta ' + vPort 
+          : 'Verificare rest-server o wireguard sulla macchina ' + vName;
+      }
+    }
+
+    // 3. Datasets check
+    if (pathsPill && pathsVal) {
+      const paths = d.selected_paths || [];
+      if (paths.length > 0) {
+        pathsPill.className = 'badge badge-info';
+        pathsPill.textContent = paths.length + ' dataset';
+        pathsVal.textContent = paths.map(p => p.split(/[\\/]/).pop() || p).join(', ');
+      } else {
+        pathsPill.className = 'badge badge-warning';
+        pathsPill.textContent = '0 cartelle';
+        pathsVal.textContent = 'Nessuna selezione salvata (usato fallback standard)';
+      }
+    }
+
+    // 4. Render logs in console
+    const logs = d.logs || [];
+    if (countEl) countEl.textContent = `${logs.length} eventi`;
+
+    if (logs.length === 0) {
+      let emptyMsg = `[${new Date().toLocaleTimeString()}] Nessun evento registrato nella sessione corrente.\n`;
+      if (d.last_error) {
+        emptyMsg += `[ULTIMO ERRORE]: ${d.last_error}\n`;
+      } else {
+        emptyMsg += `Avvia un backup premendo 'Esegui Backup Ora' per visualizzare i log di streaming.\n`;
+      }
+      consoleEl.innerHTML = `<span style="color:var(--text-muted);">${escapeHtml(emptyMsg)}</span>`;
+      currentBackupLogsText = emptyMsg;
+      return;
+    }
+
+    let rawText = '';
+    const formattedHtml = logs.map(l => {
+      const timeStr = l.timestamp || '';
+      const lvl = (l.level || 'INFO').toUpperCase();
+      const msg = escapeHtml(l.message || '');
+      rawText += `[${timeStr}] [${lvl}] ${l.message || ''}\n`;
+
+      let badgeColor = '#38bdf8'; // INFO blue
+      let msgColor = '#e2e8f0';
+      if (lvl === 'WARN') {
+        badgeColor = '#fbbf24'; // yellow
+        msgColor = '#fef08a';
+      } else if (lvl === 'ERROR') {
+        badgeColor = '#f87171'; // red
+        msgColor = '#fca5a5';
+      } else if (lvl === 'SUCCESS') {
+        badgeColor = '#4ade80'; // green
+        msgColor = '#bbf7d0';
+      }
+
+      return `<div style="margin-bottom:3px; display:flex; align-items:flex-start; gap:8px;">` +
+        `<span style="color:var(--text-muted); font-size:11px; min-width:62px;">${timeStr}</span>` +
+        `<span style="color:${badgeColor}; font-weight:700; font-size:11px; min-width:68px;">[${lvl}]</span>` +
+        `<span style="color:${msgColor}; flex:1; word-break:break-word;">${msg}</span>` +
+        `</div>`;
+    }).join('');
+
+    currentBackupLogsText = rawText;
+    consoleEl.innerHTML = formattedHtml;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+
+  } catch (err) {
+    if (consoleEl) {
+      consoleEl.innerHTML = `<span style="color:#f87171;">[ERRORE] Eccezione lettura log: ${escapeHtml(err.message)}</span>`;
+    }
+  }
+}
+
+async function copyBackupLogs() {
+  const btn = document.getElementById('btn-copy-backup-logs');
+  if (!currentBackupLogsText) {
+    if (typeof showAlert === 'function') showAlert('Nessun log da copiare al momento', 'info');
+    return;
+  }
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(currentBackupLogsText);
+    } else {
+      const t = document.createElement('textarea');
+      t.value = currentBackupLogsText;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand('copy');
+      document.body.removeChild(t);
+    }
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<span>✓</span> <span>Copiato!</span>';
+      setTimeout(() => { btn.innerHTML = orig; }, 2000);
+    }
+    if (typeof showAlert === 'function') showAlert('Log diagnostici copiati negli appunti!', 'success');
+  } catch (err) {
+    if (typeof showAlert === 'function') showAlert('Impossibile copiare: ' + err.message, 'warning');
+  }
+}
+
+window.openBackupLogsModal = openBackupLogsModal;
+window.closeBackupLogsModal = closeBackupLogsModal;
+window.loadBackupLogs = loadBackupLogs;
+window.copyBackupLogs = copyBackupLogs;
