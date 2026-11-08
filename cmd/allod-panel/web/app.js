@@ -505,7 +505,7 @@ function renderLaunchpad() {
             </button>
           ` : ''}
           ${app.id === 'odysseus' ? `
-            <button type="button" class="launchpad-btn-secondary" onclick="fetchOdysseusTempPassword(this)">
+            <button type="button" class="launchpad-btn-secondary" onclick="openOdysseusUpdateModal()" title="Aggiorna Odysseus" style="margin-right:6px;">⚡ Aggiorna</button><button type="button" class="launchpad-btn-secondary" onclick="fetchOdysseusTempPassword(this)">
               ${app.secondaryActionText}
             </button>
           ` : ''}
@@ -1452,7 +1452,7 @@ function createModuleCard(mod) {
       : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
     let odysseusQuickBtn = (mod.id === 'odysseus')
-      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
+      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button><button class="btn btn-sm btn-outline-info" onclick="openOdysseusUpdateModal()" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Aggiorna Odysseus all'ultima versione">⚡ Aggiorna</button>`
       : ``;
 
     actionButtons = `
@@ -1479,7 +1479,7 @@ function createModuleCard(mod) {
       : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
     let odysseusQuickBtn = (mod.id === 'odysseus')
-      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
+      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button><button class="btn btn-sm btn-outline-info" onclick="openOdysseusUpdateModal()" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Aggiorna Odysseus all'ultima versione">⚡ Aggiorna</button>`
       : ``;
 
     actionButtons = `
@@ -1503,7 +1503,7 @@ function createModuleCard(mod) {
     if (mod.runtime_status === 'running') {
       statusBadge = `<span class="badge badge-success">${t('status_running')}</span>`;
       let odysseusQuickBtn = (mod.id === 'odysseus')
-        ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
+        ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button><button class="btn btn-sm btn-outline-info" onclick="openOdysseusUpdateModal()" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Aggiorna Odysseus all'ultima versione">⚡ Aggiorna</button>`
         : ``;
       let backupRingBtn = (mod.id === 'backup')
         ? `<button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="Apri scheda Ring Federation">🤝 Ring</button>`
@@ -1790,7 +1790,7 @@ function createModuleCard(mod) {
       if (mod.id === 'odysseus') {
         primaryActionBtn = `
           <a href="http://${host}:7000" target="_blank" class="btn btn-sm btn-primary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none; padding:7px 12px; font-weight:600;">🌐 Apri Workspace ↗</a>
-          <button class="btn btn-sm btn-secondary" onclick="fetchOdysseusTempPassword(this)" style="padding:7px 12px; font-size:12px; font-weight:600;">🔑 Password</button>
+          <button class="btn btn-sm btn-secondary" onclick="fetchOdysseusTempPassword(this)" style="padding:7px 12px; font-size:12px; font-weight:600;">🔑 Password</button><button class="btn btn-sm btn-outline-info" onclick="openOdysseusUpdateModal()" style="padding:7px 12px; font-size:12px; font-weight:600; margin-left:6px;">⚡ Aggiorna</button>
         `;
       } else if (tech.linkPort) {
         const isVwUnregistered = (mod.id === 'passwords' && !localStorage.getItem('allod_vw_registered'));
@@ -7917,3 +7917,159 @@ async function installResticClient() {
 }
 
 window.installResticClient = installResticClient;
+
+// ==============================================================================
+// 19. ODYSSEUS AI WORKSPACE UPDATE ENGINE
+// ==============================================================================
+let currentOdysseusUpdateOutput = '';
+
+async function openOdysseusUpdateModal() {
+  const modal = document.getElementById('modal-odysseus-update');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  await checkOdysseusDetection();
+}
+
+function closeOdysseusUpdateModal() {
+  const modal = document.getElementById('modal-odysseus-update');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function checkOdysseusDetection(explicitPath = '') {
+  const pathInput = document.getElementById('odysseus-custom-path-input');
+  const summaryEl = document.getElementById('odysseus-detected-mode-summary');
+  const pillEl = document.getElementById('odysseus-mode-pill');
+
+  const path = explicitPath || (pathInput ? pathInput.value.trim() : '');
+  const url = path ? `/api/modules/odysseus/update?path=${encodeURIComponent(path)}` : '/api/modules/odysseus/update';
+
+  try {
+    const res = await apiGet(url);
+    if (res && res.status === 'ok' && res.data) {
+      const d = res.data;
+      if (summaryEl) summaryEl.textContent = d.mode_summary || d.path;
+      if (pathInput && !pathInput.value && d.path) {
+        pathInput.value = d.path;
+      }
+      if (pillEl) {
+        if (d.mode === 'git') {
+          pillEl.className = 'badge badge-primary';
+          pillEl.textContent = 'Git + Python';
+        } else if (d.mode === 'docker') {
+          pillEl.className = 'badge badge-info';
+          pillEl.textContent = 'Docker Compose';
+        } else {
+          pillEl.className = 'badge badge-success';
+          pillEl.textContent = 'Quadlet Podman';
+        }
+      }
+    }
+  } catch (err) {
+    if (summaryEl) summaryEl.textContent = 'Impossibile interrogare il server: ' + err.message;
+  }
+}
+
+async function runOdysseusUpdate() {
+  const btn = document.getElementById('btn-run-odysseus-update');
+  const consoleEl = document.getElementById('odysseus-update-console');
+  const pillEl = document.getElementById('odysseus-update-status-pill');
+  const pathInput = document.getElementById('odysseus-custom-path-input');
+
+  if (btn && btn.disabled) return;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:4px;"></span> Aggiornamento in corso...`;
+  }
+  if (pillEl) {
+    pillEl.className = 'badge badge-warning';
+    pillEl.textContent = 'In esecuzione...';
+  }
+  if (consoleEl) {
+    consoleEl.innerHTML = `<div style="color:var(--text-muted);"><span class="spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:4px;"></span> Avvio sincronizzazione codice e dipendenze...</div>`;
+  }
+
+  const path = pathInput ? pathInput.value.trim() : '';
+
+  try {
+    const res = await apiPost('/api/modules/odysseus/update', { path });
+    const d = res.data;
+    const output = (d && d.output) ? d.output : (res.message || 'Operazione terminata.');
+    currentOdysseusUpdateOutput = output;
+
+    if (res.status === 'ok') {
+      if (pillEl) {
+        pillEl.className = 'badge badge-success';
+        pillEl.textContent = 'Completato con successo';
+      }
+      if (consoleEl) {
+        consoleEl.innerHTML = `<div style="color:#4ade80; font-weight:600; margin-bottom:8px;">✓ Aggiornamento completato con successo!</div>` +
+          `<div style="color:#e2e8f0;">${escapeHtml(output)}</div>`;
+      }
+      if (typeof showAlert === 'function') showAlert('Odysseus aggiornato con successo!', 'success');
+    } else {
+      if (pillEl) {
+        pillEl.className = 'badge badge-danger';
+        pillEl.textContent = 'Errore aggiornamento';
+      }
+      if (consoleEl) {
+        consoleEl.innerHTML = `<div style="color:#f87171; font-weight:600; margin-bottom:8px;">❌ Aggiornamento terminato con segnalazioni:</div>` +
+          `<div style="color:#fca5a5;">${escapeHtml(output)}</div>`;
+      }
+      if (typeof showAlert === 'function') showAlert(res.message || 'Errore durante l\'aggiornamento di Odysseus', 'danger');
+    }
+  } catch (err) {
+    if (pillEl) {
+      pillEl.className = 'badge badge-danger';
+      pillEl.textContent = 'Errore di rete';
+    }
+    if (consoleEl) {
+      consoleEl.innerHTML = `<div style="color:#f87171;">❌ Eccezione durante la richiesta: ${escapeHtml(err.message)}</div>`;
+    }
+    currentOdysseusUpdateOutput = err.message;
+    if (typeof showAlert === 'function') showAlert('Errore di comunicazione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span>⚡</span> <span>Aggiorna Adesso</span>`;
+    }
+    if (consoleEl) {
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+  }
+}
+
+async function copyOdysseusUpdateLogs() {
+  const btn = document.getElementById('btn-copy-odysseus-logs');
+  if (!currentOdysseusUpdateOutput) {
+    if (typeof showAlert === 'function') showAlert('Nessun log da copiare al momento', 'info');
+    return;
+  }
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(currentOdysseusUpdateOutput);
+    } else {
+      const t = document.createElement('textarea');
+      t.value = currentOdysseusUpdateOutput;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand('copy');
+      document.body.removeChild(t);
+    }
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<span>✓</span> <span>Copiato!</span>';
+      setTimeout(() => { btn.innerHTML = orig; }, 2000);
+    }
+    if (typeof showAlert === 'function') showAlert('Log aggiornamento copiati negli appunti!', 'success');
+  } catch (err) {
+    if (typeof showAlert === 'function') showAlert('Impossibile copiare: ' + err.message, 'warning');
+  }
+}
+
+window.openOdysseusUpdateModal = openOdysseusUpdateModal;
+window.closeOdysseusUpdateModal = closeOdysseusUpdateModal;
+window.checkOdysseusDetection = checkOdysseusDetection;
+window.runOdysseusUpdate = runOdysseusUpdate;
+window.copyOdysseusUpdateLogs = copyOdysseusUpdateLogs;

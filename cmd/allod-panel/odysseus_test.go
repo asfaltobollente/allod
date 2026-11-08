@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestExtractOdysseusTempPassword(t *testing.T) {
 	tests := []struct {
@@ -25,5 +29,28 @@ func TestExtractOdysseusTempPassword(t *testing.T) {
 				t.Errorf("extractOdysseusTempPassword() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDetectOdysseusMode(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. Empty dir -> unknown
+	if m := detectOdysseusMode(tempDir); m != "unknown" {
+		t.Errorf("expected 'unknown', got %s", m)
+	}
+
+	// 2. Git dir
+	gitDir := t.TempDir()
+	_ = os.Mkdir(filepath.Join(gitDir, ".git"), 0755)
+	if m := detectOdysseusMode(gitDir); m != "git" {
+		t.Errorf("expected 'git', got %s", m)
+	}
+
+	// 3. Docker compose dir
+	dockerDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dockerDir, "docker-compose.yml"), []byte("version: '3'"), 0644)
+	if m := detectOdysseusMode(dockerDir); m != "docker" {
+		t.Errorf("expected 'docker', got %s", m)
 	}
 }

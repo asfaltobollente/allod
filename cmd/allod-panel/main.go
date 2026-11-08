@@ -4478,6 +4478,7 @@ WantedBy=default.target
 	})
 
 	mux.HandleFunc("/api/modules/odysseus/temp-password", handleOdysseusTempPassword)
+	mux.HandleFunc("/api/modules/odysseus/update", handleOdysseusUpdate)
 
 	// 5e. API Network Status & NetBird Control (extracted to internal/panel/network.go)
 	panel.RegisterNetworkRoutes(mux, &panel.NetworkHandler{
