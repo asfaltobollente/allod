@@ -40,7 +40,8 @@
             "network.server_status",
             "network.zeroconfig_status",
             "network.zeroconfig_setup",
-            "containers.prune"
+            "containers.prune",
+            "backup.install_restic"
           ]
         },
         "plan": {

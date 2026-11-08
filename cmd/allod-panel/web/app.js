@@ -7886,3 +7886,34 @@ window.openBackupLogsModal = openBackupLogsModal;
 window.closeBackupLogsModal = closeBackupLogsModal;
 window.loadBackupLogs = loadBackupLogs;
 window.copyBackupLogs = copyBackupLogs;
+
+async function installResticClient() {
+  const btn = document.getElementById('btn-install-restic');
+  if (btn && btn.disabled) return;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:4px;"></span> Installazione in corso...`;
+  }
+
+  try {
+    const res = await apiPost('/api/backup/install-restic', {});
+    if (res && res.status === 'ok') {
+      if (typeof showAlert === 'function') showAlert(res.message || 'Client restic installato con successo!', 'success');
+      await loadBackupLogs(true);
+      await loadBackupLiveStatus(false);
+    } else {
+      const msg = (res && res.message) ? res.message : 'Installazione non riuscita.';
+      if (typeof showAlert === 'function') showAlert(msg, 'danger');
+    }
+  } catch (err) {
+    if (typeof showAlert === 'function') showAlert('Errore durante l\'installazione: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span>⚡</span> <span>Installa Restic Ora</span>`;
+    }
+  }
+}
+
+window.installResticClient = installResticClient;

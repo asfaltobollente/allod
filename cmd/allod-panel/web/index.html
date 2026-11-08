@@ -2610,7 +2610,10 @@ sudo systemctl enable --now allod-helperd</pre>
             </div>
             <div style="font-size:12px; font-family:monospace; color:var(--foreground);" id="backup-diag-restic-val">--</div>
             <div id="backup-diag-restic-fix" class="hidden mt-2" style="font-size:11px; color:#f87171;">
-              Installa con: <code style="user-select:all; background:rgba(0,0,0,0.4); padding:2px 4px; border-radius:3px;">sudo apt install -y restic</code>
+              <div>Installa con: <code style="user-select:all; background:rgba(0,0,0,0.4); padding:2px 4px; border-radius:3px;">sudo apt install -y restic</code></div>
+              <button class="btn btn-sm btn-primary mt-2 w-100" id="btn-install-restic" onclick="installResticClient()" style="padding:5px 8px; font-size:11px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                <span>⚡</span> <span>Installa Restic Ora</span>
+              </button>
             </div>
           </div>
 

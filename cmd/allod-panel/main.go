@@ -5866,6 +5866,46 @@ runcmd:
 		})
 	})
 
+	// 22. API Install Restic Client via Root Helper / Apt (POST /api/backup/install-restic)
+	mux.HandleFunc("/api/backup/install-restic", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		// 1. Try via privileged allod-helperd
+		client := helper.Client{SocketPath: "/run/allod/helper.sock"}
+		resp, err := client.Execute("backup.install_restic", map[string]interface{}{}, false)
+		if err == nil && resp.Ok {
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "ok",
+				Message: "Client restic installato con successo sul sistema tramite allod-helperd!",
+			})
+			return
+		}
+
+		// 2. Direct fallback via sudo apt-get
+		aptBin := "/usr/bin/apt-get"
+		cmdApt := exec.Command("sudo", aptBin, "install", "-y", "-q", "restic")
+		cmdApt.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+		out, errApt := cmdApt.CombinedOutput()
+		if errApt != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := fmt.Sprintf("Installazione automatica fallita: %v (%s). Esegui da terminale: sudo apt update && sudo apt install -y restic", errApt, strings.TrimSpace(string(out)))
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: errMsg,
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: "Client restic installato con successo sul sistema!",
+		})
+	})
+
 	adminProtectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 

@@ -55,6 +55,7 @@ var AllowedActions = []string{
 	"network.zeroconfig_status",
 	"network.zeroconfig_setup",
 	"containers.prune",
+	"backup.install_restic",
 }
 
 // AllowedServiceUnits defines systemd service units allowed to be restarted via service.restart.
@@ -2255,6 +2256,27 @@ server:
 				"images_pruned":     strings.TrimSpace(string(imgOut)),
 			})
 			return Response{Ok: true, Applied: true, Output: string(resPayload), Plan: plan}
+		}
+		return Response{Ok: true, Applied: false, Plan: plan}
+
+	case "backup.install_restic":
+		plan := []string{"apt-get update", "apt-get install -y -q restic"}
+		if !req.Plan {
+			aptBin := resolveExecutable("apt-get", "/usr/bin/apt-get", "/bin/apt-get")
+			if aptBin == "" {
+				return Response{Ok: false, Error: "gestore pacchetti apt-get non trovato sul sistema"}
+			}
+			cmdUpdate := exec.Command(aptBin, "update")
+			cmdUpdate.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+			_ = cmdUpdate.Run()
+
+			cmdApt := exec.Command(aptBin, "install", "-y", "-q", "restic")
+			cmdApt.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+			out, err := cmdApt.CombinedOutput()
+			if err != nil {
+				return Response{Ok: false, Error: fmt.Sprintf("installazione fallita: %v (%s)", err, strings.TrimSpace(string(out)))}
+			}
+			return Response{Ok: true, Applied: true, Output: "Client restic installato con successo sul sistema", Plan: plan}
 		}
 		return Response{Ok: true, Applied: false, Plan: plan}
 
