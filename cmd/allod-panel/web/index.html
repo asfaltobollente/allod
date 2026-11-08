@@ -2737,7 +2737,77 @@ sudo systemctl enable --now allod-helperd</pre>
     </div>
   </div>
 
-  <!-- MODAL: ALLOD STANDALONE VAULT PROVISIONING (TWO-WAY DESIGN) -->
+  </div>
+
+  <!-- MODAL: AGGIORNAMENTO MODULI ALLOD (TRANSAZIONALE CON ROLLBACK AUTOMATICO) -->
+  <div id="modal-module-update" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:720px; max-height:92vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;" id="mod-update-icon">📦</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:700;" id="mod-update-title">Aggiornamento Modulo</h3>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);" id="mod-update-subtitle">Aggiornamento container transazionale con rollback automatico</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeModuleUpdateModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding:16px; overflow-y:auto; flex:1;">
+        <!-- Version Info Banner -->
+        <div style="background:rgba(15,23,42,0.6); border:1px solid var(--card-border); border-radius:8px; padding:12px 14px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:600; display:block;">Versione Container</span>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                <span id="mod-update-cur-tag" class="badge badge-secondary" style="font-size:12px; font-family:monospace;">--</span>
+                <span style="color:var(--text-muted); font-size:13px;">➔</span>
+                <span id="mod-update-tgt-tag" class="badge badge-info" style="font-size:12px; font-family:monospace;">--</span>
+              </div>
+            </div>
+            <span id="mod-update-availability-badge" class="badge badge-success" style="font-size:11px;">Ultima versione</span>
+          </div>
+          
+          <div style="margin-top:12px; display:flex; align-items:center; gap:8px;">
+            <label for="mod-update-custom-tag-input" style="font-size:11.5px; color:var(--text-muted); min-width:85px; margin:0;">Tag target:</label>
+            <input type="text" id="mod-update-custom-tag-input" class="form-control form-control-sm" style="font-family:monospace; font-size:12px; flex:1;" placeholder="es: v3.3.0 o latest" />
+            <button class="btn btn-sm btn-outline-secondary" onclick="setMockUpdateTarget()" title="Imposta come target disponibile per il test" style="padding:4px 8px; font-size:11px;">Salva Target</button>
+          </div>
+        </div>
+
+        <!-- Update Procedure Description & Safety Warning -->
+        <div style="background:rgba(30,41,59,0.3); border-radius:8px; border:1px dashed var(--card-border); padding:10px 14px; margin-bottom:14px; font-size:11.5px; color:var(--text-muted);">
+          <strong style="color:var(--foreground); display:block; margin-bottom:4px;">🛡️ Garanzia di Transazionalità Allod:</strong>
+          <ul style="margin:0; padding-left:18px; line-height:1.5;">
+            <li><strong>Download:</strong> Scarica la nuova immagine container da registry (Docker Hub / GHCR).</li>
+            <li><strong>Staging:</strong> Rigenera e scrive le definizioni Quadlet in <code>~/.config/containers/systemd/</code> mantenendo un backup dei file precedenti.</li>
+            <li><strong>Healthcheck & Rollback:</strong> Ricarica systemd ed esegue l'healthcheck. In caso di errore o mancato avvio, Allod ripristina <strong>immediatamente e in automatico</strong> la versione precedente senza interruzioni permanenti.</li>
+          </ul>
+        </div>
+
+        <!-- Live Execution Console -->
+        <div style="margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+          <label style="font-size:12px; font-weight:600; color:var(--foreground); margin:0;">Log Operazioni:</label>
+          <span id="mod-update-status-pill" class="badge badge-secondary" style="font-size:10.5px;">In attesa</span>
+        </div>
+        <div id="mod-update-console" style="background:#090d16; border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px; font-family:'Fira Code', 'Cascadia Code', monospace; font-size:12px; line-height:1.6; color:#cbd5e1; max-height:280px; min-height:130px; overflow-y:auto; white-space:pre-wrap; word-break:break-all;">
+          <div style="color:var(--text-muted); font-style:italic;">Premi "Avvia Aggiornamento Adesso" per iniziare la procedura transazionale...</div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="padding:12px 16px; border-top:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyModuleUpdateLogs()" id="btn-copy-mod-update-logs">
+          <span>📋</span> <span>Copia Log</span>
+        </button>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-run-module-update" onclick="runModuleUpdate()">
+            <span>⚡</span> <span>Avvia Aggiornamento Adesso</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="closeModuleUpdateModal()">Chiudi</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="vault-remote-modal" class="modal-overlay hidden">
     <div class="modal-card" style="max-width:760px; max-height:94vh; display:flex; flex-direction:column;">
       <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
@@ -3141,7 +3211,7 @@ restic -r rest:http://&lt;ip_wireguard_amico&gt;:8000/ restore latest --target /
 
   <script src="qrcode.js?v=3.17"></script>
   <script src="i18n.js?v=3.17"></script>
-  <script src="app.js?v=3.17"></script>
+  <script src="app.js?v=3.18"></script>
   <script type="module" src="network.js?v=3.17"></script>
 </body>
 </html>

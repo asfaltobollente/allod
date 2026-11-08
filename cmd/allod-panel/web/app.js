@@ -32,6 +32,74 @@ let unlockedModules = new Set();
 let startingModules = new Map(); // modID -> timestamp
 let photosSharesState = { enabled: false, mounted: false, shares_active: false };
 let currentViewMode = localStorage.getItem('allod_view_mode') || 'simple';
+let moduleUpdatesCache = {};
+window.moduleUpdatesCache = moduleUpdatesCache;
+
+// Core HTTP API Helpers (hoisted early for SPA robustness)
+async function apiGet(url) {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson && errJson.message) msg = errJson.message;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return await res.json();
+}
+
+async function apiPost(url, data = {}) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson && errJson.message) msg = errJson.message;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return await res.json();
+}
+
+window.apiGet = apiGet;
+window.apiPost = apiPost;
+
+function renderModuleUpdateButton(mod, isLocked, isUnlocked) {
+  if (mod.id === 'odysseus') {
+    if (isLocked) {
+      return `<button class="btn btn-sm btn-outline-secondary" disabled style="padding:2px 8px; font-size:11px; opacity:0.6; margin-right:4px; cursor:not-allowed;" title="Sblocca prima il modulo con 🔓 per consentire l'aggiornamento">🔒 Aggiorna</button>`;
+    }
+    return `<button class="btn btn-sm btn-outline-info" onclick="openOdysseusUpdateModal()" style="padding:2px 8px; font-size:11px; margin-right:4px; font-weight:600;" title="Aggiorna Odysseus all'ultima versione">⚡ Aggiorna</button>`;
+  }
+
+  const info = (window.moduleUpdatesCache && window.moduleUpdatesCache[mod.id]) || null;
+  const updateAvailable = !!(info && info.update_available);
+  const curTag = (info && info.current_tag) ? info.current_tag : '';
+  const latestTag = (info && info.latest_tag) ? info.latest_tag : '';
+
+  // Case 1: No update available
+  if (!updateAvailable) {
+    if (isLocked) {
+      return `<button class="btn btn-sm btn-outline-secondary" disabled style="padding:2px 8px; font-size:11px; opacity:0.5; margin-right:4px; cursor:not-allowed;" title="Nessun aggiornamento disponibile (${escapeHtml(curTag || 'all\'ultima versione')})">✓ Ultima versione</button>`;
+    }
+    // When unlocked, user can click to inspect/force update
+    return `<button class="btn btn-sm btn-outline-secondary" onclick="openModuleUpdateModal('${escapeHtml(mod.id)}')" style="padding:2px 8px; font-size:11px; opacity:0.85; margin-right:4px;" title="Modulo all'ultima versione (${escapeHtml(curTag)}). Clicca per verificare o reinstallare">✓ Ultima versione</button>`;
+  }
+
+  // Case 2: Update IS available!
+  if (isLocked) {
+    // Disabled and grey when locked
+    return `<button class="btn btn-sm btn-outline-secondary" disabled style="padding:2px 8px; font-size:11px; opacity:0.6; margin-right:4px; cursor:not-allowed;" title="Sblocca prima il modulo con 🔓 per consentire l'aggiornamento (Nuova versione: ${escapeHtml(latestTag)})">🔒 Aggiorna (${escapeHtml(latestTag)})</button>`;
+  }
+
+  // Clickable and highlighted when unlocked
+  return `<button class="btn btn-sm btn-info" onclick="openModuleUpdateModal('${escapeHtml(mod.id)}')" style="padding:2px 8px; font-size:11px; margin-right:4px; font-weight:600; box-shadow:0 0 10px rgba(56,189,248,0.25);" title="Aggiorna modulo a ${escapeHtml(latestTag)}">⚡ Aggiorna (${escapeHtml(latestTag)})</button>`;
+}
 
 function setViewMode(mode) {
   if (mode !== 'simple' && mode !== 'expert') {
@@ -158,15 +226,20 @@ function setupTabs() {
 
 async function refreshData() {
   try {
-    const [statusRes, modulesRes, ringRes] = await Promise.all([
+    const [statusRes, modulesRes, ringRes, updatesRes] = await Promise.all([
       fetch('/api/status').then(r => r.json()),
       fetch('/api/modules').then(r => r.json()),
-      fetch('/api/ring').then(r => r.json())
+      fetch('/api/ring').then(r => r.json()),
+      fetch('/api/modules/updates').then(r => r.json()).catch(() => null)
     ]);
 
     currentStatus = statusRes ? statusRes.data : null;
     currentModules = modulesRes ? modulesRes.data : null;
     currentRing = ringRes ? ringRes.data : null;
+    if (updatesRes && updatesRes.status === 'ok' && updatesRes.data) {
+      moduleUpdatesCache = updatesRes.data;
+      window.moduleUpdatesCache = moduleUpdatesCache;
+    }
 
     try {
       await fetchPhotosSharesIntegration();
@@ -1425,11 +1498,13 @@ function createModuleCard(mod) {
   const isUnlocked = isDataCritical && isRunningOrNAS && !isOrphan && unlockedModules.has(mod.id);
 
   const host = window.location.hostname || '127.0.0.1';
+  const updateBtn = renderModuleUpdateButton(mod, isLocked, isUnlocked);
 
   if (isOrphan) {
     if (isLocked) { card.className += ' module-card-locked'; }
     statusBadge = `<span class="badge badge-warning" style="background:#f59e0b; color:#000; font-weight:700;">⚠️ ATTIVO (OFF)</span>`;
     actionButtons = `
+      ${updateBtn}
       <button class="btn btn-sm btn-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;" title="Termina forzatamente il container Podman attivo">⏹ ${t('btn_stop')}</button>
       <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
     `;
@@ -1452,10 +1527,11 @@ function createModuleCard(mod) {
       : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
     let odysseusQuickBtn = (mod.id === 'odysseus')
-      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button><button class="btn btn-sm btn-outline-info" onclick="openOdysseusUpdateModal()" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Aggiorna Odysseus all'ultima versione">⚡ Aggiorna</button>`
+      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
       : ``;
 
     actionButtons = `
+      ${updateBtn}
       ${odysseusQuickBtn}
       ${diagBtn}
       <button class="btn btn-sm btn-outline-secondary" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="${t('btn_unlock')}">🔓 ${t('btn_unlock')}</button>
@@ -1479,11 +1555,12 @@ function createModuleCard(mod) {
       : `<button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px;">🩺 ${t('btn_diagnostics')}</button>`;
 
     let odysseusQuickBtn = (mod.id === 'odysseus')
-      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button><button class="btn btn-sm btn-outline-info" onclick="openOdysseusUpdateModal()" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Aggiorna Odysseus all'ultima versione">⚡ Aggiorna</button>`
+      ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
       : ``;
 
     actionButtons = `
       ${mod.id !== 'storage' ? `<button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>` : ''}
+      ${updateBtn}
       ${odysseusQuickBtn}
       ${diagBtn}
       <button class="btn btn-sm btn-warning" onclick="toggleModuleUnlock('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="${t('btn_lock')}">🔒 ${t('btn_lock')}</button>
@@ -1503,14 +1580,15 @@ function createModuleCard(mod) {
     if (mod.runtime_status === 'running') {
       statusBadge = `<span class="badge badge-success">${t('status_running')}</span>`;
       let odysseusQuickBtn = (mod.id === 'odysseus')
-        ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button><button class="btn btn-sm btn-outline-info" onclick="openOdysseusUpdateModal()" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Aggiorna Odysseus all'ultima versione">⚡ Aggiorna</button>`
+        ? `<button class="btn btn-sm btn-primary" onclick="fetchOdysseusTempPassword(this)" style="padding:2px 8px; font-size:11px; margin-right:4px;" title="Leggi e copia la password admin di Odysseus">🔑 Password</button>`
         : ``;
       let backupRingBtn = (mod.id === 'backup')
         ? `<button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="Apri scheda Ring Federation">🤝 Ring</button>`
         : ``;
       actionButtons = `
         <button class="btn btn-sm btn-outline-danger" onclick="stopModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">⏹ ${t('btn_stop')}</button>
-        ${odysseusQuickBtn}
+        ${updateBtn}
+      ${odysseusQuickBtn}
         ${backupRingBtn}
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
       `;
@@ -1531,6 +1609,7 @@ function createModuleCard(mod) {
         ? `<button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="Apri scheda Ring Federation">🤝 Ring</button>`
         : ``;
       actionButtons = `
+        ${updateBtn}
         <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_restart')}</button>
         ${backupRingBtn}
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
@@ -1542,6 +1621,7 @@ function createModuleCard(mod) {
         ? `<button class="btn btn-sm btn-outline-info" onclick="switchToTab('ring')" style="padding:2px 8px; font-size:11px; margin-left:4px;" title="Apri scheda Ring Federation">🤝 Ring</button>`
         : ``;
       actionButtons = `
+        ${updateBtn}
         <button class="btn btn-sm btn-success" onclick="startModule('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:8px;">▶ ${t('btn_start')}</button>
         ${backupRingBtn}
         <button class="btn btn-sm btn-outline-info" onclick="showModuleDiagnostics('${mod.id}')" style="padding:2px 8px; font-size:11px; margin-left:4px;">🩺 ${t('btn_diagnostics')}</button>
@@ -1877,6 +1957,7 @@ function createModuleCard(mod) {
 
         <div class="module-simple-actions">
           ${primaryActionBtn}
+          ${updateBtn}
           ${lockPill}
         </div>
 
@@ -8073,3 +8154,230 @@ window.closeOdysseusUpdateModal = closeOdysseusUpdateModal;
 window.checkOdysseusDetection = checkOdysseusDetection;
 window.runOdysseusUpdate = runOdysseusUpdate;
 window.copyOdysseusUpdateLogs = copyOdysseusUpdateLogs;
+
+// ==============================================================================
+// 20. UNIVERSAL MODULE UPDATE ENGINE (Quadlet / Container / Transactional Rollback)
+// ==============================================================================
+let currentUpdatingModule = null;
+let currentModuleUpdateOutput = '';
+
+const MODULE_DISPLAY_ICONS = {
+  photos: '📸',
+  cloud: '☁️',
+  media: '🎬',
+  passwords: '🔑',
+  search: '🔍',
+  network: '🌐',
+  backup: '🛡️',
+  storage: '💾',
+  shares: '📁',
+  watch: '⏱️',
+  odysseus: '🧠'
+};
+
+async function openModuleUpdateModal(modId) {
+  if (modId === 'odysseus') {
+    return openOdysseusUpdateModal();
+  }
+
+  currentUpdatingModule = modId;
+  const modal = document.getElementById('modal-module-update');
+  if (!modal) return;
+
+  const info = (window.moduleUpdatesCache && window.moduleUpdatesCache[modId]) || null;
+  const iconEl = document.getElementById('mod-update-icon');
+  const titleEl = document.getElementById('mod-update-title');
+  const curTagEl = document.getElementById('mod-update-cur-tag');
+  const tgtTagEl = document.getElementById('mod-update-tgt-tag');
+  const availBadge = document.getElementById('mod-update-availability-badge');
+  const customTagInput = document.getElementById('mod-update-custom-tag-input');
+  const consoleEl = document.getElementById('mod-update-console');
+  const pillEl = document.getElementById('mod-update-status-pill');
+  const runBtn = document.getElementById('btn-run-module-update');
+
+  const curTag = (info && info.current_tag) ? info.current_tag : 'attuale';
+  const latestTag = (info && info.latest_tag) ? info.latest_tag : curTag;
+  const isAvail = !!(info && info.update_available);
+
+  if (iconEl) iconEl.textContent = MODULE_DISPLAY_ICONS[modId] || '📦';
+  if (titleEl) titleEl.textContent = `Aggiornamento modulo "${modId.toUpperCase()}"`;
+  if (curTagEl) curTagEl.textContent = curTag;
+  if (tgtTagEl) tgtTagEl.textContent = latestTag;
+  if (customTagInput) customTagInput.value = isAvail ? latestTag : '';
+
+  if (availBadge) {
+    if (isAvail) {
+      availBadge.className = 'badge badge-warning';
+      availBadge.textContent = `Nuova versione disponibile (${latestTag})`;
+    } else {
+      availBadge.className = 'badge badge-success';
+      availBadge.textContent = 'All\'ultima versione';
+    }
+  }
+
+  if (pillEl) {
+    pillEl.className = 'badge badge-secondary';
+    pillEl.textContent = 'In attesa';
+  }
+
+  if (runBtn) {
+    runBtn.disabled = false;
+    runBtn.innerHTML = `<span>⚡</span> <span>Avvia Aggiornamento Adesso</span>`;
+  }
+
+  if (consoleEl) {
+    consoleEl.innerHTML = `<div style="color:var(--text-muted); font-style:italic;">Pronto per l'aggiornamento transazionale di <strong>${escapeHtml(modId)}</strong>.<br/>Premi "Avvia Aggiornamento Adesso" per avviare il download dell'immagine e la verifica con rollback automatico.</div>`;
+  }
+
+  currentModuleUpdateOutput = '';
+  modal.classList.remove('hidden');
+}
+
+function closeModuleUpdateModal() {
+  const modal = document.getElementById('modal-module-update');
+  if (modal) modal.classList.add('hidden');
+  currentUpdatingModule = null;
+}
+
+async function setMockUpdateTarget() {
+  if (!currentUpdatingModule) return;
+  const customTagInput = document.getElementById('mod-update-custom-tag-input');
+  const target = customTagInput ? customTagInput.value.trim() : '';
+
+  try {
+    const res = await apiPost('/api/modules/updates/target', {
+      module: currentUpdatingModule,
+      target: target
+    });
+    if (typeof showAlert === 'function') {
+      showAlert(res.message || `Target impostato per ${currentUpdatingModule}`, 'info');
+    }
+    // Refresh updates
+    const updatesRes = await apiGet('/api/modules/updates');
+    if (updatesRes && updatesRes.status === 'ok' && updatesRes.data) {
+      window.moduleUpdatesCache = updatesRes.data;
+    }
+    openModuleUpdateModal(currentUpdatingModule);
+    renderModules();
+  } catch (err) {
+    if (typeof showAlert === 'function') {
+      showAlert('Errore impostazione target: ' + err.message, 'danger');
+    }
+  }
+}
+
+async function runModuleUpdate() {
+  if (!currentUpdatingModule) return;
+  const modId = currentUpdatingModule;
+  const runBtn = document.getElementById('btn-run-module-update');
+  const consoleEl = document.getElementById('mod-update-console');
+  const pillEl = document.getElementById('mod-update-status-pill');
+  const customTagInput = document.getElementById('mod-update-custom-tag-input');
+
+  const info = (window.moduleUpdatesCache && window.moduleUpdatesCache[modId]) || null;
+  const targetTag = (customTagInput && customTagInput.value.trim()) ? customTagInput.value.trim() : ((info && info.latest_tag) ? info.latest_tag : '');
+
+  if (runBtn && runBtn.disabled) return;
+
+  if (runBtn) {
+    runBtn.disabled = true;
+    runBtn.innerHTML = `<span class="spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:4px;"></span> Aggiornamento in corso...`;
+  }
+  if (pillEl) {
+    pillEl.className = 'badge badge-warning';
+    pillEl.textContent = 'Aggiornamento in corso...';
+  }
+  if (consoleEl) {
+    consoleEl.innerHTML = `<div style="color:var(--text-muted);"><span class="spinner" style="width:12px; height:12px; border-width:2px; display:inline-block; vertical-align:middle; margin-right:4px;"></span> Inizializzazione pipeline transazionale per <strong>${escapeHtml(modId)}</strong> (tag: ${escapeHtml(targetTag || 'default')})...</div>`;
+  }
+
+  try {
+    const res = await apiPost('/api/modules/update', {
+      module: modId,
+      target_tag: targetTag
+    });
+
+    const report = res.data;
+    let logLines = [];
+
+    if (report && report.steps && Array.isArray(report.steps)) {
+      logLines = report.steps.map(s => {
+        const timeStr = s.timestamp ? new Date(s.timestamp).toLocaleTimeString() : '';
+        const stateBadge = `[${s.state}]`;
+        return `${timeStr} ${stateBadge} ${s.message}`;
+      });
+    } else {
+      logLines.push(res.message || 'Operazione completata.');
+    }
+
+    currentModuleUpdateOutput = logLines.join('\n');
+
+    if (res.status === 'ok' && (!report || report.success)) {
+      if (pillEl) {
+        pillEl.className = 'badge badge-success';
+        pillEl.textContent = 'Completato con successo';
+      }
+      if (consoleEl) {
+        consoleEl.innerHTML = `<div style="color:#4ade80; font-weight:600; margin-bottom:8px;">✓ Modulo "${escapeHtml(modId)}" aggiornato con successo a ${escapeHtml(report ? report.target_tag : targetTag)}!</div>` +
+          `<div style="color:#cbd5e1;">${escapeHtml(currentModuleUpdateOutput)}</div>`;
+      }
+      if (typeof showAlert === 'function') {
+        showAlert(`Modulo "${modId}" aggiornato con successo!`, 'success');
+      }
+      await refreshData();
+    } else {
+      if (pillEl) {
+        pillEl.className = 'badge badge-danger';
+        pillEl.textContent = 'Rollback automatico eseguito';
+      }
+      if (consoleEl) {
+        consoleEl.innerHTML = `<div style="color:#f87171; font-weight:600; margin-bottom:8px;">❌ Healthcheck non superato: ROLLBACK AUTOMATICO COMPLETATO</div>` +
+          `<div style="color:#fca5a5;">${escapeHtml(currentModuleUpdateOutput)}</div>`;
+      }
+      if (typeof showAlert === 'function') {
+        showAlert(res.message || `Aggiornamento "${modId}" fallito, rollback automatico completato`, 'danger');
+      }
+      await refreshData();
+    }
+  } catch (err) {
+    if (pillEl) {
+      pillEl.className = 'badge badge-danger';
+      pillEl.textContent = 'Errore richiesta';
+    }
+    if (consoleEl) {
+      consoleEl.innerHTML = `<div style="color:#f87171; font-weight:600; margin-bottom:8px;">❌ Errore durante la richiesta di aggiornamento:</div>` +
+        `<div style="color:#fca5a5;">${escapeHtml(err.message)}</div>`;
+    }
+    if (typeof showAlert === 'function') {
+      showAlert('Errore di comunicazione: ' + err.message, 'danger');
+    }
+  } finally {
+    if (runBtn) {
+      runBtn.disabled = false;
+      runBtn.innerHTML = `<span>⚡</span> <span>Avvia Aggiornamento Adesso</span>`;
+    }
+    if (consoleEl) {
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+  }
+}
+
+function copyModuleUpdateLogs() {
+  const btn = document.getElementById('btn-copy-mod-update-logs');
+  const text = currentModuleUpdateOutput || (document.getElementById('mod-update-console') ? document.getElementById('mod-update-console').innerText : '');
+  if (!text) {
+    if (typeof showAlert === 'function') showAlert('Nessun log da copiare', 'warning');
+    return;
+  }
+  if (typeof copyTextToClipboard === 'function') {
+    copyTextToClipboard(text, btn);
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text);
+  }
+}
+
+window.openModuleUpdateModal = openModuleUpdateModal;
+window.closeModuleUpdateModal = closeModuleUpdateModal;
+window.setMockUpdateTarget = setMockUpdateTarget;
+window.runModuleUpdate = runModuleUpdate;
+window.copyModuleUpdateLogs = copyModuleUpdateLogs;

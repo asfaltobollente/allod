@@ -4480,6 +4480,146 @@ WantedBy=default.target
 	mux.HandleFunc("/api/modules/odysseus/temp-password", handleOdysseusTempPassword)
 	mux.HandleFunc("/api/modules/odysseus/update", handleOdysseusUpdate)
 
+	// API Module Updates: Check update availability across all modules
+	mux.HandleFunc("/api/modules/updates", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		cfg, err := config.LoadConfig(getConfigPath())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore configurazione: " + err.Error()})
+			return
+		}
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore state.db: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		u := updater.NewUpdater("out_quadlet")
+		updates := u.CheckUpdates(getModulesDir(), cfg, st)
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status: "ok",
+			Data:   updates,
+		})
+	})
+
+	// API Module Updates: Target setter (useful for manual updates or test simulations)
+	mux.HandleFunc("/api/modules/updates/target", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Module string `json:"module"`
+			Target string `json:"target"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Module == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Parametri non validi"})
+			return
+		}
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore state.db: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		key := "module_update_target_" + req.Module
+		_ = st.SetMeta(key, strings.TrimSpace(req.Target))
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Target aggiornamento per '%s' impostato a '%s'", req.Module, req.Target),
+		})
+	})
+
+	// API Module Updates: Execute transactional update with automatic rollback
+	mux.HandleFunc("/api/modules/update", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Module     string `json:"module"`
+			TargetTag  string `json:"target_tag"`
+			CustomPath string `json:"custom_path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Module == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Parametro 'module' obbligatorio"})
+			return
+		}
+
+		if req.Module == "odysseus" {
+			det := detectOdysseus(strings.TrimSpace(req.CustomPath))
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+			defer cancel()
+			rep := executeOdysseusUpdate(ctx, det)
+			if !rep.Success {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(PanelResponse{
+					Status:  "error",
+					Message: "Aggiornamento Odysseus completato con anomalie.",
+					Data:    rep,
+				})
+				return
+			}
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "ok",
+				Message: "Odysseus aggiornato con successo!",
+				Data:    rep,
+			})
+			return
+		}
+
+		cfg, err := config.LoadConfig(getConfigPath())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore configurazione: " + err.Error()})
+			return
+		}
+		st, err := state.Open(dbPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(PanelResponse{Status: "error", Message: "Errore state.db: " + err.Error()})
+			return
+		}
+		defer st.Close()
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+		defer cancel()
+
+		u := updater.NewUpdater("out_quadlet")
+		report, err := u.ExecuteUpdate(ctx, req.Module, req.TargetTag, getModulesDir(), cfg, st)
+		if err != nil || (report != nil && !report.Success) {
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := "Aggiornamento fallito"
+			if err != nil {
+				errMsg = err.Error()
+			} else if report != nil && report.ErrorMessage != "" {
+				errMsg = report.ErrorMessage
+			}
+			json.NewEncoder(w).Encode(PanelResponse{
+				Status:  "error",
+				Message: errMsg,
+				Data:    report,
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(PanelResponse{
+			Status:  "ok",
+			Message: fmt.Sprintf("Modulo '%s' aggiornato con successo alla versione %s!", req.Module, report.TargetTag),
+			Data:    report,
+		})
+	})
+
 	// 5e. API Network Status & NetBird Control (extracted to internal/panel/network.go)
 	panel.RegisterNetworkRoutes(mux, &panel.NetworkHandler{
 		GetConfigPath: getConfigPath,
