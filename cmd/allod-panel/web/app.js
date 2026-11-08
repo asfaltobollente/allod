@@ -7292,6 +7292,40 @@ function updateVaultVpsCommandDisplay() {
 }
 window.updateVaultVpsCommandDisplay = updateVaultVpsCommandDisplay;
 
+// Generic API HTTP Helper Methods
+async function apiGet(url) {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson && errJson.message) msg = errJson.message;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return await res.json();
+}
+
+async function apiPost(url, data = {}) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson && errJson.message) msg = errJson.message;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  return await res.json();
+}
+
+window.apiGet = apiGet;
+window.apiPost = apiPost;
+
 // ==============================================================================
 // RING MEMBER REMOVAL
 // ==============================================================================
