@@ -204,6 +204,7 @@ async function refreshData() {
 
 let launchpadMode = 'lan';
 let currentMeshIP = '--';
+// --- Odysseus Temporary Password Helper ---
 let odysseusTempCreds = null;
 
 async function fetchOdysseusTempPassword(btn) {
@@ -3309,27 +3310,35 @@ function copyAllDiagnostics(btn) {
   copyTextToClipboard(fullText, btn);
 }
 
-function copyTextToClipboard(text, btn) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
+function copyTextToClipboard(text, btnOrMsg) {
+  const isMsg = typeof btnOrMsg === 'string';
+  const successMsg = isMsg ? btnOrMsg : '✓ Copiato negli appunti!';
+  const btn = !isMsg && btnOrMsg instanceof HTMLElement ? btnOrMsg : null;
+
+  if (navigator.clipboard && (window.isSecureContext || navigator.clipboard.writeText)) {
     navigator.clipboard.writeText(text).then(() => {
-      showCopyFeedback(btn);
-      showAlert('✓ Copiato negli appunti!', 'success');
+      if (btn) showCopyFeedback(btn);
+      showToast(successMsg, 'success');
     }).catch(() => {
-      fallbackCopyText(text, btn);
+      fallbackCopyText(text, btnOrMsg);
     });
   } else {
-    fallbackCopyText(text, btn);
+    fallbackCopyText(text, btnOrMsg);
   }
 }
 
-function fallbackCopyText(text, btn) {
+function fallbackCopyText(text, btnOrMsg) {
+  const isMsg = typeof btnOrMsg === 'string';
+  const successMsg = isMsg ? btnOrMsg : '✓ Copiato negli appunti!';
+  const btn = !isMsg && btnOrMsg instanceof HTMLElement ? btnOrMsg : null;
+
   let copied = false;
   const ta = document.createElement('textarea');
   ta.value = text;
   ta.setAttribute('readonly', '');
   ta.style.position = 'fixed';
-  ta.style.left = '0';
-  ta.style.top = '0';
+  ta.style.left = '-9999px';
+  ta.style.top = '-9999px';
   ta.style.width = '2em';
   ta.style.height = '2em';
   ta.style.padding = '0';
@@ -3349,10 +3358,10 @@ function fallbackCopyText(text, btn) {
   document.body.removeChild(ta);
 
   if (copied) {
-    showCopyFeedback(btn);
-    showAlert('✓ Copiato negli appunti!', 'success');
+    if (btn) showCopyFeedback(btn);
+    showToast(successMsg, 'success');
   } else {
-    window.prompt('Copia il link:', text);
+    window.prompt('Copia il testo:', text);
   }
 }
 
@@ -7086,36 +7095,8 @@ function downloadVaultCompose() {
   showToast('docker-compose.yml scaricato con successo!', 'success');
 }
 
-function copyTextToClipboard(text, successMsg) {
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(() => {
-      showToast(successMsg, 'success');
-    }).catch(() => {
-      fallbackCopyText(text, successMsg);
-    });
-  } else {
-    fallbackCopyText(text, successMsg);
-  }
-}
-
-function fallbackCopyText(text, successMsg) {
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position = 'fixed';
-  ta.style.left = '-9999px';
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  try {
-    document.execCommand('copy');
-    showToast(successMsg, 'success');
-  } catch (err) {
-    showToast('Impossibile copiare automaticamente. Seleziona e copia a mano.', 'error');
-  }
-  document.body.removeChild(ta);
-}
-
 // Window exports
+window.copyTextToClipboard = copyTextToClipboard;
 window.openNetBirdAPIModal = openNetBirdAPIModal;
 window.closeNetBirdAPIModal = closeNetBirdAPIModal;
 window.toggleNetBirdTokenVisibility = toggleNetBirdTokenVisibility;
