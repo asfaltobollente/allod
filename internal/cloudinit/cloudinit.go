@@ -19,6 +19,7 @@ autoinstall:
   packages:
     - podman
     - btrfs-progs
+    - restic
   runcmd:
     - echo "Impostazione repository Allod..."
     - wget -O /usr/share/keyrings/allod.gpg https://get.example.com/key.gpg

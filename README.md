@@ -110,7 +110,7 @@ Set up a sovereign Allod node on **Ubuntu Server 24.04 LTS** with this 5-step wa
 ### 1. System Requirements & Dependencies
 Ensure your host is running **Ubuntu Server 24.04 LTS** (or compatible Debian/Ubuntu derivative) with **Go >= 1.25** (download from [go.dev/dl](https://go.dev/dl/) or use `GOTOOLCHAIN=auto` with apt golang) and rootless Podman:
 ```bash
-sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools samba
+sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools samba restic
 ```
 
 ### 2. Clone & Compile Binaries
@@ -351,7 +351,7 @@ When using residential internet providers behind **Carrier-Grade NAT (CGNAT)** â
 * **Hardware**: Minimum 4 GB RAM (8 GB recommended for AI photo indexing), 1x or 2x disks for storage.
 * **System Packages**:
   ```bash
-  sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools samba
+  sudo apt update && sudo apt install -y git golang podman btrfs-progs smartmontools samba restic
   ```
 * **Go Compiler (â‰¥ 1.25)**:
   Allod requires Go 1.25 or newer (for modern embedded SQLite database engines). Install it from [go.dev/dl](https://go.dev/dl/) or enable automatic toolchain fetching via `export GOTOOLCHAIN=auto`.

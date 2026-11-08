@@ -2107,7 +2107,7 @@ server:
 		netbirdIP := getHostNetBirdIP()
 
 		plan := []string{
-			"apt-get install -y -q avahi-daemon wsdd avahi-utils samba",
+			"apt-get install -y -q avahi-daemon wsdd avahi-utils samba restic",
 			fmt.Sprintf("write /etc/avahi/hosts: %s %s.local", lanIP, cleanHost),
 			"write /etc/avahi/services/samba.service for SMB & Bonjour Apple discovery",
 			fmt.Sprintf("update /etc/hosts with: %s %s.local %s", lanIP, cleanHost, strings.ToUpper(cleanHost)),
@@ -2124,7 +2124,7 @@ server:
 		if !req.Plan {
 			// 1. Ensure required zero-config packages are installed
 			aptBin := resolveExecutable("apt-get", "/usr/bin/apt-get", "/bin/apt-get")
-			cmdApt := exec.Command(aptBin, "install", "-y", "-q", "avahi-daemon", "wsdd", "avahi-utils", "samba")
+			cmdApt := exec.Command(aptBin, "install", "-y", "-q", "avahi-daemon", "wsdd", "avahi-utils", "samba", "restic")
 			cmdApt.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 			_ = cmdApt.Run()
 
