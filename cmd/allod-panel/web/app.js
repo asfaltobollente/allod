@@ -7373,6 +7373,7 @@ async function loadBackupLiveStatus(force = false) {
     }
 
     const d = res.data;
+    window.lastBackupStatus = d;
 
     // 1. Vault metadata
     if (vaultMeta) {
@@ -7570,3 +7571,94 @@ async function triggerManualBackup() {
 
 window.loadBackupLiveStatus = loadBackupLiveStatus;
 window.triggerManualBackup = triggerManualBackup;
+
+// ==============================================================================
+// 17. VAULT CLI MANAGEMENT & ONELINER MODAL
+// ==============================================================================
+let currentVaultCliTarget = { name: '', ip: '' };
+
+function openVaultCliModal(targetName, targetIp) {
+  const modal = document.getElementById('vault-cli-modal');
+  if (!modal) return;
+
+  const targetNameEl = document.getElementById('vault-cli-target-name');
+  const targetIpEl = document.getElementById('vault-cli-target-ip');
+  const primaryIpEl = document.getElementById('vault-cli-primary-ip');
+  const onelinerArea = document.getElementById('vault-cli-code-oneliner');
+
+  // Determine fallback target name and IP from backup status
+  if (!targetName && window.lastBackupStatus && window.lastBackupStatus.remote_peer_name) {
+    targetName = window.lastBackupStatus.remote_peer_name;
+    targetIp = window.lastBackupStatus.remote_address || '';
+  }
+
+  currentVaultCliTarget = {
+    name: targetName || 'Vault Remoto',
+    ip: targetIp || '100.100.66.117'
+  };
+
+  if (targetNameEl) targetNameEl.textContent = currentVaultCliTarget.name;
+  if (targetIpEl) targetIpEl.textContent = currentVaultCliTarget.ip ? ("(" + currentVaultCliTarget.ip + ")") : '';
+
+  // Primary mesh host
+  let primaryHost = '100.100.64.229:8080';
+  if (window.lastBackupStatus && window.lastBackupStatus.primary_mesh_ip) {
+    primaryHost = window.lastBackupStatus.primary_mesh_ip + ':8080';
+  } else if (window.location && window.location.host) {
+    primaryHost = window.location.host;
+  }
+  if (primaryIpEl) primaryIpEl.textContent = primaryHost;
+
+  // Dedicated Oneliner
+  let cmd = 'curl -fsSL "http://' + primaryHost + '/api/vault/update-cli.sh" | sudo bash';
+  if (window.lastBackupStatus && window.lastBackupStatus.cli_update_oneliner) {
+    cmd = window.lastBackupStatus.cli_update_oneliner;
+  }
+  if (onelinerArea) onelinerArea.value = cmd;
+
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+}
+
+function closeVaultCliModal() {
+  const modal = document.getElementById('vault-cli-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+  }
+}
+
+async function copyVaultCliOneliner() {
+  const area = document.getElementById('vault-cli-code-oneliner');
+  const btn = document.getElementById('btn-copy-vault-cli');
+  if (!area) return;
+
+  const text = area.value;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      area.select();
+      document.execCommand('copy');
+    }
+    if (btn) {
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = '<span>✓</span> <span>Copiato negli appunti!</span>';
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-success');
+      setTimeout(() => {
+        btn.innerHTML = origHtml;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-primary');
+      }, 2500);
+    }
+  } catch (err) {
+    if (typeof showAlert === 'function') {
+      showAlert('Impossibile copiare negli appunti: ' + err.message, 'warning');
+    }
+  }
+}
+
+window.openVaultCliModal = openVaultCliModal;
+window.closeVaultCliModal = closeVaultCliModal;
+window.copyVaultCliOneliner = copyVaultCliOneliner;

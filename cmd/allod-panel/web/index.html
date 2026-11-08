@@ -771,6 +771,9 @@ systemctl --user enable --now allod-panel</pre>
             </div>
             <div style="display:flex; align-items:center; gap:10px;">
               <span id="backup-status-pill" class="badge badge-secondary">Verifica in corso...</span>
+              <button class="btn btn-outline-info btn-sm" onclick="openVaultCliModal()" title="Aggiorna CLI sulla macchina remota" style="display:inline-flex; align-items:center; gap:6px;">
+                <span>⚡</span> <span>Aggiorna CLI</span>
+              </button>
               <button class="btn btn-primary btn-sm" id="btn-trigger-backup" onclick="triggerManualBackup()" style="display:inline-flex; align-items:center; gap:6px;">
                 <span>🚀</span> <span>Esegui Backup Ora</span>
               </button>
@@ -2471,6 +2474,91 @@ sudo systemctl enable --now allod-helperd</pre>
     </div>
   </div>
 
+  <!-- MODAL: AGGIORNAMENTO & DIAGNOSTICA CLI VAULT REMOTO (allod-vault) -->
+  <div id="vault-cli-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:680px; max-height:92vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="padding-bottom:12px; border-bottom:1px solid var(--card-border);">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">⚡</span>
+          <div>
+            <h3 style="margin:0; font-size:15px; font-weight:700;">Aggiornamento CLI Vault Remoto (allod-vault)</h3>
+            <p style="margin:2px 0 0 0; font-size:11.5px; color:var(--text-muted);">Sincronizzazione istantanea e diagnostica locale per server Linux e VPS federati</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeVaultCliModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding:16px; overflow-y:auto; flex:1;">
+        <!-- Target Info & Mesh Peer Badge -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 14px; background:rgba(30,41,59,0.5); border-radius:8px; border:1px solid var(--card-border); margin-bottom:14px;">
+          <div>
+            <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:600; display:block;">Nodo Remoto di Destinazione</span>
+            <div style="font-size:13.5px; font-weight:600; color:var(--foreground);" id="vault-cli-target-label">
+              <strong id="vault-cli-target-name">Casa-Test</strong> <code id="vault-cli-target-ip" style="font-size:12px; margin-left:4px; color:var(--primary);">100.100.66.117</code>
+            </div>
+          </div>
+          <span class="badge badge-success" style="font-size:11px; padding:3px 8px;">
+            🔒 Rete WireGuard Sovrana
+          </span>
+        </div>
+
+        <!-- Sovereign Mesh Notice -->
+        <div style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:12px 14px; margin-bottom:14px;">
+          <strong style="color:var(--primary); font-size:12.5px; display:block; margin-bottom:4px;">🛡️ Aggiornamento Zero-Knowledge & Mesh P2P</strong>
+          <p style="margin:0; font-size:11.5px; color:var(--text-muted); line-height:1.5;">
+            L'oneliner scarica ed esegue lo script direttamente dal tuo nodo primario Allod (<code id="vault-cli-primary-ip">100.100.64.229:8080</code>) attraverso il tunnel cifrato WireGuard. Nessun pacchetto transita da GitHub o repository di terze parti.
+          </p>
+        </div>
+
+        <!-- Oneliner Command Box -->
+        <div class="form-group mb-2">
+          <label style="font-size:12px; font-weight:600; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span>Copia ed esegui sul terminale SSH della macchina remota (con permessi root/sudo):</span>
+          </label>
+          <div style="position:relative;">
+            <textarea id="vault-cli-code-oneliner" class="form-control" readonly style="font-family:monospace; font-size:12px; height:80px; background:#0b1120; color:#38bdf8; resize:none; padding:10px; border:1px solid rgba(56,189,248,0.3); border-radius:6px;"></textarea>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
+          <span style="font-size:11.5px; color:var(--text-muted);">
+            ⚡ Scarica la nuova CLI, aggiorna <code>/usr/local/bin/allod-vault</code> e mostra lo stato storage
+          </span>
+          <button type="button" class="btn btn-primary" onclick="copyVaultCliOneliner()" id="btn-copy-vault-cli" style="display:inline-flex; align-items:center; gap:6px;">
+            <span>📋</span> <span>Copia Oneliner</span>
+          </button>
+        </div>
+
+        <!-- Cheat-sheet of allod-vault commands -->
+        <div style="padding:12px 14px; background:rgba(15,23,42,0.6); border-radius:8px; border:1px solid var(--card-border);">
+          <div style="font-size:12px; font-weight:600; color:var(--foreground); margin-bottom:8px;">
+            Comandi diagnostici disponibili sulla macchina remota:
+          </div>
+          <div style="display:grid; grid-template-columns:140px 1fr; gap:6px 12px; font-size:11.5px;">
+            <div><code>allod-vault status</code></div>
+            <div style="color:var(--text-muted);">Mostra spazio occupato dai chunk crittografati, snapshot e stato del demone</div>
+
+            <div><code>allod-vault logs</code></div>
+            <div style="color:var(--text-muted);">Streaming in tempo reale del log delle connessioni HTTP WireGuard</div>
+
+            <div><code>allod-vault test-mesh</code></div>
+            <div style="color:var(--text-muted);">Verifica la connettività di rete Mesh verso il nodo primario Allod</div>
+
+            <div><code>allod-vault update</code></div>
+            <div style="color:var(--text-muted);">Auto-aggiorna la CLI dal nodo primario senza ripassare dal pannello</div>
+
+            <div><code>allod-vault restart</code></div>
+            <div style="color:var(--text-muted);">Riavvia in sicurezza il servizio systemd allod-vault</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="padding:12px 16px; border-top:1px solid var(--card-border); display:flex; justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeVaultCliModal()">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: ALLOD STANDALONE VAULT PROVISIONING (TWO-WAY DESIGN) -->
   <div id="vault-remote-modal" class="modal-overlay hidden">
     <div class="modal-card" style="max-width:760px; max-height:94vh; display:flex; flex-direction:column;">
@@ -2873,9 +2961,9 @@ restic -r rest:http://&lt;ip_wireguard_amico&gt;:8000/ restore latest --target /
   <!-- Floating Telemetry Chart Tooltip -->
   <div id="metrics-chart-tooltip" class="metrics-tooltip hidden"></div>
 
-  <script src="qrcode.js?v=3.12"></script>
-  <script src="i18n.js?v=3.12"></script>
-  <script src="app.js?v=3.12"></script>
-  <script type="module" src="network.js?v=3.12"></script>
+  <script src="qrcode.js?v=3.13"></script>
+  <script src="i18n.js?v=3.13"></script>
+  <script src="app.js?v=3.13"></script>
+  <script type="module" src="network.js?v=3.13"></script>
 </body>
 </html>

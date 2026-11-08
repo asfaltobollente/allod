@@ -55,10 +55,12 @@ type Status struct {
 	RemoteAddress   string     `json:"remote_address,omitempty"`
 	RemotePort      int        `json:"remote_port,omitempty"`
 	SelectedPaths   []string   `json:"selected_paths"`
-	TotalSnapshots  int        `json:"total_snapshots"`
-	Snapshots       []Snapshot `json:"snapshots"`
-	EncryptionMode  string     `json:"encryption_mode"`
-	HasRestic       bool       `json:"has_restic"`
+	TotalSnapshots    int        `json:"total_snapshots"`
+	Snapshots         []Snapshot `json:"snapshots"`
+	EncryptionMode    string     `json:"encryption_mode"`
+	HasRestic         bool       `json:"has_restic"`
+	CLIUpdateOneliner string     `json:"cli_update_oneliner,omitempty"`
+	PrimaryMeshIP     string     `json:"primary_mesh_ip,omitempty"`
 }
 
 // Engine coordinates client-side Restic backups towards remote append-only vaults.

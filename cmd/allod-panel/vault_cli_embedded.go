@@ -1,0 +1,246 @@
+package main
+
+const embeddedUpdateVaultCLIScript = `#!/usr/bin/env bash
+# ==============================================================================
+# ALLOD STANDALONE VAULT — AGGIORNAMENTO CLI ONE-LINER
+# Scarica e installa l'ultima versione di allod-vault dal nodo Allod primario
+# ==============================================================================
+set -euo pipefail
+
+PRIMARY_HOST="{{PRIMARY_HOST}}"
+
+echo -e "\033[0;36m"
+echo "  ╔════════════════════════════════════════════════════════════════╗"
+echo "  ║        ALLOD STANDALONE VAULT — AGGIORNAMENTO CLI              ║"
+echo "  ║      Sovereign Zero-Knowledge Mesh • Aggiornamento P2P         ║"
+echo "  ╚════════════════════════════════════════════════════════════════╝"
+echo -e "\033[0m"
+
+if [[ $EUID -ne 0 ]]; then
+   echo -e "\033[0;31m[ERRORE] Questo script deve essere eseguito come root o con sudo (es. curl ... | sudo bash)\033[0m" 
+   exit 1
+fi
+
+if [[ -z "${PRIMARY_HOST:-}" || "${PRIMARY_HOST}" == *"PRIMARY_HOST"* ]]; then
+  PRIMARY_HOST="${1:-}"
+fi
+
+if [[ -z "${PRIMARY_HOST:-}" && -f "/etc/allod-vault.conf" ]]; then
+  source "/etc/allod-vault.conf" 2>/dev/null || true
+  if [[ -n "${PEER_HOST:-}" ]]; then
+    PRIMARY_HOST="${PEER_HOST}:8080"
+  fi
+fi
+
+if [[ -z "${PRIMARY_HOST:-}" ]]; then
+  if command -v netbird >/dev/null 2>&1; then
+    DETECTED_IP=$(netbird status 2>/dev/null | grep -oP '100\.\d+\.\d+\.\d+' | head -n 1 || echo "")
+    if [[ -n "$DETECTED_IP" ]]; then
+      PRIMARY_HOST="${DETECTED_IP}:8080"
+    fi
+  fi
+fi
+
+if [[ -z "${PRIMARY_HOST:-}" ]]; then
+  echo -e "\033[0;31m[ERRORE] Indirizzo del nodo Allod primario non specificato o non rilevato.\033[0m"
+  echo "Specifica l'IP mesh: curl -fsSL http://<ip-mesh>:8080/api/vault/update-cli.sh | sudo bash -s -- <ip-mesh:8080>"
+  exit 1
+fi
+
+PRIMARY_HOST=$(echo "$PRIMARY_HOST" | sed 's~http://~~; s~https://~~; s~/.*~~')
+if [[ ! "$PRIMARY_HOST" =~ : ]]; then
+  PRIMARY_HOST="${PRIMARY_HOST}:8080"
+fi
+
+echo -e "[ALLOD] Download CLI aggiornata da \033[1;36mhttp://${PRIMARY_HOST}/api/vault/cli.sh\033[0m..."
+
+TMP_FILE=$(mktemp)
+if curl -fsSL --retry 3 --retry-delay 2 "http://${PRIMARY_HOST}/api/vault/cli.sh" -o "${TMP_FILE}"; then
+  if head -n 1 "${TMP_FILE}" | grep -q "bash"; then
+    chmod +x "${TMP_FILE}"
+    mv "${TMP_FILE}" /usr/local/bin/allod-vault
+    
+    PEER_ONLY_IP=$(echo "${PRIMARY_HOST}" | cut -d':' -f1 | tr -d '[]')
+    mkdir -p /etc
+    echo "PEER_HOST=\"${PEER_ONLY_IP}\"" > /etc/allod-vault.conf
+    
+    echo -e "\033[0;32m[✓] CLI /usr/local/bin/allod-vault aggiornata con successo!\033[0m"
+    echo ""
+    /usr/local/bin/allod-vault status
+  else
+    rm -f "${TMP_FILE}"
+    echo -e "\033[0;31m[ERRORE] Il file scaricato non sembra essere uno script bash valido.\033[0m"
+    exit 1
+  fi
+else
+  rm -f "${TMP_FILE}"
+  echo -e "\033[0;31m[ERRORE] Impossibile scaricare la CLI da http://${PRIMARY_HOST}/api/vault/cli.sh\033[0m"
+  echo "Verifica che il nodo primario Allod sia in esecuzione e connesso alla rete mesh WireGuard."
+  exit 1
+fi
+`
+
+const embeddedAllodVaultCLIScript = `#!/usr/bin/env bash
+# ==============================================================================
+# ALLOD STANDALONE VAULT — DIAGNOSTICA & GESTIONE LOCALE
+# Sovereign Zero-Knowledge Storage Node CLI
+# ==============================================================================
+set -euo pipefail
+
+STORAGE_DIR="/var/lib/allod-vault"
+CONF_FILE="/etc/allod-vault.conf"
+VERSION="1.2.0"
+
+PEER_HOST=""
+if [[ -f "$CONF_FILE" ]]; then
+  source "$CONF_FILE" 2>/dev/null || true
+fi
+
+case "${1:-status}" in
+  status)
+    echo -e "\033[0;36m====================================================\033[0m"
+    echo -e "\033[1;37m   ALLOD STANDALONE VAULT — DIAGNOSTICA STORAGE     \033[0m"
+    echo -e "\033[0;36m====================================================\033[0m"
+    echo -e "Versione CLI:            \033[1;33mv${VERSION}\033[0m"
+    
+    if systemctl is-active --quiet allod-vault; then
+      echo -e "Servizio Vault:          \033[0;32m● ATTIVO (rest-server in esecuzione)\033[0m"
+    else
+      echo -e "Servizio Vault:          \033[0;31m○ INATTIVO (systemctl start allod-vault)\033[0m"
+    fi
+    
+    if command -v netbird >/dev/null 2>&1; then
+      NB_STATUS="ATTIVO"
+      if netbird status 2>/dev/null | grep -iq "management: connected"; then
+        NB_STATUS="CONNESSO"
+      fi
+      NB_IP=$(ip -4 addr show wt0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' || echo "")
+      echo -e "Mesh WireGuard:          \033[0;32m● ${NB_STATUS}\033[0m (${NB_IP:-wt0})"
+    fi
+
+    echo "Directory Repository:    ${STORAGE_DIR}"
+    
+    USED_BYTES=$(du -sh "${STORAGE_DIR}" 2>/dev/null | awk '{print $1}' || echo "0 B")
+    echo "Spazio Occupato Chunk:   ${USED_BYTES}"
+    
+    FREE_SPACE=$(df -h "${STORAGE_DIR}" 2>/dev/null | awk 'NR==2 {print $4 " liberi di " $2}' || echo "N/D")
+    echo "Spazio Disco Disponibile: ${FREE_SPACE}"
+
+    SNAPSHOT_COUNT=0
+    if [[ -d "${STORAGE_DIR}/snapshots" ]]; then
+      SNAPSHOT_COUNT=$(find "${STORAGE_DIR}/snapshots" -type f 2>/dev/null | wc -l)
+    fi
+    echo -e "Snapshot Consolidati:    \033[1;33m${SNAPSHOT_COUNT}\033[0m"
+
+    INDEX_COUNT=0
+    if [[ -d "${STORAGE_DIR}/index" ]]; then
+      INDEX_COUNT=$(find "${STORAGE_DIR}/index" -type f 2>/dev/null | wc -l)
+    fi
+    echo "Indici Crittografici:    ${INDEX_COUNT}"
+
+    DATA_CHUNKS=0
+    if [[ -d "${STORAGE_DIR}/data" ]]; then
+      DATA_CHUNKS=$(find "${STORAGE_DIR}/data" -type f 2>/dev/null | wc -l)
+    fi
+    echo "Chunk Dati Cifrati:      ${DATA_CHUNKS}"
+
+    if [[ -n "${PEER_HOST:-}" ]]; then
+      echo -e "Nodo Primario Config:    ${PEER_HOST}"
+    fi
+
+    echo -e "\033[0;36m----------------------------------------------------\033[0m"
+    echo "Ultime richieste HTTP ricevute dai nodi Mesh:"
+    journalctl -u allod-vault -n 6 --no-pager 2>/dev/null | tail -n 6
+    echo -e "\033[0;36m====================================================\033[0m"
+    ;;
+    
+  logs)
+    echo "Streaming dei log di allod-vault (premi Ctrl+C per uscire)..."
+    journalctl -u allod-vault -f
+    ;;
+
+  restart)
+    echo "Riavvio del servizio allod-vault in corso..."
+    systemctl restart allod-vault
+    echo -e "\033[0;32m✓ Servizio allod-vault riavviato.\033[0m"
+    ;;
+
+  test-mesh)
+    TARGET="${2:-${PEER_HOST:-}}"
+    if [[ -z "$TARGET" ]]; then
+      if command -v netbird >/dev/null 2>&1; then
+        TARGET=$(netbird status 2>/dev/null | grep -oP '100\.\d+\.\d+\.\d+' | head -n 1 || echo "")
+      fi
+    fi
+    TARGET="${TARGET:-100.64.0.1}"
+    TARGET_HOST=$(echo "$TARGET" | cut -d':' -f1 | tr -d '[]')
+    echo "Verifica connettività Mesh verso il nodo Allod primario (http://${TARGET_HOST}:8080/api/health)..."
+    if curl -fs -m 5 "http://${TARGET_HOST}:8080/api/health" >/dev/null 2>&1; then
+      echo -e "\033[0;32m✓ Connessione Mesh WireGuard funzionante e nodo primario raggiungibile!\033[0m"
+    else
+      echo -e "\033[0;31m✗ Impossibile raggiungere http://${TARGET_HOST}:8080/api/health\033[0m"
+      echo "Verifica con 'netbird status' lo stato dei peer nella rete mesh."
+    fi
+    ;;
+
+  update)
+    PEER_TARGET="${2:-${PEER_HOST:-}}"
+    if [[ -z "$PEER_TARGET" ]]; then
+      if command -v netbird >/dev/null 2>&1; then
+        PEER_TARGET=$(netbird status 2>/dev/null | grep -oP '100\.\d+\.\d+\.\d+' | head -n 1 || echo "")
+      fi
+    fi
+    PEER_TARGET=$(echo "${PEER_TARGET:-}" | cut -d':' -f1 | tr -d '[]')
+    
+    if [[ -z "$PEER_TARGET" ]]; then
+      echo -e "\033[0;31mErrore: Nessun IP del nodo Allod primario rilevato o specificato.\033[0m"
+      echo "Uso: sudo allod-vault update <ip-peer-mesh>"
+      exit 1
+    fi
+
+    echo -e "Scaricamento aggiornamento CLI da \033[1;36mhttp://${PEER_TARGET}:8080/api/vault/cli.sh\033[0m..."
+    TMP_CLI=$(mktemp)
+    if curl -fsSL --retry 3 --retry-delay 1 "http://${PEER_TARGET}:8080/api/vault/cli.sh" -o "$TMP_CLI"; then
+      if head -n 1 "$TMP_CLI" | grep -q "bash"; then
+        chmod +x "$TMP_CLI"
+        mv "$TMP_CLI" /usr/local/bin/allod-vault
+        mkdir -p /etc
+        echo "PEER_HOST=\"${PEER_TARGET}\"" > "$CONF_FILE"
+        echo -e "\033[0;32m✓ CLI allod-vault aggiornata con successo!\033[0m"
+        /usr/local/bin/allod-vault status
+      else
+        rm -f "$TMP_CLI"
+        echo -e "\033[0;31mErrore: il file scaricato non è uno script valido.\033[0m"
+        exit 1
+      fi
+    else
+      rm -f "$TMP_CLI"
+      echo -e "\033[0;31mErrore durante il download da http://${PEER_TARGET}:8080/api/vault/cli.sh\033[0m"
+      exit 1
+    fi
+    ;;
+
+  version|--version|-v)
+    echo "allod-vault version ${VERSION}"
+    ;;
+
+  help|--help|-h)
+    echo "Uso: allod-vault [comando]"
+    echo ""
+    echo "Comandi disponibili:"
+    echo "  status            Mostra spazio occupato, snapshot ricevuti e diagnostica (default)"
+    echo "  logs              Visualizza in streaming i log in tempo reale di rest-server"
+    echo "  test-mesh         Verifica la connettività HTTP/WireGuard con il nodo Allod primario"
+    echo "  update [ip-peer]  Aggiorna la CLI direttamente dal nodo Allod primario"
+    echo "  restart           Riavvia il servizio systemd allod-vault"
+    echo "  version           Visualizza la versione installata"
+    echo "  help              Mostra questo messaggio di aiuto"
+    ;;
+
+  *)
+    echo "Comando non riconosciuto: $1"
+    echo "Esegui 'allod-vault help' per visualizzare i comandi disponibili."
+    exit 1
+    ;;
+esac
+`

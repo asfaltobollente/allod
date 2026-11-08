@@ -5290,6 +5290,7 @@ runcmd:
 			"primary_mesh_ipv6":       primaryMeshIPv6,
 			"script_command":          scriptCommand,
 			"script_command_mesh_only": scriptCommandAlreadyMesh,
+			"cli_update_oneliner":     fmt.Sprintf("curl -fsSL \"http://%s:8080/api/vault/update-cli.sh\" | sudo bash", downloadHost),
 			"cloud_init":              cloudInitData,
 			"docker_compose":          dockerComposeData,
 		}
@@ -5308,6 +5309,45 @@ runcmd:
 		// Fallback se il file non è reperibile su disco locale
 		fmt.Fprintf(w, "#!/bin/bash\necho 'Script install-vault.sh non reperibile su disco.'\nexit 1\n")
 	})
+
+	// 14b. API Download Vault Update CLI One-Liner Script (GET /api/vault/update-cli.sh)
+	mux.HandleFunc("/api/vault/update-cli.sh", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+
+		primaryMeshIP := getLocalNetBirdIP()
+		host := primaryMeshIP
+		if host == "" {
+			host = "100.64.0.1"
+		}
+		primaryHost := host + ":8080"
+		if r.Host != "" && (strings.HasPrefix(r.Host, "100.") || strings.Contains(r.Host, ":")) {
+			primaryHost = r.Host
+		}
+
+		scriptBytes, err := os.ReadFile("scripts/update-vault-cli.sh")
+		var scriptStr string
+		if err == nil {
+			scriptStr = string(scriptBytes)
+		} else {
+			scriptStr = embeddedUpdateVaultCLIScript
+		}
+
+		scriptStr = strings.ReplaceAll(scriptStr, "{{PRIMARY_HOST}}", primaryHost)
+		w.Write([]byte(scriptStr))
+	})
+
+	// 14c. API Download Vault CLI Executable Script (GET /api/vault/cli.sh & /api/vault/allod-vault)
+	vaultCliHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+		scriptBytes, err := os.ReadFile("scripts/allod-vault")
+		if err == nil {
+			w.Write(scriptBytes)
+			return
+		}
+		w.Write([]byte(embeddedAllodVaultCLIScript))
+	}
+	mux.HandleFunc("/api/vault/cli.sh", vaultCliHandler)
+	mux.HandleFunc("/api/vault/allod-vault", vaultCliHandler)
 
 	// 15. API Ring Announce (POST /api/ring/announce)
 	mux.HandleFunc("/api/ring/announce", func(w http.ResponseWriter, r *http.Request) {
@@ -5746,6 +5786,13 @@ runcmd:
 			return
 		}
 
+		primaryMeshIP := getLocalNetBirdIP()
+		if primaryMeshIP == "" {
+			primaryMeshIP = "100.64.0.1"
+		}
+		status.PrimaryMeshIP = primaryMeshIP
+		status.CLIUpdateOneliner = fmt.Sprintf("curl -fsSL \"http://%s:8080/api/vault/update-cli.sh\" | sudo bash", primaryMeshIP)
+
 		json.NewEncoder(w).Encode(PanelResponse{
 			Status: "ok",
 			Data:   status,
@@ -5806,6 +5853,9 @@ runcmd:
 			path == "/api/watch/install.sh" ||
 			path == "/api/watch/binary" ||
 			path == "/api/vault/install.sh" ||
+			path == "/api/vault/update-cli.sh" ||
+			path == "/api/vault/cli.sh" ||
+			path == "/api/vault/allod-vault" ||
 			path == "/api/ring/announce" ||
 			strings.HasPrefix(path, "/api/pki/") ||
 			strings.HasPrefix(path, "/api/auth/") ||
