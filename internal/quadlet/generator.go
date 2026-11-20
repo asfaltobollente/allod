@@ -168,6 +168,8 @@ func ensureOdysseusSecret() error {
 	createDirWithFallback(filepath.Join(resBaseDir, "odysseus"), 0775)
 	secDir := filepath.Join(resBaseDir, "odysseus", "secrets")
 	createDirWithFallback(secDir, 0775)
+	createDirWithFallback(filepath.Join(resBaseDir, "odysseus", "models"), 0775)
+	createDirWithFallback(filepath.Join(resBaseDir, "odysseus", "local"), 0775)
 	secFile := filepath.Join(secDir, "odysseus.env")
 	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
 		_ = os.Chmod(secFile, 0664)
@@ -421,6 +423,8 @@ func EnsureStorageDirectories(modID string) {
 			filepath.Join(baseDir, "odysseus", "logs"),
 			filepath.Join(baseDir, "odysseus", "chroma"),
 			filepath.Join(baseDir, "odysseus", "secrets"),
+			filepath.Join(baseDir, "odysseus", "models"),
+			filepath.Join(baseDir, "odysseus", "local"),
 		}
 	case "passwords":
 		dirs = []string{
@@ -638,6 +642,9 @@ func generateContainer(unitName string, m *manifest.Manifest, img manifest.Image
 		if isPrimary {
 			sb.WriteString(fmt.Sprintf("Volume=%s/odysseus/data:/app/data:Z,U\n", baseDir))
 			sb.WriteString(fmt.Sprintf("Volume=%s/odysseus/logs:/app/logs:Z,U\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/odysseus/models:/app/.cache/huggingface:Z,U\n", baseDir))
+			sb.WriteString(fmt.Sprintf("Volume=%s/odysseus/local:/app/.local:Z,U\n", baseDir))
+			sb.WriteString("Environment=HF_HOME=/app/.cache/huggingface\n")
 			sb.WriteString(fmt.Sprintf("Volume=%s/shares:/shares:z,ro\n", baseDir))
 			sb.WriteString(fmt.Sprintf("EnvironmentFile=%s/odysseus/secrets/odysseus.env\n", baseDir))
 			sb.WriteString("ShmSize=512m\n")

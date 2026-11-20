@@ -17,6 +17,7 @@ The module deploys a multi-container rootless Podman stack via systemd Quadlets:
 * **`odysseus`**: Core FastAPI/React workspace handling agent planning, MCP tools, headless Chromium browser automation for web tasks, and local ONNX FastEmbed for lightweight embeddings.
 * **`odysseus-chroma`**: ChromaDB vector store for semantic long-term memory and document RAG.
 * **`odysseus-searxng`**: Private local metasearch engine used by autonomous research agents for untracked web search.
+* **Cookbook Model Persistence**: Models downloaded via the Odysseus Cookbook are permanently stored in the Btrfs NAS pool under `/mnt/allod-storage/odysseus/models` (`/app/.cache/huggingface`), persisting across container restarts and updates.
 
 ---
 

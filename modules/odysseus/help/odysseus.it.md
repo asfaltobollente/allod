@@ -17,6 +17,7 @@ Il modulo avvia uno stack rootless Podman coordinato da Quadlet:
 * **`odysseus`**: Applicazione principale FastAPI/React con gestione agenti, tool MCP, automazione browser headless Chromium e FastEmbed ONNX locale per gli embedding vettoriali leggeri.
 * **`odysseus-chroma`**: Vector Database ChromaDB per la memoria semantica a lungo termine e RAG documentale.
 * **`odysseus-searxng`**: Motore metasearch privato locale, interrogato dagli agenti per effettuare ricerche web e scraping senza tracciamento.
+* **Persistenza Modelli Cookbook**: I pesi e i checkpoint dei modelli scaricati tramite il catalogo Cookbook di Odysseus vengono salvati in modo permanente nel pool Btrfs NAS in `/mnt/allod-storage/odysseus/models` (`/app/.cache/huggingface`), rimanendo preservati anche in caso di riavvio o aggiornamento del container.
 
 ---
 

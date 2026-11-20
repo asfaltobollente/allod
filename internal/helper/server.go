@@ -2641,6 +2641,8 @@ func PrepareModuleStorage(storageRoot, modID string, clean bool) error {
 			filepath.Join(storageRoot, "odysseus", "logs"),
 			filepath.Join(storageRoot, "odysseus", "chroma"),
 			filepath.Join(storageRoot, "odysseus", "secrets"),
+			filepath.Join(storageRoot, "odysseus", "models"),
+			filepath.Join(storageRoot, "odysseus", "local"),
 		}
 	default:
 		dirs = []string{

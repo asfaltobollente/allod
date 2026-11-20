@@ -54,8 +54,8 @@ transitions:
 
 datasets:
   - id: odysseus
-    includes: [data, logs, chroma]
-    excludes: [huggingface/cache]
+    includes: [data, logs, chroma, models]
+    excludes: [local]
 
 help:
   en: help/odysseus.en.md
