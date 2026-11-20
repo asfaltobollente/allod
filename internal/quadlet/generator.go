@@ -168,8 +168,15 @@ func ensureOdysseusSecret() error {
 	createDirWithFallback(filepath.Join(resBaseDir, "odysseus"), 0775)
 	secDir := filepath.Join(resBaseDir, "odysseus", "secrets")
 	createDirWithFallback(secDir, 0775)
-	createDirWithFallback(filepath.Join(resBaseDir, "odysseus", "models"), 0775)
-	createDirWithFallback(filepath.Join(resBaseDir, "odysseus", "local"), 0775)
+
+	for _, sub := range []string{"models", "local", "chroma", "data", "logs"} {
+		subDir := filepath.Join(resBaseDir, "odysseus", sub)
+		createDirWithFallback(subDir, 0777)
+		_ = os.Chmod(subDir, 0777)
+		_ = exec.Command("chmod", "-R", "0777", subDir).Run()
+		_ = exec.Command("podman", "unshare", "chmod", "-R", "0777", subDir).Run()
+	}
+
 	secFile := filepath.Join(secDir, "odysseus.env")
 	if fi, err := os.Stat(secFile); err == nil && fi.Size() > 0 {
 		_ = os.Chmod(secFile, 0664)

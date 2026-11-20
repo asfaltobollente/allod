@@ -2661,6 +2661,15 @@ func PrepareModuleStorage(storageRoot, modID string, clean bool) error {
 	_ = exec.Command("chown", "-R", owner, modDir).Run()
 	_ = exec.Command("chmod", "-R", "g+rwX", modDir).Run()
 
+	if modID == "odysseus" {
+		for _, sub := range []string{"models", "local", "chroma", "data", "logs"} {
+			subDir := filepath.Join(storageRoot, "odysseus", sub)
+			_ = os.MkdirAll(subDir, 0777)
+			_ = exec.Command("chmod", "-R", "0777", subDir).Run()
+			_ = exec.Command("chmod", "2777", subDir).Run()
+		}
+	}
+
 	// Module specific file initializations
 	if modID == "search" {
 		cfgDir := filepath.Join(storageRoot, "search", "config")
